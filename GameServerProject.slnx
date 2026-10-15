@@ -1,0 +1,7 @@
+<Solution>
+  <Configurations>
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Project Path="AimLab/AimLab.vcxproj" Id="34a73ebc-3b44-45ae-968c-53217113a66d" />
+</Solution>

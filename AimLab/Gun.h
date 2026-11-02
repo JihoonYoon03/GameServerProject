@@ -13,6 +13,12 @@ public:
 	void FollowCamera(const Camera& camera, const glm::vec3& playerPosition);
 	glm::mat4 GetModelMatrix() const override;
 
+	// 탄약·재장전·반동은 본인 클라이언트에서만 처리하며 서버로 전송하지 않는다.
+	bool TryFire();
+	void StartReload();
+	void UpdateReload(float deltaTime);
+	void UpdateRecoil(float deltaTime);
+
 private:
 	float	  recoilTime_ = 0.0f;
 	float	  recoilAmount_ = 0.0f;

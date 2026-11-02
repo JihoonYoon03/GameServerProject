@@ -2,6 +2,7 @@
 #include "pch.h"
 #include "Object.h"
 #include "Camera.h"
+#include "Shared/NetworkTypes.h"
 
 class Scene;
 
@@ -25,6 +26,11 @@ public:
 	float pitch = 0.0f;
 	float moveSpeed = 10.0f / 3.6f;
 	float sensitivity = 0.2f;
+
+	// 화면 객체 ID와 네트워크 세션 토큰은 서로 다른 식별자이다.
+	Net::SessionToken sessionToken{};
+	Net::Mat4Data GetNetworkTransform() const;
+	bool ApplyNetworkTransform(const Net::Mat4Data& value);
 
 private:
 	glm::vec3 eyePosition_{0.0f};

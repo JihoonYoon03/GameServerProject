@@ -148,9 +148,8 @@ void ShootingScene::ApplyPlayerCommand(const PlayerCommand& command, float delta
 	player_->ApplyCommand(command, deltaTime, *this);
 	player_->UpdateCamera(camera_);
 
-	if (command.fire)
+	if (command.fire && gun_->Fire())
 	{
-		gun_->Fire();
 		shot_ = {camera_.position, camera_.GetForward()};
 		hasShot_ = true;
 	}

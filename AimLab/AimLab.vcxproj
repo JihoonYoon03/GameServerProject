@@ -145,6 +145,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="Config.h" />
     <ClCompile Include="NetworkContracts.cpp" />
     <ClCompile Include="Assets.cpp" />
     <ClCompile Include="Camera.cpp" />
@@ -221,11 +222,7 @@
       <_GameShader Include="$(MSBuildThisFileDirectory)Shaders\**\*" />
       <_GameResource Include="$(MSBuildThisFileDirectory)..\Resources\**\*" />
     </ItemGroup>
-    <Copy SourceFiles="@(_GameShader)"
-          DestinationFiles="@(_GameShader->'$(TargetDir)Shaders\%(RecursiveDir)%(Filename)%(Extension)')"
-          SkipUnchangedFiles="true" />
-    <Copy SourceFiles="@(_GameResource)"
-          DestinationFiles="@(_GameResource->'$(TargetDir)Resources\%(RecursiveDir)%(Filename)%(Extension)')"
-          SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(_GameShader)" DestinationFiles="@(_GameShader->'$(TargetDir)Shaders\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(_GameResource)" DestinationFiles="@(_GameResource->'$(TargetDir)Resources\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
   </Target>
 </Project>

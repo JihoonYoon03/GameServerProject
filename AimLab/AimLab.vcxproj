@@ -145,6 +145,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="NetworkContracts.cpp" />
     <ClCompile Include="Assets.cpp" />
     <ClCompile Include="Camera.cpp" />
     <ClCompile Include="Collision.cpp" />
@@ -164,6 +165,20 @@
     <ClCompile Include="Texture.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Server\Client.h" />
+    <ClInclude Include="Server\ClientPlayer.h" />
+    <ClInclude Include="Server\Framework.h" />
+    <ClInclude Include="Server\NetworkServer.h" />
+    <ClInclude Include="Server\Room.h" />
+    <ClInclude Include="Server\RoomManager.h" />
+    <ClInclude Include="Server\StageController.h" />
+    <ClInclude Include="Server\Target.h" />
+    <ClInclude Include="Shared\NetworkConversions.h" />
+    <ClInclude Include="Shared\NetworkMessages.h" />
+    <ClInclude Include="Shared\NetworkPackets.h" />
+    <ClInclude Include="Shared\NetworkTypes.h" />
+    <ClInclude Include="MainScene.h" />
+    <ClInclude Include="NetworkClient.h" />
     <ClInclude Include="Assets.h" />
     <ClInclude Include="Camera.h" />
     <ClInclude Include="Collision.h" />

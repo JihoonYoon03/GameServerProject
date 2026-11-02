@@ -41,13 +41,18 @@ public:
 
 private:
 	Object* AddProp(const std::string& name, const std::shared_ptr<Mesh>& mesh, const std::shared_ptr<Material>& material, const glm::vec3& position, const glm::vec3& scale, bool solid = false);
-	void SpawnTarget();
+	void SpawnTargets();
+	void RemoveDestroyedTargets();
+	void ClearTargets();
 	void Shoot();
 
 	// 소유권은 Scene의 objects_에 있습니다. 아래 포인터는 현재 장면에서만 사용합니다.
 	Player*				 player_ = nullptr;
 	Gun*				 gun_ = nullptr;
 	std::vector<Target*> targets_;
+	std::shared_ptr<Mesh> targetMesh_;
+	std::shared_ptr<Material> targetMaterial_;
+	float targetSpawnTime_ = 0.0f;
 	StageController		 stages_;
 	Ray					 shot_;
 	bool				 hasShot_ = false;

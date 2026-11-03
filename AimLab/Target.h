@@ -5,31 +5,16 @@
 class Target : public Object
 {
 public:
-	using Object::Object;
+	Target(std::shared_ptr<Mesh> mesh = nullptr, std::shared_ptr<Material> material = nullptr);
 
-	void Update(float deltaTime) override
-	{
-		if (pendingDestroy_ || deltaTime <= 0.0f) return;
-
-		elapsedTime_ += deltaTime;
-
-		if (elapsedTime_ >= lifetime_)
-		{
-			pendingDestroy_ = true;
-		}
-	}
+	void Update(float deltaTime) override;
 
 	bool IsPendingDestroy() const { return pendingDestroy_; }
 
-	bool Hit()
-	{
-		if (!active || pendingDestroy_) return false;
-
-		pendingDestroy_ = true;
-		return true;
-	}
+	bool Hit();
 
 private:
+	glm::vec3 moveDirection_;
 	// 삭제 여부는 Target이 결정하고, 실제 해제는 Scene의 순회가 끝난 뒤 처리합니다.
 	float elapsedTime_ = 0.0f;
 	float lifetime_ = 3.0f;

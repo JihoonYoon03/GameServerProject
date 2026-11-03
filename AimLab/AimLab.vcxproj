@@ -181,6 +181,7 @@
     <ClCompile Include="Shader.cpp" />
     <ClCompile Include="ShootingScene.cpp" />
     <ClCompile Include="StageController.cpp" />
+    <ClCompile Include="Target.cpp" />
     <ClCompile Include="Texture.cpp" />
   </ItemGroup>
   <ItemGroup>

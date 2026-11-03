@@ -4,11 +4,6 @@
     <Filter Include="Network" />
     <Filter Include="Network\Shared" />
     <Filter Include="Network\Client" />
-    <Filter Include="Network\Server" />
-    <Filter Include="헤더 파일">
-      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
-      <Extensions>h;hh;hpp;hxx;h++;hm;inl;inc;ipp;xsd</Extensions>
-    </Filter>
     <Filter Include="Shaders">
       <UniqueIdentifier>{c6604914-aeb7-4875-b256-3ffe2da8f7e7}</UniqueIdentifier>
     </Filter>
@@ -46,6 +41,12 @@
     </Filter>
     <Filter Include="Application">
       <UniqueIdentifier>{eb50d5cd-39b4-466c-a7e3-3f1843098d50}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Network\Client\Header">
+      <UniqueIdentifier>{06b9c63c-50f9-478d-8584-c07c4a7fa39c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Network\Client\Source">
+      <UniqueIdentifier>{d44cb177-548a-43a2-9a6d-141f1d7518c3}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -103,11 +104,11 @@
     <ClCompile Include="Texture.cpp">
       <Filter>Engine\Source</Filter>
     </ClCompile>
-    <ClCompile Include="Config.h">
-      <Filter>헤더 파일</Filter>
-    </ClCompile>
     <ClCompile Include="Target.cpp">
       <Filter>Engine\Source</Filter>
+    </ClCompile>
+    <ClCompile Include="NetworkClient.cpp">
+      <Filter>Network\Client\Source</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -128,12 +129,6 @@
     </ClInclude>
     <ClInclude Include="stb_image.h">
       <Filter>External</Filter>
-    </ClInclude>
-    <ClInclude Include="MainScene.h">
-      <Filter>Network\Client</Filter>
-    </ClInclude>
-    <ClInclude Include="NetworkClient.h">
-      <Filter>Network\Client</Filter>
     </ClInclude>
     <ClInclude Include="Assets.h">
       <Filter>Engine\Header</Filter>
@@ -174,17 +169,23 @@
     <ClInclude Include="Texture.h">
       <Filter>Engine\Header</Filter>
     </ClInclude>
+    <ClInclude Include="MainScene.h">
+      <Filter>Network\Client\Header</Filter>
+    </ClInclude>
+    <ClInclude Include="NetworkClient.h">
+      <Filter>Network\Client\Header</Filter>
+    </ClInclude>
     <ClInclude Include="..\Shared\NetworkConversions.h">
-      <Filter>헤더 파일</Filter>
+      <Filter>Network\Shared</Filter>
     </ClInclude>
     <ClInclude Include="..\Shared\NetworkMessages.h">
-      <Filter>헤더 파일</Filter>
+      <Filter>Network\Shared</Filter>
     </ClInclude>
     <ClInclude Include="..\Shared\NetworkPackets.h">
-      <Filter>헤더 파일</Filter>
+      <Filter>Network\Shared</Filter>
     </ClInclude>
     <ClInclude Include="..\Shared\NetworkTypes.h">
-      <Filter>헤더 파일</Filter>
+      <Filter>Network\Shared</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

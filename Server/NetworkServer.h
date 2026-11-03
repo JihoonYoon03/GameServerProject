@@ -1,27 +1,48 @@
-ï»¿#pragma once
+#pragma once
 #include "../Shared/NetworkMessages.h"
+#include "Client.h"
+#include "RoomManager.h"
 
 struct sockaddr_in;
 
-namespace Server
+class RoomManager;
+
+class NetworkServer
 {
-    class NetworkServer
-    {
-    public:
-        bool StartNetwork(std::uint16_t tcpPort, std::uint16_t udpPort);
-        void NetworkLoop();
-        void AcceptPlayer();
-        // í† í°ê³¼ ì‹¤ì œ ìˆ˜ì‹  ì£¼ì†Œë¥¼ ì—°ê²°í•œë‹¤. í† í°ë§Œìœ¼ë¡œ ë°œì‹ ìë¥¼ ì¸ì¦í•˜ì§€ ì•ŠëŠ”ë‹¤.
-        void RegisterPlayerUDP(const Net::UdpHeader& header,
-            const sockaddr_in& sourceAddress);
-        void OnClientDisconnected(const Net::SessionToken& sessionToken);
-        // í™•ì¸ëœ ë°œì‹ ìì™€ íŒ¨í‚·ì„ ë°© ëª…ë ¹ íë¡œ ì „ë‹¬í•˜ë©° ê²Œì„ ìƒíƒœëŠ” ì§ì ‘ ë°”ê¾¸ì§€ ì•ŠëŠ”ë‹¤.
-        void DispatchPacket(const Net::SessionToken& verifiedSender,
-            const Net::PacketData& packet);
-        // ë°© ìŠ¤ë ˆë“œì˜ ì†¡ì‹  ìš”ì²­ì„ íì— ë„£ê³  ì‹¤ì œ ì†Œì¼“ ì†¡ì‹ ì€ í†µì‹  ìŠ¤ë ˆë“œê°€ ë‹´ë‹¹í•œë‹¤.
-        bool SendPacket(const Net::SendRequest& request);
-        void ReplyTimeProbe(const Net::SessionToken& recipient,
-            const Net::TimeProbeRequest& request, Net::ServerTimeMs receivedAtMs);
-        void StopNetwork();
-    };
-}
+public:
+	bool StartNetwork(std::uint16_t tcpPort, std::uint16_t udpPort);
+	void NetworkLoop();
+	void AcceptPlayer();
+
+	// ÅäÅ«°ú ½ÇÁ¦ ¼ö½Å ÁÖ¼Ò¸¦ ¿¬°áÇÑ´Ù. ÅäÅ«¸¸À¸·Î ¹ß½ÅÀÚ¸¦ ÀÎÁõÇÏÁö ¾Ê´Â´Ù.
+	void RegisterPlayerUDP(const Net::UdpHeader& header, const sockaddr_in& sourceAddress);
+
+	void OnClientDisconnected(const Net::SessionToken& sessionToken);
+	// È®ÀÎµÈ ¹ß½ÅÀÚ¿Í ÆĞÅ¶À» ¹æ ¸í·É Å¥·Î Àü´ŞÇÏ¸ç °ÔÀÓ »óÅÂ´Â Á÷Á¢ ¹Ù²ÙÁö ¾Ê´Â´Ù.
+	void DispatchPacket(const Net::SessionToken& verifiedSender,
+		const Net::PacketData& packet);
+	// ¹æ ½º·¹µåÀÇ ¼Û½Å ¿äÃ»À» Å¥¿¡ ³Ö°í ½ÇÁ¦ ¼ÒÄÏ ¼Û½ÅÀº Åë½Å ½º·¹µå°¡ ´ã´çÇÑ´Ù.
+	bool SendPacket(const Net::SendRequest& request);
+	void ReplyTimeProbe(const Net::SessionToken& recipient,
+		const Net::TimeProbeRequest& request, Net::ServerTimeMs receivedAtMs);
+	void StopNetwork();
+
+private:
+	SOCKET							m_SockListen;
+	SOCKET							m_SockUDP;
+
+	//Å¬¶óÀÌ¾ğÆ® ¸ñ·Ï
+	std::vector<Client>				m_vClients;
+	//Åë½Å ¾²·¹µå ÇÚµé
+	HANDLE							m_hNetworkThread;
+
+	//Å¬¶ó¿¡ º¸³¾ UDP ÆĞÅ¶ ÀúÀåÇÏ´Â Å¥. ¹æÀÌ ³Ö°í Åë½Å ¾²·¹µå°¡ ²¨³» ¾¸
+	std::queue<Net::SendRequest>	m_qSendQueue;
+	//Å¥¸¦ ¿©·¯ ¾²·¹µå¿¡¼­ »ç¿ëÇÏ¹Ç·Î º¸È£ ÇÊ¿ä
+	CRITICAL_SECTION				m_CSSendQueue;
+
+	RoomManager*					m_pRoomManager;
+	
+	//Åë½Å ¾²·¹µå Á¾·á ¿äÃ» ¿©ºÎ. StopNetwork¿¡¼­ È£Ãâ, ¿øÀÚÀûÀ¸·Î °ª º¯°æµÊ
+	std::atomic<bool>				m_bStopRequested;
+};

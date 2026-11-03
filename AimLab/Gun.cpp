@@ -1,12 +1,11 @@
 #include "pch.h"
 #include "Gun.h"
-#include "Config.h"
 
 Gun::Gun(std::shared_ptr<Mesh> mesh, std::shared_ptr<Material> material)
 	: Object(mesh, material),
 	m_fFireInterval			(0.0f),
 	m_fReloadTime			(0.0f),
-	m_nAmmo					(conf::gun::MAGAZINE),
+	m_nAmmo					(Net::MagazineCapacity),
 	m_fRecoilTimeElapsed	(0.0f),
 	m_fRecoilProgress		(0.0f),
 	m_bIsRecoiling			(false),
@@ -38,7 +37,7 @@ void Gun::Update(float deltaTime)
 		if (m_fReloadTime < 0.0f)
 		{
 			m_fReloadTime = 0.0f;
-			m_nAmmo = conf::gun::MAGAZINE;
+			m_nAmmo = Net::MagazineCapacity;
 		}
 	}
 
@@ -48,7 +47,7 @@ void Gun::Update(float deltaTime)
 		//반동 진행 시간에 따라 두 구간으로 나누고, 해당 구간의 몇%가 지나는지 recoilAmount에 저장
 		m_fRecoilProgress = m_fRecoilTimeElapsed < 0.05f ? m_fRecoilTimeElapsed / 0.05f : (1.0f - m_fRecoilTimeElapsed) / 0.95f;
 		//반동 진행 시간 갱신.
-		m_fRecoilTimeElapsed = std::min(1.0f, m_fRecoilTimeElapsed + deltaTime * conf::gun::RECOIL_ANIM_SPEED);
+		m_fRecoilTimeElapsed = std::min(1.0f, m_fRecoilTimeElapsed + deltaTime * Net::RecoilAnimSpeed);
 
 		if (m_fRecoilTimeElapsed >= 1.0f)
 		{
@@ -94,13 +93,13 @@ bool Gun::TryFire()
 	if (m_nAmmo == 0)
 	{
 		if (m_fReloadTime == 0.0f)
-			m_fReloadTime = conf::gun::RELOAD_TIME;
+			m_fReloadTime = Net::ReloadSeconds;
 
 		return false;
 	}
 
 	--m_nAmmo;
-	m_fFireInterval = conf::gun::FIRE_INTERVAL;
+	m_fFireInterval = Net::FireIntervalSeconds;
 
 	m_bIsRecoiling = true;
 	m_fRecoilTimeElapsed = 0.0f;

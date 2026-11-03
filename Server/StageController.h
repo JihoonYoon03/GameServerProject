@@ -1,18 +1,16 @@
-ï»¿#pragma once
+#pragma once
 #include "../Shared/NetworkPackets.h"
 
-namespace Server
+class StageController
 {
-    class StageController
-    {
-    public:
-        void StartGame(const Net::MatchRules& rules, Net::ServerTimeMs startsAtMs);
-        void UpdateMatch(Net::ServerTimeMs nowMs);
-        // ì ìˆ˜ ìš°ì„ , ë™ì ì´ë©´ ì‚¬ìš© íƒ„ ìˆ˜ê°€ ì ì€ ìˆœì„œ. ë‘ ê°’ì´ ê°™ìœ¼ë©´ ê³µë™ ìˆœìœ„ì´ë‹¤.
-        std::vector<Net::PlayerResult> JudgeWhoWins() const;
-        void ChangeGameStatus(Net::GameState state);
-        void SendMatchTime();
-        void SendGameResults(Net::MatchEndReason reason);
-        void ResetGame();
-    };
-}
+public:
+	void StartGame(const Net::MatchRules& rules, Net::ServerTimeMs startsAtMs);
+	void UpdateMatch(Net::ServerTimeMs nowMs);
+	// Á¡¼ö ¿ì¼±, µ¿Á¡ÀÌ¸é »ç¿ë Åº ¼ö°¡ ÀûÀº ¼ø¼­. µÎ °ªÀÌ °°À¸¸é °øµ¿ ¼øÀ§ÀÌ´Ù.
+	std::vector<Net::PlayerResult> JudgeWhoWins() const;
+	void ChangeGameStatus(Net::GameState state);
+	void SendMatchTime();
+	void SendGameResults(Net::MatchEndReason reason);
+	void ResetGame();
+};
+

@@ -1,10 +1,10 @@
-ï»¿#pragma once
+#pragma once
 #include "NetworkTypes.h"
 
-// í”„ë¡œí† ì½œ 5: ê³µí†µ í—¤ë” ë’¤ì— ë³¸ë¬¸ í•„ë“œë¥¼ ê¸°ë¡í•œë‹¤. êµ¬ì¡°ì²´ì˜ ë©”ëª¨ë¦¬ í¬ê¸°ë¥¼ ì „ì†¡ í¬ê¸°ë¡œ ì“°ì§€ ì•ŠëŠ”ë‹¤.
-// í—¤ë”ì˜ ê¸¸ì´ í•„ë“œëŠ” í—¤ë”ë¥¼ í¬í•¨í•œ ì „ì²´ íŒ¨í‚· ê¸¸ì´ì´ë‹¤. ì •ìˆ˜ì™€ ì‹¤ìˆ˜ì˜ ë¹„íŠ¸ëŠ”
-// ë¹… ì—”ë””ì–¸ìœ¼ë¡œ ì „ì†¡í•˜ê³ , ê°€ë³€ ëª©ë¡ì€ ê°œìˆ˜ì™€ ìœ íš¨ í•­ëª©ë§Œ ê¸°ë¡í•œë‹¤.
-// UDP í† í°ì€ í´ë¼â†’ì„œë²„ì—ì„œ ë°œì‹ ì, ì„œë²„â†’í´ë¼ì—ì„œ ìˆ˜ì‹ ìë¥¼ ë‚˜íƒ€ë‚¸ë‹¤.
+// ÇÁ·ÎÅäÄİ 5: °øÅë Çì´õ µÚ¿¡ º»¹® ÇÊµå¸¦ ±â·ÏÇÑ´Ù. ±¸Á¶Ã¼ÀÇ ¸Ş¸ğ¸® Å©±â¸¦ Àü¼Û Å©±â·Î ¾²Áö ¾Ê´Â´Ù.
+// Çì´õÀÇ ±æÀÌ ÇÊµå´Â Çì´õ¸¦ Æ÷ÇÔÇÑ ÀüÃ¼ ÆĞÅ¶ ±æÀÌÀÌ´Ù. Á¤¼ö¿Í ½Ç¼öÀÇ ºñÆ®´Â
+// ºò ¿£µğ¾ğÀ¸·Î Àü¼ÛÇÏ°í, °¡º¯ ¸ñ·ÏÀº °³¼ö¿Í À¯È¿ Ç×¸ñ¸¸ ±â·ÏÇÑ´Ù.
+// UDP ÅäÅ«Àº Å¬¶ó¡æ¼­¹ö¿¡¼­ ¹ß½ÅÀÚ, ¼­¹ö¡æÅ¬¶ó¿¡¼­ ¼ö½ÅÀÚ¸¦ ³ªÅ¸³½´Ù.
 namespace Net
 {
 	inline constexpr std::uint16_t ProtocolVersion = 5;
@@ -48,20 +48,18 @@ namespace Net
 		TargetSnapshot = 0x1103
 	};
 
-	// ì‚¬ìš©: ì„œë²„ NetworkServer::NetworkLoop(), DispatchPacket() / í´ë¼ NetworkClient::NetworkLoop(), UpdateNetwork() [ì„ ì–¸]
+	// »ç¿ë: ¼­¹ö NetworkServer::NetworkLoop(), DispatchPacket() / Å¬¶ó NetworkClient::NetworkLoop(), UpdateNetwork() [¼±¾ğ]
 	struct TcpHeader
 	{
 		std::uint32_t size = TcpHeaderBytes;
-		std::uint16_t version = ProtocolVersion;
 		TcpType type = TcpType::ConnectResult;
 		std::uint32_t requestId = 0;
 	};
 
-	// ì‚¬ìš©: ì„œë²„ NetworkServer::RegisterPlayerUDP(), DispatchPacket() / í´ë¼ NetworkClient::NetworkLoop() [ì„ ì–¸]
+	// »ç¿ë: ¼­¹ö NetworkServer::RegisterPlayerUDP(), DispatchPacket() / Å¬¶ó NetworkClient::NetworkLoop() [¼±¾ğ]
 	struct UdpHeader
 	{
 		std::uint16_t magic = UdpMagic;
-		std::uint16_t version = ProtocolVersion;
 		UdpType type = UdpType::RegisterRequest;
 		std::uint16_t size = UdpHeaderBytes;
 		SessionToken sessionToken{};
@@ -72,7 +70,7 @@ namespace Net
 		std::uint32_t serverTick = 0;
 	};
 
-	// ì‚¬ìš©: ì„œë²„ NetworkServer::AcceptPlayer() â†’ í´ë¼ NetworkClient::ConnectServer() [ì„ ì–¸]
+	// »ç¿ë: ¼­¹ö NetworkServer::AcceptPlayer() ¡æ Å¬¶ó NetworkClient::ConnectServer() [¼±¾ğ]
 	struct ConnectResult { ErrorCode result = ErrorCode::Ok; SessionToken sessionToken{};
 
 		std::uint16_t udpPort = 0;
@@ -80,23 +78,23 @@ namespace Net
 		std::uint16_t tickRate = static_cast<std::uint16_t>(ServerTickRate);
 	};
 
-	// ì‚¬ìš©: ì„œë²„ NetworkServer::DispatchPacket(), RoomManager::JoinGameRoom(), Room::RecvShoot() â†’ í´ë¼
-	//       NetworkClient::UpdateNetwork() [ì„ ì–¸]
+	// »ç¿ë: ¼­¹ö NetworkServer::DispatchPacket(), RoomManager::JoinGameRoom(), Room::RecvShoot() ¡æ Å¬¶ó
+	//       NetworkClient::UpdateNetwork() [¼±¾ğ]
 	struct RequestRejected { ErrorCode reason = ErrorCode::InvalidRequest; MatchContext context; };
 
-	// ì‚¬ìš©: í´ë¼ MainScene::SearchRoomList() â†’ ì„œë²„ RoomManager::SendRoomList() [ì„ ì–¸]
+	// »ç¿ë: Å¬¶ó MainScene::SearchRoomList() ¡æ ¼­¹ö RoomManager::SendRoomList() [¼±¾ğ]
 	struct RoomListRequest { RoomId afterRoomId = 0; };
 
-	// ì‚¬ìš©: ì„œë²„ RoomManager::SendRoomList() â†’ í´ë¼ MainScene::UpdateRoomList() [ì„ ì–¸]
+	// »ç¿ë: ¼­¹ö RoomManager::SendRoomList() ¡æ Å¬¶ó MainScene::UpdateRoomList() [¼±¾ğ]
 	struct RoomListResult { RoomId nextAfterRoomId = 0; std::vector<RoomInfo> rooms; };
 
-	// ì‚¬ìš©: í´ë¼ MainScene::RequestGameRoom() â†’ ì„œë²„ RoomManager::CreateGameRoom() [ì„ ì–¸]
+	// »ç¿ë: Å¬¶ó MainScene::RequestGameRoom() ¡æ ¼­¹ö RoomManager::CreateGameRoom() [¼±¾ğ]
 	struct CreateRoomRequest {};
 
-	// ì‚¬ìš©: í´ë¼ MainScene::JoinRoom() â†’ ì„œë²„ RoomManager::JoinGameRoom() [ì„ ì–¸]
+	// »ç¿ë: Å¬¶ó MainScene::JoinRoom() ¡æ ¼­¹ö RoomManager::JoinGameRoom() [¼±¾ğ]
 	struct JoinRoomRequest { RoomId roomId = 0; };
 
-	// ì‚¬ìš©: ì„œë²„ RoomManager::CreateGameRoom(), RoomManager::JoinGameRoom() â†’ í´ë¼ MainScene::JoinRoom() [ì„ ì–¸]
+	// »ç¿ë: ¼­¹ö RoomManager::CreateGameRoom(), RoomManager::JoinGameRoom() ¡æ Å¬¶ó MainScene::JoinRoom() [¼±¾ğ]
 	struct RoomEnterResult
 	{
 		ErrorCode result = ErrorCode::Ok;
@@ -104,22 +102,22 @@ namespace Net
 		RoomStateData room;
 	};
 
-	// ì‚¬ìš©: í´ë¼ MainScene::ExitRoom() â†’ ì„œë²„ Room::RemovePlayerFromRoom() [ì„ ì–¸]
+	// »ç¿ë: Å¬¶ó MainScene::ExitRoom() ¡æ ¼­¹ö Room::RemovePlayerFromRoom() [¼±¾ğ]
 	struct LeaveRoomRequest { RoomId roomId = 0; };
 
-	// ì‚¬ìš©: ì„œë²„ Room::RemovePlayerFromRoom() â†’ í´ë¼ MainScene::OnRoomExited() [ì„ ì–¸]
+	// »ç¿ë: ¼­¹ö Room::RemovePlayerFromRoom() ¡æ Å¬¶ó MainScene::OnRoomExited() [¼±¾ğ]
 	struct LeaveRoomResult { ErrorCode result = ErrorCode::Ok; RoomId roomId = 0; };
 
-	// ì‚¬ìš©: í´ë¼ ShootingScene::SendMapLoaded() â†’ ì„œë²„ Room::SetPlayerLoaded() [ì„ ì–¸]
+	// »ç¿ë: Å¬¶ó ShootingScene::SendMapLoaded() ¡æ ¼­¹ö Room::SetPlayerLoaded() [¼±¾ğ]
 	struct MapLoaded { RoomId roomId = 0; };
 
-	// ì‚¬ìš©: í´ë¼ ShootingScene::RequestReadyChange() â†’ ì„œë²„ Room::SetPlayerReady() [ì„ ì–¸]
+	// »ç¿ë: Å¬¶ó ShootingScene::RequestReadyChange() ¡æ ¼­¹ö Room::SetPlayerReady() [¼±¾ğ]
 	struct ReadyChangeRequest { RoomId roomId = 0; std::uint8_t ready = 0; };
 
-	// ì‚¬ìš©: ì„œë²„ Room::SendRoomState() â†’ í´ë¼ ShootingScene::OnRoomStateChanged() [ì„ ì–¸] / ë¬¶ìŒ: ì°¸ê°€ìÂ·ì¤€ë¹„Â·êµ¬ì—­
+	// »ç¿ë: ¼­¹ö Room::SendRoomState() ¡æ Å¬¶ó ShootingScene::OnRoomStateChanged() [¼±¾ğ] / ¹­À½: Âü°¡ÀÚ¡¤ÁØºñ¡¤±¸¿ª
 	struct RoomState { RoomStateData room; };
 
-	// ì‚¬ìš©: ì„œë²„ Room::StartGameIfReady() â†’ í´ë¼ ShootingScene::OnGameStarted() [ì„ ì–¸] / ë¬¶ìŒ: ì‹œê°„Â·ê·œì¹™Â·í”Œë ˆì´ì–´, í‘œì  ëª©ë¡ì€ UDPë¡œë§Œ ì „ë‹¬
+	// »ç¿ë: ¼­¹ö Room::StartGameIfReady() ¡æ Å¬¶ó ShootingScene::OnGameStarted() [¼±¾ğ] / ¹­À½: ½Ã°£¡¤±ÔÄ¢¡¤ÇÃ·¹ÀÌ¾î, Ç¥Àû ¸ñ·ÏÀº UDP·Î¸¸ Àü´Ş
 	struct GameStarted
 	{
 		RoomVersion version;
@@ -130,7 +128,7 @@ namespace Net
 		std::vector<PlayerData> players;
 	};
 
-	// ì‚¬ìš©: í´ë¼ ShootingScene::SendShoot() â†’ ì„œë²„ Room::RecvShoot(), Room::JudgeShoot() [ì„ ì–¸] / ê°œë³„ ë°œì‚¬ ìš”ì²­
+	// »ç¿ë: Å¬¶ó ShootingScene::SendShoot() ¡æ ¼­¹ö Room::RecvShoot(), Room::JudgeShoot() [¼±¾ğ] / °³º° ¹ß»ç ¿äÃ»
 	struct FireRequest
 	{
 		MatchContext context;
@@ -141,8 +139,8 @@ namespace Net
 		Vec3Data origin;
 	};
 
-	// ì‚¬ìš©: ì„œë²„ Room::SendShootResult() â†’ í´ë¼ ShootingScene::RecvShootResult() [ì„ ì–¸] / ë¬¶ìŒ: ë°œì‚¬ì í† í°Â·ëª…ì¤‘ ê²°ê³¼Â·ì ìˆ˜Â·íƒ„
-	//       ìˆ˜, í‘œì  ìƒì„±Â·ì‚­ì œì™€ ë°˜ë™ ì ìš© ì—†ìŒ
+	// »ç¿ë: ¼­¹ö Room::SendShootResult() ¡æ Å¬¶ó ShootingScene::RecvShootResult() [¼±¾ğ] / ¹­À½: ¹ß»çÀÚ ÅäÅ«¡¤¸íÁß °á°ú¡¤Á¡¼ö¡¤Åº
+	//       ¼ö, Ç¥Àû »ı¼º¡¤»èÁ¦¿Í ¹İµ¿ Àû¿ë ¾øÀ½
 	struct ShotResolved { RoomVersion version; SessionToken shooterToken{};
 
 		ShotId shotId = 0;
@@ -151,11 +149,11 @@ namespace Net
 		PlayerStats shooterStats;
 	};
 
-	// ì‚¬ìš©: ì„œë²„ StageController::SendMatchTime() â†’ í´ë¼ ShootingScene::UpdateMatchTime() [ì„ ì–¸]
+	// »ç¿ë: ¼­¹ö StageController::SendMatchTime() ¡æ Å¬¶ó ShootingScene::UpdateMatchTime() [¼±¾ğ]
 	struct MatchTime { MatchContext context; ServerTimeMs serverTimeMs = 0; ServerTimeMs endsAtMs = 0; };
 
-	// ì‚¬ìš©: ì„œë²„ StageController::SendGameResults() â†’ í´ë¼ ShootingScene::RecvGameResults(), ShootingScene::OnGameEnded() [ì„ ì–¸]
-	//       / ë¬¶ìŒ: ìˆœìœ„Â·ë°© ìƒíƒœÂ·ì¤€ë¹„ ì´ˆê¸°í™”
+	// »ç¿ë: ¼­¹ö StageController::SendGameResults() ¡æ Å¬¶ó ShootingScene::RecvGameResults(), ShootingScene::OnGameEnded() [¼±¾ğ]
+	//       / ¹­À½: ¼øÀ§¡¤¹æ »óÅÂ¡¤ÁØºñ ÃÊ±âÈ­
 	struct GameResults
 	{
 		RoomStateData room;
@@ -164,10 +162,10 @@ namespace Net
 		std::vector<PlayerResult> players;
 	};
 
-	// ì‚¬ìš©: í´ë¼ NetworkClient::SendTimeProbe() â†’ ì„œë²„ NetworkServer::ReplyTimeProbe() [ì„ ì–¸]
+	// »ç¿ë: Å¬¶ó NetworkClient::SendTimeProbe() ¡æ ¼­¹ö NetworkServer::ReplyTimeProbe() [¼±¾ğ]
 	struct TimeProbeRequest { std::uint64_t clientSendMs = 0; };
 
-	// ì‚¬ìš©: ì„œë²„ NetworkServer::ReplyTimeProbe() â†’ í´ë¼ NetworkClient::ApplyTimeProbe() [ì„ ì–¸]
+	// »ç¿ë: ¼­¹ö NetworkServer::ReplyTimeProbe() ¡æ Å¬¶ó NetworkClient::ApplyTimeProbe() [¼±¾ğ]
 	struct TimeProbeResult
 	{
 		std::uint64_t clientSendMs = 0;
@@ -175,17 +173,17 @@ namespace Net
 		ServerTimeMs serverSendMs = 0;
 	};
 
-	// ì‚¬ìš©: í´ë¼ NetworkClient::RegisterUDP() â†’ ì„œë²„ NetworkServer::RegisterPlayerUDP() [ì„ ì–¸]
+	// »ç¿ë: Å¬¶ó NetworkClient::RegisterUDP() ¡æ ¼­¹ö NetworkServer::RegisterPlayerUDP() [¼±¾ğ]
 	struct UdpRegisterRequest {};
 
-	// ì‚¬ìš©: ì„œë²„ NetworkServer::RegisterPlayerUDP() â†’ í´ë¼ NetworkClient::CompleteConnection() [ì„ ì–¸]
+	// »ç¿ë: ¼­¹ö NetworkServer::RegisterPlayerUDP() ¡æ Å¬¶ó NetworkClient::CompleteConnection() [¼±¾ğ]
 	struct UdpRegisterResult { ErrorCode result = ErrorCode::Ok; Sequence registrationSequence = 0; };
 
-	// ì‚¬ìš©: í´ë¼ ShootingScene::SendPlayerTransform() â†’ ì„œë²„ Room::RecvPlayerInput(), Room::UpdatePlayerTransform() [ì„ ì–¸] / ê°œë³„
-	//       í”Œë ˆì´ì–´ì˜ ìµœì‹  ë³€í™˜ í–‰ë ¬
+	// »ç¿ë: Å¬¶ó ShootingScene::SendPlayerTransform() ¡æ ¼­¹ö Room::RecvPlayerInput(), Room::UpdatePlayerTransform() [¼±¾ğ] / °³º°
+	//       ÇÃ·¹ÀÌ¾îÀÇ ÃÖ½Å º¯È¯ Çà·Ä
 	struct PlayerTransform { Sequence inputSequence = 0; Mat4Data worldTransform; };
 
-	// ì‚¬ìš©: ì„œë²„ Room::SendTransformData() â†’ í´ë¼ ShootingScene::RecvTransformData() [ì„ ì–¸] / ë¬¶ìŒ: ì „ì²´ í”Œë ˆì´ì–´Â·ë³¸ì¸ ë³´ì •
+	// »ç¿ë: ¼­¹ö Room::SendTransformData() ¡æ Å¬¶ó ShootingScene::RecvTransformData() [¼±¾ğ] / ¹­À½: ÀüÃ¼ ÇÃ·¹ÀÌ¾î¡¤º»ÀÎ º¸Á¤
 	struct PlayerSnapshot
 	{
 		ServerTimeMs serverTimeMs = 0;
@@ -195,11 +193,11 @@ namespace Net
 
 	};
 
-	// ì‚¬ìš©: ì„œë²„ Room::SendTargetPositions() â†’ í´ë¼ ShootingScene::ApplyTargetPositions() [ì„ ì–¸] / ì‚´ì•„ ìˆëŠ” ì „ì²´ ëª©ë¡ì˜ í•œ ì¡°ê°, ìµœëŒ€ 40ê°œ
+	// »ç¿ë: ¼­¹ö Room::SendTargetPositions() ¡æ Å¬¶ó ShootingScene::ApplyTargetPositions() [¼±¾ğ] / »ì¾Æ ÀÖ´Â ÀüÃ¼ ¸ñ·ÏÀÇ ÇÑ Á¶°¢, ÃÖ´ë 40°³
 	struct TargetSnapshot
 	{
-		// ê°™ì€ ì„œë²„ ê³„ì‚° ì‹œì ì˜ ì „ì²´ í‘œì  ëª©ë¡ì„ ë‚˜ëˆˆ ì¡°ê°. ëª¨ë‘ ìˆ˜ì‹ í•œ ë’¤ì—ë§Œ ë°˜ì˜í•œë‹¤.
-		// í‘œì ì´ ì—†ì–´ë„ targetCountê°€ 0ì¸ ì¡°ê° í•˜ë‚˜ë¥¼ ë³´ë‚´ ê¸°ì¡´ í‘œì ì„ ì§€ìš´ë‹¤.
+		// °°Àº ¼­¹ö °è»ê ½ÃÁ¡ÀÇ ÀüÃ¼ Ç¥Àû ¸ñ·ÏÀ» ³ª´« Á¶°¢. ¸ğµÎ ¼ö½ÅÇÑ µÚ¿¡¸¸ ¹İ¿µÇÑ´Ù.
+		// Ç¥ÀûÀÌ ¾ø¾îµµ targetCount°¡ 0ÀÎ Á¶°¢ ÇÏ³ª¸¦ º¸³» ±âÁ¸ Ç¥ÀûÀ» Áö¿î´Ù.
 		ServerTimeMs serverTimeMs = 0;
 		std::uint16_t totalTargetCount = 0;
 		std::uint16_t chunkIndex = 0;

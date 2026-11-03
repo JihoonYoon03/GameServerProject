@@ -1,13 +1,11 @@
-﻿#pragma once
+#pragma once
 #include "../Shared/NetworkTypes.h"
 
-namespace Server
+class ClientPlayer
 {
-    class ClientPlayer
-    {
-    public:
-        Net::PlayerData state;
-        Net::Sequence lastProcessedInput = 0;
-        Net::ShotId lastProcessedShot = 0;
-    };
-}
+public:
+	Net::PlayerData state;
+	Net::Sequence lastProcessedInput = 0;
+	Net::ShotId lastProcessedShot = 0;
+};
+

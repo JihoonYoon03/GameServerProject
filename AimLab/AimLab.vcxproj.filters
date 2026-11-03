@@ -106,6 +106,9 @@
     <ClCompile Include="Config.h">
       <Filter>헤더 파일</Filter>
     </ClCompile>
+    <ClCompile Include="Target.cpp">
+      <Filter>Engine\Source</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Gun.h">

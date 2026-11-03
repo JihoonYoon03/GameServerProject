@@ -103,6 +103,9 @@
     <ClCompile Include="Texture.cpp">
       <Filter>Engine\Source</Filter>
     </ClCompile>
+    <ClCompile Include="Config.h">
+      <Filter>헤더 파일</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Gun.h">
@@ -122,42 +125,6 @@
     </ClInclude>
     <ClInclude Include="stb_image.h">
       <Filter>External</Filter>
-    </ClInclude>
-    <ClInclude Include="Server\Client.h">
-      <Filter>Network\Server</Filter>
-    </ClInclude>
-    <ClInclude Include="Server\ClientPlayer.h">
-      <Filter>Network\Server</Filter>
-    </ClInclude>
-    <ClInclude Include="Server\Framework.h">
-      <Filter>Network\Server</Filter>
-    </ClInclude>
-    <ClInclude Include="Server\NetworkServer.h">
-      <Filter>Network\Server</Filter>
-    </ClInclude>
-    <ClInclude Include="Server\Room.h">
-      <Filter>Network\Server</Filter>
-    </ClInclude>
-    <ClInclude Include="Server\RoomManager.h">
-      <Filter>Network\Server</Filter>
-    </ClInclude>
-    <ClInclude Include="Server\StageController.h">
-      <Filter>Network\Server</Filter>
-    </ClInclude>
-    <ClInclude Include="Server\Target.h">
-      <Filter>Network\Server</Filter>
-    </ClInclude>
-    <ClInclude Include="Shared\NetworkConversions.h">
-      <Filter>Network\Shared</Filter>
-    </ClInclude>
-    <ClInclude Include="Shared\NetworkMessages.h">
-      <Filter>Network\Shared</Filter>
-    </ClInclude>
-    <ClInclude Include="Shared\NetworkPackets.h">
-      <Filter>Network\Shared</Filter>
-    </ClInclude>
-    <ClInclude Include="Shared\NetworkTypes.h">
-      <Filter>Network\Shared</Filter>
     </ClInclude>
     <ClInclude Include="MainScene.h">
       <Filter>Network\Client</Filter>
@@ -204,6 +171,18 @@
     <ClInclude Include="Texture.h">
       <Filter>Engine\Header</Filter>
     </ClInclude>
+    <ClInclude Include="..\Shared\NetworkConversions.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Shared\NetworkMessages.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Shared\NetworkPackets.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Shared\NetworkTypes.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="Shaders\Lit.frag">
@@ -214,25 +193,25 @@
     </None>
   </ItemGroup>
   <ItemGroup>
-    <None Include="..\Resources\Meshes\Cube.obj">
-      <Filter>Resources\Meshes</Filter>
-    </None>
-    <None Include="..\Resources\Meshes\K1.obj">
-      <Filter>Resources\Meshes</Filter>
-    </None>
-    <None Include="..\Resources\Meshes\Pistol.obj">
-      <Filter>Resources\Meshes</Filter>
-    </None>
-    <None Include="..\Resources\Meshes\Sphere.obj">
-      <Filter>Resources\Meshes</Filter>
-    </None>
+    <Image Include="Resources\Textures\GroundTex.png">
+      <Filter>Resources\Textures</Filter>
+    </Image>
+    <Image Include="Resources\Textures\SkydomeTex.png">
+      <Filter>Resources\Textures</Filter>
+    </Image>
   </ItemGroup>
   <ItemGroup>
-    <Image Include="..\Resources\Textures\GroundTex.png">
-      <Filter>Resources\Textures</Filter>
-    </Image>
-    <Image Include="..\Resources\Textures\SkydomeTex.png">
-      <Filter>Resources\Textures</Filter>
-    </Image>
+    <Object Include="Resources\Meshes\Cube.obj">
+      <Filter>Resources\Meshes</Filter>
+    </Object>
+    <Object Include="Resources\Meshes\K1.obj">
+      <Filter>Resources\Meshes</Filter>
+    </Object>
+    <Object Include="Resources\Meshes\Pistol.obj">
+      <Filter>Resources\Meshes</Filter>
+    </Object>
+    <Object Include="Resources\Meshes\Sphere.obj">
+      <Filter>Resources\Meshes</Filter>
+    </Object>
   </ItemGroup>
 </Project>

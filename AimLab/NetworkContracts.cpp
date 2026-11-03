@@ -1,18 +1,10 @@
-ï»¿#include "pch.h"
+#include "pch.h"
 #include "Framework.h"
 #include "MainScene.h"
 #include "NetworkClient.h"
 #include "ShootingScene.h"
 #include "Shared/NetworkConversions.h"
-#include "Server/Client.h"
-#include "Server/ClientPlayer.h"
-#include "Server/Framework.h"
-#include "Server/NetworkServer.h"
-#include "Server/Room.h"
-#include "Server/RoomManager.h"
-#include "Server/StageController.h"
-#include "Server/Target.h"
 
-// í´ë¼ì´ì–¸íŠ¸Â·ì„œë²„ ì„ ì–¸ì„ í•¨ê»˜ ì»´íŒŒì¼í•´ ì´ë¦„Â·ìë£Œí˜• ì¶©ëŒì„ í™•ì¸í•œë‹¤. í†µì‹  í•¨ìˆ˜ëŠ” ì‹¤í–‰í•˜ì§€ ì•ŠëŠ”ë‹¤.
+// Å¬¶óÀÌ¾ğÆ®¡¤¼­¹ö ¼±¾ğÀ» ÇÔ²² ÄÄÆÄÀÏÇØ ÀÌ¸§¡¤ÀÚ·áÇü Ãæµ¹À» È®ÀÎÇÑ´Ù. Åë½Å ÇÔ¼ö´Â ½ÇÇàÇÏÁö ¾Ê´Â´Ù.
 static_assert(Net::MaxPlayers == 4, "Room capacity differs from the plan");
 static_assert(Net::ProtocolVersion == 5, "Protocol version differs from the plan");

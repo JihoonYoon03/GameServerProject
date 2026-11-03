@@ -1,35 +1,33 @@
-ï»¿#pragma once
+#pragma once
 #include "../Shared/NetworkMessages.h"
 
-namespace Server
+// °æ±â »óÅÂ´Â ÀÌ ¹æÀÇ ½º·¹µå¿¡¼­¸¸ º¯°æÇÑ´Ù. ¿ÜºÎ ¿äÃ»Àº AddCommand()·Î Àü´ŞÇÑ´Ù.
+class Room
 {
-    // ê²½ê¸° ìƒíƒœëŠ” ì´ ë°©ì˜ ìŠ¤ë ˆë“œì—ì„œë§Œ ë³€ê²½í•œë‹¤. ì™¸ë¶€ ìš”ì²­ì€ AddCommand()ë¡œ ì „ë‹¬í•œë‹¤.
-    class Room
-    {
-    public:
-        void AssignPlayerAreas();
-        void SetPlayerLoaded(const Net::SessionToken& player);
-        void RemovePlayerFromRoom(const Net::SessionToken& player);
-        void SetPlayerReady(const Net::SessionToken& player, bool ready);
-        void SendRoomState();
-        bool AreAllPlayersReady() const;
-        void StartGameIfReady();
-        void Tick();
-        void StartRoomThread();
-        void AddCommand(const Net::RoomCommand& command);
-        void ProcessCommands();
-        void StopRoom();
-        void RecvPlayerInput(const Net::SessionToken& player,
-            const Net::PlayerTransform& input);
-        bool UpdatePlayerTransform(const Net::SessionToken& player,
-            const Net::PlayerTransform& input);
-        void CheckPlayerCollision(const Net::SessionToken& player);
-        void SendTransformData();
-        void RecvShoot(const Net::SessionToken& player, const Net::FireRequest& request);
-        Net::ShotResolved JudgeShoot(const Net::SessionToken& player,
-            const Net::FireRequest& request);
-        void SendShootResult(const Net::ShotResolved& result);
-        // í™œì„± í‘œì  ì „ì²´ ëª©ë¡ì„ ë™ì¼ ì‹œì  ê¸°ì¤€ìœ¼ë¡œ ë‚˜ëˆ  UDP ì „ì†¡í•œë‹¤.
-        void SendTargetPositions();
-    };
-}
+public:
+	void AssignPlayerAreas();
+	void SetPlayerLoaded(const Net::SessionToken& player);
+	void RemovePlayerFromRoom(const Net::SessionToken& player);
+	void SetPlayerReady(const Net::SessionToken& player, bool ready);
+	void SendRoomState();
+	bool AreAllPlayersReady() const;
+	void StartGameIfReady();
+	void Tick();
+	void StartRoomThread();
+	void AddCommand(const Net::RoomCommand& command);
+	void ProcessCommands();
+	void StopRoom();
+	void RecvPlayerInput(const Net::SessionToken& player,
+		const Net::PlayerTransform& input);
+	bool UpdatePlayerTransform(const Net::SessionToken& player,
+		const Net::PlayerTransform& input);
+	void CheckPlayerCollision(const Net::SessionToken& player);
+	void SendTransformData();
+	void RecvShoot(const Net::SessionToken& player, const Net::FireRequest& request);
+	Net::ShotResolved JudgeShoot(const Net::SessionToken& player,
+		const Net::FireRequest& request);
+	void SendShootResult(const Net::ShotResolved& result);
+	// È°¼º Ç¥Àû ÀüÃ¼ ¸ñ·ÏÀ» µ¿ÀÏ ½ÃÁ¡ ±âÁØÀ¸·Î ³ª´² UDP Àü¼ÛÇÑ´Ù.
+	void SendTargetPositions();
+};
+

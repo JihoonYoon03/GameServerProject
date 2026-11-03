@@ -45,9 +45,6 @@
     <ClInclude Include="pch.h">
       <Filter>Application</Filter>
     </ClInclude>
-    <ClInclude Include="Common.h">
-      <Filter>Server\Header</Filter>
-    </ClInclude>
     <ClInclude Include="..\Shared\NetworkConversions.h">
       <Filter>Server\Shared</Filter>
     </ClInclude>
@@ -65,10 +62,10 @@
     <ClCompile Include="pch.cpp">
       <Filter>Application</Filter>
     </ClCompile>
-    <ClCompile Include="Common.cpp">
+    <ClCompile Include="Framework.cpp">
       <Filter>Server\Source</Filter>
     </ClCompile>
-    <ClCompile Include="Framework.cpp">
+    <ClCompile Include="NetworkServer.cpp">
       <Filter>Server\Source</Filter>
     </ClCompile>
   </ItemGroup>

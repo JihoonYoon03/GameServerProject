@@ -1,19 +1,18 @@
-ï»¿#pragma once
+#pragma once
 #include "../Shared/NetworkMessages.h"
 
-namespace Server
+class RoomManager
 {
-    class RoomManager
-    {
-    public:
-        void SendRoomList(const Net::SessionToken& recipient,
-            const Net::RoomListRequest& request);
-        void CreateGameRoom(const Net::SessionToken& creator);
-        void JoinGameRoom(const Net::SessionToken& player,
-            const Net::JoinRoomRequest& request);
-        Net::ErrorCode CheckRoomJoin(Net::RoomId roomId) const;
-        // ìš”ì²­ ì „ë‹¬ ì¤‘ì§€ì™€ ë°© ìŠ¤ë ˆë“œ ì¢…ë£Œë¥¼ í™•ì¸í•œ ë’¤ ë°© ê°ì²´ë¥¼ ì‚­ì œí•œë‹¤.
-        void DeleteRoom(Net::RoomId roomId);
-        void UpdateRooms();
-    };
-}
+public:
+	void SendRoomList(const Net::SessionToken& recipient,
+		const Net::RoomListRequest& request);
+	void CreateGameRoom(const Net::SessionToken& creator);
+	void JoinGameRoom(const Net::SessionToken& player,
+		const Net::JoinRoomRequest& request);
+	Net::ErrorCode CheckRoomJoin(Net::RoomId roomId) const;
+	// ¿äÃ» Àü´Ş ÁßÁö¿Í ¹æ ½º·¹µå Á¾·á¸¦ È®ÀÎÇÑ µÚ ¹æ °´Ã¼¸¦ »èÁ¦ÇÑ´Ù.
+	void DeleteRoom(Net::RoomId roomId);
+	void UpdateRooms();
+};
+
+

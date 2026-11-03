@@ -4,7 +4,7 @@
 Target::Target(std::shared_ptr<Mesh> mesh, std::shared_ptr<Material> material)
 	: Object(std::move(mesh), std::move(material))
 {
-	static std::mt19937 random{ std::random_device{}() };
+	static std::mt19937 random{std::random_device{}()};
 	std::uniform_int_distribution<int> horizontal(-1, 1);
 	moveDirection_ = glm::normalize(glm::vec3(static_cast<float>(horizontal(random)), 1.0f, 0.0f));
 }

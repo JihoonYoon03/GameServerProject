@@ -1,15 +1,16 @@
-ï»¿#pragma once
+#pragma once
 #include "../Shared/NetworkTypes.h"
 
-namespace Server
+// ¼ÒÄÏ¡¤UDP ÁÖ¼Ò º¸°üÀº Á¢¼Ó Ã³¸® ±¸Çö ½Ã Ãß°¡ÇÑ´Ù.
+class Client
 {
-    // ì†Œì¼“Â·UDP ì£¼ì†Œ ë³´ê´€ì€ ì ‘ì† ì²˜ë¦¬ êµ¬í˜„ ì‹œ ì¶”ê°€í•œë‹¤.
-    class Client
-    {
-    public:
-        Net::SessionToken sessionToken{};
-        Net::RoomId roomId = 0;
-        Net::MembershipId membershipId = 0;
-        bool udpRegistered = false;
-    };
-}
+public:
+    Net::SessionToken   sessionToken{};
+
+    SOCKET              TCPSocket = INVALID_SOCKET;
+    sockaddr_in         UDPAddress{};
+    bool                UDPRegistered = false;
+
+    Net::RoomId         roomId = 0;
+    Net::MembershipId   membershipId = 0;
+};

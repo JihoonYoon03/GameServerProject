@@ -1,8 +1,8 @@
-ï»¿#pragma once
-// í´ë¼ì´ì–¸íŠ¸ì™€ ì„œë²„ê°€ í•¨ê»˜ ì‚¬ìš©í•˜ëŠ” ì „ì†¡ ë°ì´í„°. ê·¸ë˜í”½Â·ìš´ì˜ì²´ì œ í—¤ë”ì— ì˜ì¡´í•˜ì§€ ì•ŠëŠ”ë‹¤.
-// ì„¸ì…˜ í† í°ì€ ì ‘ì†ë³„ í”Œë ˆì´ì–´ ì‹ë³„ìì´ë©°, ë¹„ë°€ ì¸ì¦ê°’ìœ¼ë¡œ ì‚¬ìš©í•˜ì§€ ì•ŠëŠ”ë‹¤.
-// êµ¬ì¡°ì²´Â·ë²¡í„° ë©”ëª¨ë¦¬ë¥¼ ì§ì ‘ ë³´ë‚´ì§€ ì•Šê³  ê° í•„ë“œë¥¼ ìˆœì„œëŒ€ë¡œ ì§ë ¬í™”í•œë‹¤.
-// í–‰ë ¬ì€ ì—´ ìš°ì„  ë‹¨ì •ë°€ë„ ì‹¤ìˆ˜ 16ê°œì´ë©°, ì „ì†¡ ì‹œ ê° ê°’ì˜ ë¹„íŠ¸ë¥¼ ë„¤íŠ¸ì›Œí¬ ë°”ì´íŠ¸ ìˆœì„œë¡œ ë³€í™˜í•œë‹¤.
+#pragma once
+// Å¬¶óÀÌ¾ğÆ®¿Í ¼­¹ö°¡ ÇÔ²² »ç¿ëÇÏ´Â Àü¼Û µ¥ÀÌÅÍ. ±×·¡ÇÈ¡¤¿î¿µÃ¼Á¦ Çì´õ¿¡ ÀÇÁ¸ÇÏÁö ¾Ê´Â´Ù.
+// ¼¼¼Ç ÅäÅ«Àº Á¢¼Óº° ÇÃ·¹ÀÌ¾î ½Äº°ÀÚÀÌ¸ç, ºñ¹Ğ ÀÎÁõ°ªÀ¸·Î »ç¿ëÇÏÁö ¾Ê´Â´Ù.
+// ±¸Á¶Ã¼¡¤º¤ÅÍ ¸Ş¸ğ¸®¸¦ Á÷Á¢ º¸³»Áö ¾Ê°í °¢ ÇÊµå¸¦ ¼ø¼­´ë·Î Á÷·ÄÈ­ÇÑ´Ù.
+// Çà·ÄÀº ¿­ ¿ì¼± ´ÜÁ¤¹Ğµµ ½Ç¼ö 16°³ÀÌ¸ç, Àü¼Û ½Ã °¢ °ªÀÇ ºñÆ®¸¦ ³×Æ®¿öÅ© ¹ÙÀÌÆ® ¼ø¼­·Î º¯È¯ÇÑ´Ù.
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -34,6 +34,7 @@ namespace Net
 	inline constexpr std::uint8_t MagazineCapacity = 6;
 	inline constexpr float FireIntervalSeconds = 0.2f;
 	inline constexpr float ReloadSeconds = 2.0f;
+	inline constexpr float RecoilAnimSpeed = 1.5f;
 
 	enum class ReadyState : std::uint8_t
 	{
@@ -84,11 +85,11 @@ namespace Net
 		ServerStopped = 2
 	};
 
-	// ì‚¬ìš©: Net::ToWire(glm::vec3), Net::FromWire(Vec3Data) [ì„ ì–¸] / íŒ¨í‚· ì „ìš©, ì—°ì‚°ì€ glm::vec3
+	// »ç¿ë: Net::ToWire(glm::vec3), Net::FromWire(Vec3Data) [¼±¾ğ] / ÆĞÅ¶ Àü¿ë, ¿¬»êÀº glm::vec3
 	struct Vec3Data { float x = 0.0f; float y = 0.0f; float z = 0.0f; };
 
-	// ì‚¬ìš©: Player::GetNetworkTransform(), Player::ApplyNetworkTransform(), Net::ToWire(glm::mat4),
-	//       Net::FromWire(Mat4Data) [ì„ ì–¸] / ìœ„ì¹˜Â·íšŒì „ í†µí•© í–‰ë ¬
+	// »ç¿ë: Player::GetNetworkTransform(), Player::ApplyNetworkTransform(), Net::ToWire(glm::mat4),
+	//       Net::FromWire(Mat4Data) [¼±¾ğ] / À§Ä¡¡¤È¸Àü ÅëÇÕ Çà·Ä
 	struct Mat4Data
 	{
 
@@ -101,19 +102,19 @@ namespace Net
 
 	};
 
-	// ì‚¬ìš©: ì„œë²„ Room::AssignPlayerAreas(), Room::CheckPlayerCollision() [ì„ ì–¸]
+	// »ç¿ë: ¼­¹ö Room::AssignPlayerAreas(), Room::CheckPlayerCollision() [¼±¾ğ]
 	struct BoxData { Vec3Data min; Vec3Data max; };
 
-	// ì‚¬ìš©: í´ë¼ NetworkClient::UpdateNetwork(), ì„œë²„ Room::RecvPlayerInput(), Room::RecvShoot() [ì„ ì–¸]
+	// »ç¿ë: Å¬¶ó NetworkClient::UpdateNetwork(), ¼­¹ö Room::RecvPlayerInput(), Room::RecvShoot() [¼±¾ğ]
 	struct MatchContext { RoomId roomId = 0; MatchId matchId = 0; };
 
-	// ì‚¬ìš©: ì„œë²„ Room::SendRoomState(), Room::SendShootResult() / í´ë¼ ShootingScene::OnRoomStateChanged() [ì„ ì–¸]
+	// »ç¿ë: ¼­¹ö Room::SendRoomState(), Room::SendShootResult() / Å¬¶ó ShootingScene::OnRoomStateChanged() [¼±¾ğ]
 	struct RoomVersion { MatchContext context; Revision revision = 0; };
 
-	// ì‚¬ìš©: ì„œë²„ Room::AssignPlayerAreas(), Room::CheckPlayerCollision() / í´ë¼ ShootingScene::OnRoomStateChanged() [ì„ ì–¸]
+	// »ç¿ë: ¼­¹ö Room::AssignPlayerAreas(), Room::CheckPlayerCollision() / Å¬¶ó ShootingScene::OnRoomStateChanged() [¼±¾ğ]
 	struct AreaData { std::uint8_t areaId = UnassignedArea; BoxData movementBounds; Mat4Data spawnTransform; };
 
-	// ì‚¬ìš©: ì„œë²„ StageController::StartGame(), Target::SpawnTargets() / í´ë¼ ShootingScene::OnGameStarted() [ì„ ì–¸]
+	// »ç¿ë: ¼­¹ö StageController::StartGame(), Target::SpawnTargets() / Å¬¶ó ShootingScene::OnGameStarted() [¼±¾ğ]
 	struct MatchRules
 	{
 		std::uint32_t durationMs = MatchDurationMs;
@@ -121,12 +122,12 @@ namespace Net
 		std::uint16_t pointsPerHit = 1;
 	};
 
-	// ì‚¬ìš©: ì„œë²„ Room::RecvShoot(), Room::JudgeShoot(), StageController::JudgeWhoWins() / í´ë¼
-	//       ShootingScene::RecvShootResult() [ì„ ì–¸]
+	// »ç¿ë: ¼­¹ö Room::RecvShoot(), Room::JudgeShoot(), StageController::JudgeWhoWins() / Å¬¶ó
+	//       ShootingScene::RecvShootResult() [¼±¾ğ]
 	struct PlayerStats { std::uint32_t score = 0; std::uint32_t shotsFired = 0; };
 
-	// ì‚¬ìš©: ì„œë²„ Room::SetPlayerLoaded(), Room::SetPlayerReady(), Room::UpdatePlayerTransform() / í´ë¼
-	//       ShootingScene::OnRoomStateChanged() [ì„ ì–¸]
+	// »ç¿ë: ¼­¹ö Room::SetPlayerLoaded(), Room::SetPlayerReady(), Room::UpdatePlayerTransform() / Å¬¶ó
+	//       ShootingScene::OnRoomStateChanged() [¼±¾ğ]
 	struct PlayerData { SessionToken sessionToken{};
 
 		Mat4Data worldTransform;
@@ -136,11 +137,11 @@ namespace Net
 		PlayerStats stats;
 	};
 
-	// ì‚¬ìš©: ì„œë²„ Room::SendTargetPositions() â†’ í´ë¼ ShootingScene::ApplyTargetSnapshot(), InterpolateTargets() [ì„ ì–¸] / ì „ì†¡ ì „ìš©:
-	//       ì‹ë³„ìÂ·ìœ„ì¹˜Â·ì´ˆë‹¹ ì´ë™ ë²¡í„°
+	// »ç¿ë: ¼­¹ö Room::SendTargetPositions() ¡æ Å¬¶ó ShootingScene::ApplyTargetSnapshot(), InterpolateTargets() [¼±¾ğ] / Àü¼Û Àü¿ë:
+	//       ½Äº°ÀÚ¡¤À§Ä¡¡¤ÃÊ´ç ÀÌµ¿ º¤ÅÍ
 	struct TargetMotionData { TargetId targetId = 0; Vec3Data position; Vec3Data velocity; };
 
-	// ì‚¬ìš©: ì„œë²„ RoomManager::SendRoomList() / í´ë¼ MainScene::UpdateRoomList(), MainScene::ShowRoomList() [ì„ ì–¸]
+	// »ç¿ë: ¼­¹ö RoomManager::SendRoomList() / Å¬¶ó MainScene::UpdateRoomList(), MainScene::ShowRoomList() [¼±¾ğ]
 	struct RoomInfo
 	{
 		RoomId roomId = 0;
@@ -149,15 +150,15 @@ namespace Net
 		GameState state = GameState::Preparing;
 	};
 
-	// ì‚¬ìš©: ì„œë²„ StageController::JudgeWhoWins(), StageController::SendGameResults() / í´ë¼ ShootingScene::RecvGameResults(),
-	//       ShootingScene::ShowGameResult() [ì„ ì–¸]
+	// »ç¿ë: ¼­¹ö StageController::JudgeWhoWins(), StageController::SendGameResults() / Å¬¶ó ShootingScene::RecvGameResults(),
+	//       ShootingScene::ShowGameResult() [¼±¾ğ]
 	struct PlayerResult { SessionToken sessionToken{};
 
 		PlayerStats stats;
 		std::uint8_t rank = 0;
 	};
 
-	// ì‚¬ìš©: ì„œë²„ Room::SendRoomState() / í´ë¼ ShootingScene::OnRoomStateChanged(), ShootingScene::OnGameEnded() [ì„ ì–¸]
+	// »ç¿ë: ¼­¹ö Room::SendRoomState() / Å¬¶ó ShootingScene::OnRoomStateChanged(), ShootingScene::OnGameEnded() [¼±¾ğ]
 	struct RoomStateData
 	{
 		RoomVersion version;
@@ -168,7 +169,7 @@ namespace Net
 		std::vector<PlayerData> players;
 	};
 
-	// ì‚¬ìš©: ì„œë²„ Room::SendTransformData() / í´ë¼ ShootingScene::RecvTransformData() [ì„ ì–¸] / ìœ„ì¹˜Â·íšŒì „ í†µí•© í–‰ë ¬
+	// »ç¿ë: ¼­¹ö Room::SendTransformData() / Å¬¶ó ShootingScene::RecvTransformData() [¼±¾ğ] / À§Ä¡¡¤È¸Àü ÅëÇÕ Çà·Ä
 	struct PlayerTransformEntry { SessionToken sessionToken{};
 
 		Mat4Data worldTransform;

@@ -1,12 +1,10 @@
-﻿#pragma once
+#pragma once
 #include <cstdint>
 
-namespace Server
+class Framework
 {
-    class Framework
-    {
-    public:
-        bool StartServer(std::uint16_t tcpPort, std::uint16_t udpPort);
-        void StopServer();
-    };
-}
+public:
+	bool StartServer(std::uint16_t tcpPort, std::uint16_t udpPort);
+	void StopServer();
+};
+

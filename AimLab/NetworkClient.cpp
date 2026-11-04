@@ -45,7 +45,7 @@ bool NetworkClient::StartNetwork()
 	m_ServerAddr.sin_port = htons(port);
 
 	//TCP 접속 함수 호출
-	if (!ConnectServer("127.0.0.1", port)) err_quit("Cannot connect to server!");
+	//if (!ConnectServer("127.0.0.1", port)) err_quit("Cannot connect to server!");
 	//UDP 통신 등록 함수 호출
 	RegisterUDP();
 

@@ -49,3 +49,18 @@ void Target::UpdateTargets(float deltaTime, Net::ServerTimeMs nowMs)
 			(nowMs >= target.spawnedAtMs && nowMs - target.spawnedAtMs >= TargetLifetimeMs);
 	}), targets_.end());
 }
+
+std::vector<Net::TargetMotionData> Target::GetActiveTargets(Net::ServerTimeMs nowMs) const
+{
+	std::vector<Net::TargetMotionData> activeTargets;
+	activeTargets.reserve(targets_.size());
+	for (const auto& target : targets_)
+	{
+		if (target.elapsedSeconds < TargetLifetimeSeconds &&
+			nowMs >= target.spawnedAtMs && nowMs - target.spawnedAtMs < TargetLifetimeMs)
+		{
+			activeTargets.push_back(target.motion);
+		}
+	}
+	return activeTargets;
+}

@@ -7,11 +7,12 @@
 class Target
 {
 public:
-	// Call once per spawn interval during an active match.
+	// 경기 진행 중 표적 생성 주기마다 한 번 호출한다.
 	void SpawnTargets(const Net::MatchRules& rules, Net::ServerTimeMs nowMs);
 	void UpdateTargets(float deltaTime, Net::ServerTimeMs nowMs);
 	bool TargetHits(Net::TargetId targetId, Net::ServerTimeMs nowMs);
 	void ClearTargets();
+	std::vector<Net::TargetMotionData> GetActiveTargets(Net::ServerTimeMs nowMs) const;
 
 private:
 	struct ActiveTarget

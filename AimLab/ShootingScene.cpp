@@ -242,3 +242,43 @@ Hud ShootingScene::GetHud() const
 
 	return hud;
 }
+
+void ShootingScene::ApplyTargetPositions(const Net::UdpHeader& header, const Net::TargetSnapshot& snapshot)
+{
+	// 헤더와 본문은 네트워크 바이트 순서에서 변환된 값으로 전달받습니다.
+	if (header.magic != Net::UdpMagic || header.type != Net::UdpType::TargetSnapshot || header.context.roomId == 0) return;
+
+	if (snapshot.totalTargetCount > Net::MaxTargets || snapshot.targetCount > snapshot.targets.size()) return;
+
+	const std::size_t expectedChunkCount = std::max<std::size_t>(1,
+		(snapshot.totalTargetCount + Net::MaxTargetsPerSnapshot - 1) / Net::MaxTargetsPerSnapshot);
+
+	if (snapshot.chunkCount != expectedChunkCount || snapshot.chunkIndex >= snapshot.chunkCount) return;
+
+	const std::size_t offset = snapshot.chunkIndex * Net::MaxTargetsPerSnapshot;
+	const std::size_t expectedTargetCount = std::min<std::size_t>(Net::MaxTargetsPerSnapshot, snapshot.totalTargetCount - offset);
+
+	if (snapshot.targetCount != expectedTargetCount) return;
+
+	// SendTargetPositions에서 기록하는 필드 크기를 사용합니다.
+	constexpr std::size_t HeaderBytes = 2 + 2 + 2 + Net::SessionTokenBytes + 4 + 4 + 4 + 4 + 4;
+	constexpr std::size_t SnapshotMetadataBytes = 8 + 2 + 2 + 2 + 2;
+	constexpr std::size_t TargetBytes = 4 + 3 * 4 + 3 * 4;
+	const std::size_t expectedSize = HeaderBytes + SnapshotMetadataBytes + snapshot.targetCount * TargetBytes;
+
+	if (header.size != expectedSize || header.size > Net::MaxUdpPacketBytes) return;
+
+	for (std::size_t i = 0; i < snapshot.targetCount; ++i)
+	{
+		const auto& target = snapshot.targets[i];
+
+		if (target.targetId == 0 ||
+			!std::isfinite(target.position.x) || !std::isfinite(target.position.y) || !std::isfinite(target.position.z) ||
+			!std::isfinite(target.velocity.x) || !std::isfinite(target.velocity.y) || !std::isfinite(target.velocity.z)) return;
+	}
+
+	// TODO: 현재 방과 참가자 정보를 연결하면 context, sessionToken, membershipId를 확인합니다.
+	// TODO: context, sequence, serverTick, serverTimeMs가 같은 조각을 chunkIndex 순서로 조립합니다.
+	// TODO: 모든 조각이 모이면 전체 목록을 ApplyTargetSnapshot에 전달합니다. 빈 목록도 반영합니다.
+	// ApplyTargetSnapshot(assembledTargets, header.serverTick, snapshot.serverTimeMs);
+}

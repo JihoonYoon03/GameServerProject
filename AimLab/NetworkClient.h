@@ -26,9 +26,21 @@ private:
     SOCKET      m_TCPSocket;
     SOCKET      m_UDPSocket;
 
-    Net::SessionToken   m_SessionToken;
-    HANDLE      m_hNetworkThread;
+    sockaddr_in         m_ServerAddr;
 
+    Net::SessionToken   m_SessionToken;
+    //UDP 등록 여부
+    std::atomic<bool>   m_UDPRegistered{ false };
+
+    //CreateThread에 전달되는 네트워크 쓰레드 함수. static없으면 인자값으로 사용 못 함 주의
+    static DWORD WINAPI NetworkProc(LPVOID param);
+    HANDLE              m_hNetworkThread;
+    //쓰레드 종료 여부
+    std::atomic<bool>   m_bStopRequested{ false };
+
+    //서버에게 줄 데이터와 받은 데이터를 큐에 저장하고
+    //관련 처리 함수에서 일괄적으로 처리함.
+    //SendRequest엔 현재 클라의 토큰과 패킷 데이터가 있음
     std::queue<Net::SendRequest>    m_qSendQueue;
-    std::queue<Net::SendRequest>    m_qReceiveQueue;
+    std::queue<Net::PacketData>    m_qReceiveQueue;
 };

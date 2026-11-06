@@ -1,10 +1,10 @@
-﻿#pragma once
+#pragma once
 #include "NetworkTypes.h"
 
-// 프로토콜 5: 공통 헤더 뒤에 본문 필드를 기록한다. 구조체의 메모리 크기를 전송 크기로 쓰지 않는다.
-// 헤더의 길이 필드는 헤더를 포함한 전체 패킷 길이이다. 정수와 실수의 비트는
-// 빅 엔디언으로 전송하고, 가변 목록은 개수와 유효 항목만 기록한다.
-// UDP 토큰은 클라→서버에서 발신자, 서버→클라에서 수신자를 나타낸다.
+// ???????? 5: ???? ??? ??? ???? ??? ??????. ??????? ??? ??? ???? ???? ???? ??��?.
+// ????? ???? ???? ????? ?????? ??? ??? ???????. ?????? ????? ?????
+// ?? ????????? ???????, ???? ????? ?????? ??? ??? ??????.
+// UDP ????? ?????????? ?????, ??????????? ??????? ???????.
 namespace Net
 {
 	inline constexpr std::uint16_t ProtocolVersion = 5;
@@ -50,7 +50,7 @@ namespace Net
 		TargetSnapshot = 0x1103
 	};
 
-	// 사용: 서버 NetworkServer::NetworkLoop(), DispatchPacket() / 클라 NetworkClient::NetworkLoop(), UpdateNetwork() [선언]
+	// ???: ???? NetworkServer::NetworkLoop(), DispatchPacket() / ??? NetworkClient::NetworkLoop(), UpdateNetwork() [????]
 	struct TcpHeader
 	{
 		std::uint32_t size = TcpHeaderBytes;
@@ -59,14 +59,14 @@ namespace Net
 		std::uint32_t requestId = 0;
 	};
 
-	// 사용: 서버 NetworkServer::RegisterPlayerUDP(), DispatchPacket() / 클라 NetworkClient::NetworkLoop() [선언]
+	// ???: ???? NetworkServer::RegisterPlayerUDP(), DispatchPacket() / ??? NetworkClient::NetworkLoop() [????]
 	struct UdpHeader
 	{
 		std::uint16_t magic = UdpMagic;
 		std::uint16_t version = ProtocolVersion;
 		UdpType type = UdpType::RegisterRequest;
 		std::uint16_t size = UdpHeaderBytes;
-		SessionToken sessionToken{};
+		SessionToken m_sessionToken{};
 
 		Sequence sequence = 0;
 		MatchContext context;
@@ -74,31 +74,31 @@ namespace Net
 		std::uint32_t serverTick = 0;
 	};
 
-	// 사용: 서버 NetworkServer::AcceptPlayer() → 클라 NetworkClient::ConnectServer() [선언]
-	struct ConnectResult { ErrorCode result = ErrorCode::Ok; SessionToken sessionToken{};
+	// ???: ???? NetworkServer::AcceptPlayer() ?? ??? NetworkClient::ConnectServer() [????]
+	struct ConnectResult { ErrorCode result = ErrorCode::Ok; SessionToken m_sessionToken{};
 
 		std::uint16_t udpPort = 0;
 		ServerTimeMs serverTimeMs = 0;
 		std::uint16_t tickRate = static_cast<std::uint16_t>(ServerTickRate);
 	};
 
-	// 사용: 서버 NetworkServer::DispatchPacket(), RoomManager::JoinGameRoom(), Room::RecvShoot() → 클라
-	//       NetworkClient::UpdateNetwork() [선언]
+	// ???: ???? NetworkServer::DispatchPacket(), RoomManager::JoinGameRoom(), Room::RecvShoot() ?? ???
+	//       NetworkClient::UpdateNetwork() [????]
 	struct RequestRejected { ErrorCode reason = ErrorCode::InvalidRequest; MatchContext context; };
 
-	// 사용: 클라 MainScene::SearchRoomList() → 서버 RoomManager::SendRoomList() [선언]
+	// ???: ??? MainScene::SearchRoomList() ?? ???? RoomManager::SendRoomList() [????]
 	struct RoomListRequest { RoomId afterRoomId = 0; };
 
-	// 사용: 서버 RoomManager::SendRoomList() → 클라 MainScene::UpdateRoomList() [선언]
+	// ???: ???? RoomManager::SendRoomList() ?? ??? MainScene::UpdateRoomList() [????]
 	struct RoomListResult { RoomId nextAfterRoomId = 0; std::vector<RoomInfo> rooms; };
 
-	// 사용: 클라 MainScene::RequestGameRoom() → 서버 RoomManager::CreateGameRoom() [선언]
+	// ???: ??? MainScene::RequestGameRoom() ?? ???? RoomManager::CreateGameRoom() [????]
 	struct CreateRoomRequest {};
 
-	// 사용: 클라 MainScene::JoinRoom() → 서버 RoomManager::JoinGameRoom() [선언]
+	// ???: ??? MainScene::JoinRoom() ?? ???? RoomManager::JoinGameRoom() [????]
 	struct JoinRoomRequest { RoomId roomId = 0; };
 
-	// 사용: 서버 RoomManager::CreateGameRoom(), RoomManager::JoinGameRoom() → 클라 MainScene::JoinRoom() [선언]
+	// ???: ???? RoomManager::CreateGameRoom(), RoomManager::JoinGameRoom() ?? ??? MainScene::JoinRoom() [????]
 	struct RoomEnterResult
 	{
 		ErrorCode result = ErrorCode::Ok;
@@ -106,22 +106,22 @@ namespace Net
 		RoomStateData room;
 	};
 
-	// 사용: 클라 MainScene::ExitRoom() → 서버 Room::RemovePlayerFromRoom() [선언]
+	// ???: ??? MainScene::ExitRoom() ?? ???? Room::RemovePlayerFromRoom() [????]
 	struct LeaveRoomRequest { RoomId roomId = 0; };
 
-	// 사용: 서버 Room::RemovePlayerFromRoom() → 클라 MainScene::OnRoomExited() [선언]
+	// ???: ???? Room::RemovePlayerFromRoom() ?? ??? MainScene::OnRoomExited() [????]
 	struct LeaveRoomResult { ErrorCode result = ErrorCode::Ok; RoomId roomId = 0; };
 
-	// 사용: 클라 ShootingScene::SendMapLoaded() → 서버 Room::SetPlayerLoaded() [선언]
+	// ???: ??? ShootingScene::SendMapLoaded() ?? ???? Room::SetPlayerLoaded() [????]
 	struct MapLoaded { RoomId roomId = 0; };
 
-	// 사용: 클라 ShootingScene::RequestReadyChange() → 서버 Room::SetPlayerReady() [선언]
+	// ???: ??? ShootingScene::RequestReadyChange() ?? ???? Room::SetPlayerReady() [????]
 	struct ReadyChangeRequest { RoomId roomId = 0; std::uint8_t ready = 0; };
 
-	// 사용: 서버 Room::SendRoomState() → 클라 ShootingScene::OnRoomStateChanged() [선언] / 묶음: 참가자·준비·구역
+	// ???: ???? Room::SendRoomState() ?? ??? ShootingScene::OnRoomStateChanged() [????] / ????: ??????????????
 	struct RoomState { RoomStateData room; };
 
-	// 사용: 서버 Room::StartGameIfReady() → 클라 ShootingScene::OnGameStarted() [선언] / 묶음: 시간·규칙·플레이어, 표적 목록은 UDP로만 전달
+	// ???: ???? Room::StartGameIfReady() ?? ??? ShootingScene::OnGameStarted() [????] / ????: ?��?????????��????, ??? ????? UDP?��? ????
 	struct GameStarted
 	{
 		RoomVersion version;
@@ -132,7 +132,7 @@ namespace Net
 		std::vector<PlayerData> players;
 	};
 
-	// 사용: 클라 ShootingScene::SendShoot() → 서버 Room::RecvShoot(), Room::JudgeShoot() [선언] / 개별 발사 요청
+	// ???: ??? ShootingScene::SendShoot() ?? ???? Room::RecvShoot(), Room::JudgeShoot() [????] / ???? ??? ???
 	struct FireRequest
 	{
 		MatchContext context;
@@ -159,8 +159,8 @@ namespace Net
 		ServerTimeMs reloadEndsAtMs = 0;
 	};
 
-	// 사용: 서버 Room::SendShootResult() → 클라 ShootingScene::RecvShootResult() [선언] / 묶음: 발사자 토큰·명중 결과·점수·탄
-	//       수, 표적 생성·삭제와 반동 적용 없음
+	// ???: ???? Room::SendShootResult() ?? ??? ShootingScene::RecvShootResult() [????] / ????: ????? ????????? ????????????
+	//       ??, ??? ???????????? ??? ???? ????
 	struct ShotResolved { RoomVersion version; SessionToken shooterToken{};
 
 		ShotId shotId = 0;
@@ -169,11 +169,11 @@ namespace Net
 		PlayerStats shooterStats;
 	};
 
-	// 사용: 서버 StageController::SendMatchTime() → 클라 ShootingScene::UpdateMatchTime() [선언]
+	// ???: ???? StageController::SendMatchTime() ?? ??? ShootingScene::UpdateMatchTime() [????]
 	struct MatchTime { MatchContext context; ServerTimeMs serverTimeMs = 0; ServerTimeMs endsAtMs = 0; };
 
-	// 사용: 서버 StageController::SendGameResults() → 클라 ShootingScene::RecvGameResults(), ShootingScene::OnGameEnded() [선언]
-	//       / 묶음: 순위·방 상태·준비 초기화
+	// ???: ???? StageController::SendGameResults() ?? ??? ShootingScene::RecvGameResults(), ShootingScene::OnGameEnded() [????]
+	//       / ????: ???????? ???��???? ????
 	struct GameResults
 	{
 		RoomStateData room;
@@ -182,10 +182,10 @@ namespace Net
 		std::vector<PlayerResult> players;
 	};
 
-	// 사용: 클라 NetworkClient::SendTimeProbe() → 서버 NetworkServer::ReplyTimeProbe() [선언]
+	// ???: ??? NetworkClient::SendTimeProbe() ?? ???? NetworkServer::ReplyTimeProbe() [????]
 	struct TimeProbeRequest { std::uint64_t clientSendMs = 0; };
 
-	// 사용: 서버 NetworkServer::ReplyTimeProbe() → 클라 NetworkClient::ApplyTimeProbe() [선언]
+	// ???: ???? NetworkServer::ReplyTimeProbe() ?? ??? NetworkClient::ApplyTimeProbe() [????]
 	struct TimeProbeResult
 	{
 		std::uint64_t clientSendMs = 0;
@@ -193,17 +193,17 @@ namespace Net
 		ServerTimeMs serverSendMs = 0;
 	};
 
-	// 사용: 클라 NetworkClient::RegisterUDP() → 서버 NetworkServer::RegisterPlayerUDP() [선언]
+	// ???: ??? NetworkClient::RegisterUDP() ?? ???? NetworkServer::RegisterPlayerUDP() [????]
 	struct UdpRegisterRequest {};
 
-	// 사용: 서버 NetworkServer::RegisterPlayerUDP() → 클라 NetworkClient::CompleteConnection() [선언]
+	// ???: ???? NetworkServer::RegisterPlayerUDP() ?? ??? NetworkClient::CompleteConnection() [????]
 	struct UdpRegisterResult { ErrorCode result = ErrorCode::Ok; Sequence registrationSequence = 0; };
 
-	// 사용: 클라 ShootingScene::SendPlayerTransform() → 서버 Room::RecvPlayerInput(), Room::UpdatePlayerTransform() [선언] / 개별
-	//       플레이어의 최신 변환 행렬
+	// ???: ??? ShootingScene::SendPlayerTransform() ?? ???? Room::RecvPlayerInput(), Room::UpdatePlayerTransform() [????] / ????
+	//       ?��?????? ??? ??? ???
 	struct PlayerTransform { Sequence inputSequence = 0; Mat4Data worldTransform; };
 
-	// 사용: 서버 Room::SendTransformData() → 클라 ShootingScene::RecvTransformData() [선언] / 묶음: 전체 플레이어·본인 보정
+	// ???: ???? Room::SendTransformData() ?? ??? ShootingScene::RecvTransformData() [????] / ????: ??? ?��???????? ????
 	struct PlayerSnapshot
 	{
 		ServerTimeMs serverTimeMs = 0;
@@ -213,11 +213,11 @@ namespace Net
 
 	};
 
-	// 사용: 서버 Room::SendTargetPositions() → 클라 ShootingScene::ApplyTargetPositions() [선언] / 살아 있는 전체 목록의 한 조각, 최대 40개
+	// ???: ???? Room::SendTargetPositions() ?? ??? ShootingScene::ApplyTargetPositions() [????] / ??? ??? ??? ????? ?? ????, ??? 40??
 	struct TargetSnapshot
 	{
-		// 같은 서버 계산 시점의 전체 표적 목록을 나눈 조각. 모두 수신한 뒤에만 반영한다.
-		// 표적이 없어도 targetCount가 0인 조각 하나를 보내 기존 표적을 지운다.
+		// ???? ???? ??? ?????? ??? ??? ????? ???? ????. ??? ?????? ????? ??????.
+		// ????? ???? targetCount?? 0?? ???? ????? ???? ???? ????? ?????.
 		ServerTimeMs serverTimeMs = 0;
 		std::uint16_t totalTargetCount = 0;
 		std::uint16_t chunkIndex = 0;

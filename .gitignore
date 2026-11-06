@@ -399,3 +399,6 @@ FodyWeavers.xsd
 
 # JetBrains Rider
 *.sln.iml
+
+# 로컬 에이전트 작업 지침
+/AGENTS.md

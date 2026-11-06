@@ -1,10 +1,10 @@
 ﻿// 운영체제·그래픽·행렬 라이브러리와 게임의 미리 컴파일된 헤더 없이 컴파일되어야 한다.
 #include "../AimLab/Shared/NetworkMessages.h"
-#include <type_traits>
+#include "../AimLab/Shared/PacketCodec.h"
 #include <limits>
 
-static_assert(std::tuple_size<Net::SessionToken>::value == 16);
-static_assert(std::tuple_size<decltype(Net::Mat4Data::elements)>::value == 16);
+static_assert(Net::SessionToken{}.size() == 16);
+static_assert(Net::Mat4Data{}.elements.size() == 16);
 static_assert(sizeof(float) == 4 && std::numeric_limits<float>::is_iec559,
     "Wire floats require IEEE-754 binary32");
 
@@ -19,6 +19,11 @@ static_assert(Net::UdpHeaderBytes + 8 + 2 + 2 + 2 + 2
 static_assert(1180 <= Net::MaxUdpPacketBytes);
 static_assert(Net::MaxTargetSnapshotChunks == 3);
 
-static_assert(std::is_same_v<decltype(Net::PlayerData::sessionToken), Net::SessionToken>);
-static_assert(std::is_same_v<decltype(Net::FireRequest::shooterTransform), Net::Mat4Data>);
-static_assert(std::is_same_v<decltype(Net::ShotResolved::shooterStats), Net::PlayerStats>);
+static_assert(Net::TcpPacket<Net::FireRequest>{}.packetData.shooterTransform.elements.size() == 16);
+static_assert(Net::UdpPacket<Net::TargetSnapshot>{}.packetData.targets.size() == 40);
+static_assert(Net::PacketTraits<Net::ReloadRequest>::type == Net::TcpType::ReloadRequest);
+static_assert(Net::PacketTraits<Net::WeaponState>::type == Net::TcpType::WeaponState);
+static_assert(Net::PacketTraits<Net::UdpRegisterRequest>::type == Net::UdpType::RegisterRequest);
+static_assert(Net::PacketTraits<Net::TargetSnapshot>::transport == Net::PacketTransport::Udp);
+static_assert(static_cast<std::uint16_t>(Net::TcpType::ReloadRequest) == 0x0307);
+static_assert(static_cast<std::uint16_t>(Net::TcpType::WeaponState) == 0x0308);

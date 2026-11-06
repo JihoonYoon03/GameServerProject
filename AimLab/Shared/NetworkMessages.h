@@ -1,6 +1,7 @@
 ﻿#pragma once
 #include "NetworkPackets.h"
 #include <variant>
+#include <functional>
 
 namespace Net
 {
@@ -19,6 +20,9 @@ namespace Net
         PacketData packet;
     };
 
+    // 완성 패킷을 서버 또는 기록용 송신자에게 넘긴다. 송신 큐의 잠금은 수신 측이 관리한다.
+    using PacketSender = std::function<bool(const SendRequest&)>;
+
     struct RoomEnterCommand { bool udpRegistered = false; };
     struct ClientDisconnected {};
 
@@ -32,7 +36,7 @@ namespace Net
         MembershipId membershipId = 0;
         ServerTimeMs receivedAtMs = 0;
         std::variant<RoomEnterCommand, LeaveRoomRequest, MapLoaded,
-            ReadyChangeRequest, PlayerTransform, FireRequest, ClientDisconnected> body;
+            ReadyChangeRequest, PlayerTransform, FireRequest, ReloadRequest, ClientDisconnected> body;
     };
 
     enum class RoomManagementEventType : std::uint8_t { SummaryChanged, RoomEmpty };

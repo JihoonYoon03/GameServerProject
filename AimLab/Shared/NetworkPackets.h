@@ -35,6 +35,8 @@ namespace Net
 		ShotResolved = 0x0303,
 		MatchTime = 0x0305,
 		GameResults = 0x0306,
+		ReloadRequest = 0x0307,
+		WeaponState = 0x0308,
 		TimeProbeRequest = 0x0401,
 		TimeProbeResult = 0x0402
 	};
@@ -139,6 +141,22 @@ namespace Net
 		Sequence inputSequence = 0;
 		Mat4Data shooterTransform;
 		Vec3Data origin;
+	};
+
+	struct ReloadRequest
+	{
+		MatchContext context;
+		MembershipId membershipId = 0;
+	};
+
+	struct WeaponState
+	{
+		RoomVersion version;
+		SessionToken playerToken{};
+		std::uint8_t ammo = MagazineCapacity;
+		std::uint8_t reloading = 0;
+		ServerTimeMs nextFireAtMs = 0;
+		ServerTimeMs reloadEndsAtMs = 0;
 	};
 
 	// 사용: 서버 Room::SendShootResult() → 클라 ShootingScene::RecvShootResult() [선언] / 묶음: 발사자 토큰·명중 결과·점수·탄

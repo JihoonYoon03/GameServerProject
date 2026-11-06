@@ -1,0 +1,83 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Server">
+      <UniqueIdentifier>{3a75b3b4-80f8-403f-bb65-344f427cd5fe}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Server\Header">
+      <UniqueIdentifier>{0b2e784e-eefa-4501-93bd-49a137b97edc}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Server\Shared">
+      <UniqueIdentifier>{d98d7a26-dd3a-47ad-96bd-345c32bd0913}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Application">
+      <UniqueIdentifier>{a58bc2f4-ee08-4767-86b4-5c8ac378c80b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Server\Source">
+      <UniqueIdentifier>{f8b587e9-9e8a-46da-8af1-5f55deff0f23}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Client.h">
+      <Filter>Server\Header</Filter>
+    </ClInclude>
+    <ClInclude Include="ClientPlayer.h">
+      <Filter>Server\Header</Filter>
+    </ClInclude>
+    <ClInclude Include="Framework.h">
+      <Filter>Server\Header</Filter>
+    </ClInclude>
+    <ClInclude Include="NetworkServer.h">
+      <Filter>Server\Header</Filter>
+    </ClInclude>
+    <ClInclude Include="Room.h">
+      <Filter>Server\Header</Filter>
+    </ClInclude>
+    <ClInclude Include="RoomManager.h">
+      <Filter>Server\Header</Filter>
+    </ClInclude>
+    <ClInclude Include="StageController.h">
+      <Filter>Server\Header</Filter>
+    </ClInclude>
+    <ClInclude Include="Target.h">
+      <Filter>Server\Header</Filter>
+    </ClInclude>
+    <ClInclude Include="pch.h">
+      <Filter>Application</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Shared\NetworkConversions.h">
+      <Filter>Server\Shared</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Shared\NetworkMessages.h">
+      <Filter>Server\Shared</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Shared\NetworkPackets.h">
+      <Filter>Server\Shared</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Shared\NetworkTypes.h">
+      <Filter>Server\Shared</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="pch.cpp">
+      <Filter>Application</Filter>
+    </ClCompile>
+    <ClCompile Include="Framework.cpp">
+      <Filter>Server\Source</Filter>
+    </ClCompile>
+    <ClCompile Include="Target.cpp">
+      <Filter>Server\Source</Filter>
+    </ClCompile>
+    <ClCompile Include="NetworkServer.cpp">
+      <Filter>Server\Source</Filter>
+    </ClCompile>
+    <ClCompile Include="Room.cpp">
+      <Filter>Server\Source</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\Shared\PacketCodec.cpp"><Filter>Server\Shared</Filter></ClCompile>
+    <ClInclude Include="..\Shared\PacketCodec.h"><Filter>Server\Shared</Filter></ClInclude>
+  </ItemGroup>
+  <ItemGroup><ClInclude Include="ServerWeaponState.h"><Filter>Server\Header</Filter></ClInclude></ItemGroup>
+</Project>

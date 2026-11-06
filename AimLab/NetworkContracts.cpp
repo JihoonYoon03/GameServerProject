@@ -3,16 +3,8 @@
 #include "MainScene.h"
 #include "NetworkClient.h"
 #include "ShootingScene.h"
-#include "Shared/NetworkConversions.h"
-#include "Shared/PacketCodec.h"
-#include "Server/Client.h"
-#include "Server/ClientPlayer.h"
-#include "Server/Framework.h"
-#include "Server/NetworkServer.h"
-#include "Server/Room.h"
-#include "Server/RoomManager.h"
-#include "Server/StageController.h"
-#include "Server/Target.h"
+#include "../Shared/NetworkConversions.h"
+#include "../Shared/PacketCodec.h"
 
 // 클라이언트·서버 선언을 함께 컴파일해 이름·자료형 충돌을 확인한다. 통신 함수는 실행하지 않는다.
 static_assert(Net::MaxPlayers == 4, "Room capacity differs from the plan");

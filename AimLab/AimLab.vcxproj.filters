@@ -4,11 +4,6 @@
     <Filter Include="Network" />
     <Filter Include="Network\Shared" />
     <Filter Include="Network\Client" />
-    <Filter Include="Network\Server" />
-    <Filter Include="헤더 파일">
-      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
-      <Extensions>h;hh;hpp;hxx;h++;hm;inl;inc;ipp;xsd</Extensions>
-    </Filter>
     <Filter Include="Shaders">
       <UniqueIdentifier>{c6604914-aeb7-4875-b256-3ffe2da8f7e7}</UniqueIdentifier>
     </Filter>
@@ -47,6 +42,12 @@
     <Filter Include="Application">
       <UniqueIdentifier>{eb50d5cd-39b4-466c-a7e3-3f1843098d50}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Network\Client\Header">
+      <UniqueIdentifier>{06b9c63c-50f9-478d-8584-c07c4a7fa39c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Network\Client\Source">
+      <UniqueIdentifier>{d44cb177-548a-43a2-9a6d-141f1d7518c3}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Gun.cpp">
@@ -68,9 +69,6 @@
       <Filter>Application</Filter>
     </ClCompile>
     <ClCompile Include="NetworkContracts.cpp">
-      <Filter>Network\Shared</Filter>
-    </ClCompile>
-    <ClCompile Include="Shared\PacketCodec.cpp">
       <Filter>Network\Shared</Filter>
     </ClCompile>
     <ClCompile Include="Assets.cpp">
@@ -106,16 +104,19 @@
     <ClCompile Include="Texture.cpp">
       <Filter>Engine\Source</Filter>
     </ClCompile>
+    <ClCompile Include="Target.cpp">
+      <Filter>Engine\Source</Filter>
+    </ClCompile>
+    <ClCompile Include="NetworkClient.cpp">
+      <Filter>Network\Client\Source</Filter>
+    </ClCompile>
+    <ClCompile Include="Target.cpp">
+      <Filter>Engine\Source</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Gun.h">
       <Filter>Game\Header</Filter>
-    </ClInclude>
-    <ClInclude Include="Shared\PacketCodec.h">
-      <Filter>Network\Shared</Filter>
-    </ClInclude>
-    <ClInclude Include="Server\ServerWeaponState.h">
-      <Filter>Network\Server</Filter>
     </ClInclude>
     <ClInclude Include="Player.h">
       <Filter>Game\Header</Filter>
@@ -131,48 +132,6 @@
     </ClInclude>
     <ClInclude Include="stb_image.h">
       <Filter>External</Filter>
-    </ClInclude>
-    <ClInclude Include="Server\Client.h">
-      <Filter>Network\Server</Filter>
-    </ClInclude>
-    <ClInclude Include="Server\ClientPlayer.h">
-      <Filter>Network\Server</Filter>
-    </ClInclude>
-    <ClInclude Include="Server\Framework.h">
-      <Filter>Network\Server</Filter>
-    </ClInclude>
-    <ClInclude Include="Server\NetworkServer.h">
-      <Filter>Network\Server</Filter>
-    </ClInclude>
-    <ClInclude Include="Server\Room.h">
-      <Filter>Network\Server</Filter>
-    </ClInclude>
-    <ClInclude Include="Server\RoomManager.h">
-      <Filter>Network\Server</Filter>
-    </ClInclude>
-    <ClInclude Include="Server\StageController.h">
-      <Filter>Network\Server</Filter>
-    </ClInclude>
-    <ClInclude Include="Server\Target.h">
-      <Filter>Network\Server</Filter>
-    </ClInclude>
-    <ClInclude Include="Shared\NetworkConversions.h">
-      <Filter>Network\Shared</Filter>
-    </ClInclude>
-    <ClInclude Include="Shared\NetworkMessages.h">
-      <Filter>Network\Shared</Filter>
-    </ClInclude>
-    <ClInclude Include="Shared\NetworkPackets.h">
-      <Filter>Network\Shared</Filter>
-    </ClInclude>
-    <ClInclude Include="Shared\NetworkTypes.h">
-      <Filter>Network\Shared</Filter>
-    </ClInclude>
-    <ClInclude Include="MainScene.h">
-      <Filter>Network\Client</Filter>
-    </ClInclude>
-    <ClInclude Include="NetworkClient.h">
-      <Filter>Network\Client</Filter>
     </ClInclude>
     <ClInclude Include="Assets.h">
       <Filter>Engine\Header</Filter>
@@ -213,6 +172,24 @@
     <ClInclude Include="Texture.h">
       <Filter>Engine\Header</Filter>
     </ClInclude>
+    <ClInclude Include="MainScene.h">
+      <Filter>Network\Client\Header</Filter>
+    </ClInclude>
+    <ClInclude Include="NetworkClient.h">
+      <Filter>Network\Client\Header</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Shared\NetworkConversions.h">
+      <Filter>Network\Shared</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Shared\NetworkMessages.h">
+      <Filter>Network\Shared</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Shared\NetworkPackets.h">
+      <Filter>Network\Shared</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Shared\NetworkTypes.h">
+      <Filter>Network\Shared</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="Shaders\Lit.frag">
@@ -223,25 +200,29 @@
     </None>
   </ItemGroup>
   <ItemGroup>
-    <None Include="..\Resources\Meshes\Cube.obj">
-      <Filter>Resources\Meshes</Filter>
-    </None>
-    <None Include="..\Resources\Meshes\K1.obj">
-      <Filter>Resources\Meshes</Filter>
-    </None>
-    <None Include="..\Resources\Meshes\Pistol.obj">
-      <Filter>Resources\Meshes</Filter>
-    </None>
-    <None Include="..\Resources\Meshes\Sphere.obj">
-      <Filter>Resources\Meshes</Filter>
-    </None>
+    <Image Include="Resources\Textures\GroundTex.png">
+      <Filter>Resources\Textures</Filter>
+    </Image>
+    <Image Include="Resources\Textures\SkydomeTex.png">
+      <Filter>Resources\Textures</Filter>
+    </Image>
   </ItemGroup>
   <ItemGroup>
-    <Image Include="..\Resources\Textures\GroundTex.png">
-      <Filter>Resources\Textures</Filter>
-    </Image>
-    <Image Include="..\Resources\Textures\SkydomeTex.png">
-      <Filter>Resources\Textures</Filter>
-    </Image>
+    <Object Include="Resources\Meshes\Cube.obj">
+      <Filter>Resources\Meshes</Filter>
+    </Object>
+    <Object Include="Resources\Meshes\K1.obj">
+      <Filter>Resources\Meshes</Filter>
+    </Object>
+    <Object Include="Resources\Meshes\Pistol.obj">
+      <Filter>Resources\Meshes</Filter>
+    </Object>
+    <Object Include="Resources\Meshes\Sphere.obj">
+      <Filter>Resources\Meshes</Filter>
+    </Object>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\Shared\PacketCodec.cpp"><Filter>Network\Shared</Filter></ClCompile>
+    <ClInclude Include="..\Shared\PacketCodec.h"><Filter>Network\Shared</Filter></ClInclude>
   </ItemGroup>
 </Project>

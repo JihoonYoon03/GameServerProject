@@ -5,7 +5,6 @@ struct StageDefinition
 {
 	int duration = 30;
 	int requiredScore = 20;
-	int targetsPerSecond = 1;
 };
 
 enum class StageState
@@ -21,7 +20,6 @@ enum class StageState
 struct StageEvents
 {
 	bool clearTargets = false;
-	int	 spawnCount = 0;
 };
 
 // 렌더링과 표적 생성은 Scene에 맡기고 원본의 시간/점수 전이만 관리합니다.
@@ -41,7 +39,7 @@ public:
 private:
 	void ResetValues(int stageNumber);
 
-	const std::array<StageDefinition, 3> stages_{{{30, 20, 1}, {30, 40, 2}, {30, 60, 3}}};
+	const std::array<StageDefinition, 3> stages_{{{30, 20}, {30, 40}, {30, 60}}};
 	StageState							 state_ = StageState::Idle;
 	int									 stageIndex_ = 0;
 	int									 ruleIndex_ = 0;

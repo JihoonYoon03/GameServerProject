@@ -1,22 +1,46 @@
-ï»¿#pragma once
+#pragma once
 #include "Shared/NetworkMessages.h"
 #include <string>
 
-// í´ë¼ì´ì–¸íŠ¸ í†µì‹  í•¨ìˆ˜ ì„ ì–¸. ì‹¤ì œ ì†Œì¼“Â·í†µì‹  ìŠ¤ë ˆë“œ ì²˜ë¦¬ëŠ” ì´í›„ êµ¬í˜„í•œë‹¤.
+// Å¬¶óÀÌ¾ğÆ® Åë½Å ÇÔ¼ö ¼±¾ğ. ½ÇÁ¦ ¼ÒÄÏ¡¤Åë½Å ½º·¹µå Ã³¸®´Â ÀÌÈÄ ±¸ÇöÇÑ´Ù.
 class NetworkClient
 {
 public:
+    //¿©±â¼­ TCP Á¢¼Ó
     bool ConnectServer(const std::string& address, std::uint16_t tcpPort);
+    //¿©±â¼­ ÅäÅ«À¸·Î UDP ¿¬°á ½Ãµµ
     void RegisterUDP();
     void CompleteConnection(const Net::UdpRegisterResult& result);
     bool StartNetwork();
     void NetworkLoop();
-    // ë©”ì¸ ìŠ¤ë ˆë“œì—ì„œ ì†¡ì‹  íì— ì¶”ê°€í•˜ê³ , ì‹¤ì œ ì†¡ì‹ ì€ í†µì‹  ìŠ¤ë ˆë“œì—ì„œ ì²˜ë¦¬í•œë‹¤.
+    // ¸ŞÀÎ ½º·¹µå¿¡¼­ ¼Û½Å Å¥¿¡ Ãß°¡ÇÏ°í, ½ÇÁ¦ ¼Û½ÅÀº Åë½Å ½º·¹µå¿¡¼­ Ã³¸®ÇÑ´Ù.
     bool SendPacket(const Net::PacketData& packet);
-    // ë©”ì¸ ìŠ¤ë ˆë“œì—ì„œë§Œ ìˆ˜ì‹  íë¥¼ êº¼ë‚´ ì¥ë©´ì— ë°˜ì˜í•œë‹¤.
+    // ¸ŞÀÎ ½º·¹µå¿¡¼­¸¸ ¼ö½Å Å¥¸¦ ²¨³» Àå¸é¿¡ ¹İ¿µÇÑ´Ù.
     void UpdateNetwork();
     void SendTimeProbe();
     void ApplyTimeProbe(const Net::TimeProbeResult& result);
-    // ì¢…ë£Œ ìš”ì²­ í›„ í†µì‹  ìŠ¤ë ˆë“œê°€ ëë‚¬ëŠ”ì§€ í™•ì¸í•˜ê³  ì—°ê²° ìì›ì„ ì •ë¦¬í•œë‹¤.
+    // Á¾·á ¿äÃ» ÈÄ Åë½Å ½º·¹µå°¡ ³¡³µ´ÂÁö È®ÀÎÇÏ°í ¿¬°á ÀÚ¿øÀ» Á¤¸®ÇÑ´Ù.
     void DisconnectServer();
+
+private:
+    SOCKET      m_TCPSocket;
+    SOCKET      m_UDPSocket;
+
+    sockaddr_in         m_ServerAddr;
+
+    Net::SessionToken   m_SessionToken;
+    //UDP µî·Ï ¿©ºÎ
+    std::atomic<bool>   m_UDPRegistered{ false };
+
+    //CreateThread¿¡ Àü´ŞµÇ´Â ³×Æ®¿öÅ© ¾²·¹µå ÇÔ¼ö. static¾øÀ¸¸é ÀÎÀÚ°ªÀ¸·Î »ç¿ë ¸ø ÇÔ ÁÖÀÇ
+    static DWORD WINAPI NetworkProc(LPVOID param);
+    HANDLE              m_hNetworkThread;
+    //¾²·¹µå Á¾·á ¿©ºÎ
+    std::atomic<bool>   m_bStopRequested{ false };
+
+    //¼­¹ö¿¡°Ô ÁÙ µ¥ÀÌÅÍ¿Í ¹ŞÀº µ¥ÀÌÅÍ¸¦ Å¥¿¡ ÀúÀåÇÏ°í
+    //°ü·Ã Ã³¸® ÇÔ¼ö¿¡¼­ ÀÏ°ıÀûÀ¸·Î Ã³¸®ÇÔ.
+    //SendRequest¿£ ÇöÀç Å¬¶óÀÇ ÅäÅ«°ú ÆĞÅ¶ µ¥ÀÌÅÍ°¡ ÀÖÀ½
+    std::queue<Net::SendRequest>    m_qSendQueue;
+    std::queue<Net::PacketData>    m_qReceiveQueue;
 };

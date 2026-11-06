@@ -1,6 +1,6 @@
 ﻿// 운영체제·그래픽·행렬 라이브러리와 게임의 미리 컴파일된 헤더 없이 컴파일되어야 한다.
-#include "../AimLab/Shared/NetworkMessages.h"
-#include "../AimLab/Shared/PacketCodec.h"
+#include "../Shared/NetworkMessages.h"
+#include "../Shared/PacketCodec.h"
 #include <limits>
 
 static_assert(Net::SessionToken{}.size() == 16);

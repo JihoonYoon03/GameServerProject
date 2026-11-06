@@ -1,5 +1,5 @@
-#pragma once
-#include "../AimLab/Shared/PacketCodec.h"
+﻿#pragma once
+#include "../Shared/PacketCodec.h"
 #include <stdexcept>
 
 // 소켓·시각·그래픽·게임 진행 코드 없이 코덱을 검사하는 고정 입력이다.

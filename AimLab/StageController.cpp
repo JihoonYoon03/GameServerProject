@@ -33,7 +33,7 @@ StageEvents StageController::Update(float deltaTime)
 	if (deltaTime <= 0.0f || state_ == StageState::Idle) return events;
 
 	// control.cpp와 같이 임계값을 먼저 확인하고, 미달일 때만 시간을 누적합니다.
-	// 큰 지연을 임의로 따라잡아 여러 번 생성하지 않습니다.
+	// 표적 생성 주기는 ShootingScene에서 별도로 관리합니다.
 	const float interval = state_ == StageState::Playing ? 1.0f : 2.0f;
 
 	if (stateTime_ < interval)
@@ -51,8 +51,7 @@ StageEvents StageController::Update(float deltaTime)
 		state_ = StageState::Playing;
 		break;
 	case StageState::Playing:
-		events.spawnCount = stages_[ruleIndex_].targetsPerSecond;
-		--remaining_; // 마지막 초에도 먼저 표적을 생성합니다.
+		--remaining_;
 
 		if (remaining_ == 0)
 		{

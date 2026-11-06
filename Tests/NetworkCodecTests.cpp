@@ -1,5 +1,5 @@
-#include "NetworkFixtures.h"
-#include "../AimLab/Server/ClientPlayer.h"
+﻿#include "NetworkFixtures.h"
+#include "../Server/ClientPlayer.h"
 #include <algorithm>
 #include <cstdlib>
 #include <cstring>
@@ -449,7 +449,7 @@ namespace
 
     void TestDefaults()
     {
-        Server::ClientPlayer player;
+        ClientPlayer player;
         Check(player.state.areaId == Net::UnassignedArea && player.state.ready == Net::ReadyState::Connecting
             && player.lastProcessedInput == 0 && player.lastProcessedShot == 0
             && !player.hasProcessedInput && player.lastMovementBudgetMs == 0, "ClientPlayer initial state");

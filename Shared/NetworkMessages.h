@@ -20,10 +20,10 @@ namespace Net
         PacketData packet;
     };
 
-    // 완성 패킷을 서버 또는 기록용 송신자에게 넘긴다. 송신 큐의 잠금은 수신 측이 관리한다.
+    // 완성 패킷을 송신 큐에 전달한다. 큐의 잠금은 수신 측이 관리한다.
     using PacketSender = std::function<bool(const SendRequest&)>;
 
-    struct RoomEnterCommand { bool udpRegistered = false; };
+    struct RoomEnterCommand { bool UDPRegistered = false; };
     struct ClientDisconnected {};
 
     // 서버는 TCP 연결 또는 등록된 UDP 주소로 발신자를 확인한 뒤 토큰을 채운다.

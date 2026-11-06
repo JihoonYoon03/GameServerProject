@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|x64"><Configuration>Debug</Configuration><Platform>x64</Platform></ProjectConfiguration>
@@ -30,7 +30,6 @@
       <TreatWarningAsError>true</TreatWarningAsError>
       <ConformanceMode>true</ConformanceMode>
       <DebugInformationFormat>OldStyle</DebugInformationFormat>
-      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
       <Optimization Condition="'$(Configuration)'=='Debug'">Disabled</Optimization>
       <Optimization Condition="'$(Configuration)'=='Release'">MaxSpeed</Optimization>
     </ClCompile>
@@ -42,8 +41,11 @@
   <ItemGroup>
     <ClCompile Include="NetworkCodecTests.cpp" />
     <ClCompile Include="NetworkWireContracts.cpp" />
-    <ClCompile Include="ServerOwnershipContracts.cpp" />
-    <ClCompile Include="..\AimLab\Shared\PacketCodec.cpp" />
+    <ClCompile Include="ServerOwnershipContracts.cpp">
+      <!-- 기존 서버 헤더의 혼합 인코딩은 보존하고, 이 선언 검사에서만 인코딩 경고를 제외한다. -->
+      <DisableSpecificWarnings>4819;%(DisableSpecificWarnings)</DisableSpecificWarnings>
+    </ClCompile>
+    <ClCompile Include="..\Shared\PacketCodec.cpp" />
     <ClInclude Include="NetworkFixtures.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

@@ -70,6 +70,9 @@
     <ClCompile Include="NetworkContracts.cpp">
       <Filter>Network\Shared</Filter>
     </ClCompile>
+    <ClCompile Include="Shared\PacketCodec.cpp">
+      <Filter>Network\Shared</Filter>
+    </ClCompile>
     <ClCompile Include="Assets.cpp">
       <Filter>Engine\Source</Filter>
     </ClCompile>
@@ -107,6 +110,12 @@
   <ItemGroup>
     <ClInclude Include="Gun.h">
       <Filter>Game\Header</Filter>
+    </ClInclude>
+    <ClInclude Include="Shared\PacketCodec.h">
+      <Filter>Network\Shared</Filter>
+    </ClInclude>
+    <ClInclude Include="Server\ServerWeaponState.h">
+      <Filter>Network\Server</Filter>
     </ClInclude>
     <ClInclude Include="Player.h">
       <Filter>Game\Header</Filter>

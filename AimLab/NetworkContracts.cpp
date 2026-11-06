@@ -4,6 +4,7 @@
 #include "NetworkClient.h"
 #include "ShootingScene.h"
 #include "Shared/NetworkConversions.h"
+#include "Shared/PacketCodec.h"
 #include "Server/Client.h"
 #include "Server/ClientPlayer.h"
 #include "Server/Framework.h"

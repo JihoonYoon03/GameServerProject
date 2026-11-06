@@ -146,6 +146,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="NetworkContracts.cpp" />
+    <ClCompile Include="Shared\PacketCodec.cpp" />
     <ClCompile Include="Assets.cpp" />
     <ClCompile Include="Camera.cpp" />
     <ClCompile Include="Collision.cpp" />
@@ -166,6 +167,8 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Server\Client.h" />
+    <ClInclude Include="Server\ServerWeaponState.h" />
+    <ClInclude Include="Shared\PacketCodec.h" />
     <ClInclude Include="Server\ClientPlayer.h" />
     <ClInclude Include="Server\Framework.h" />
     <ClInclude Include="Server\NetworkServer.h" />

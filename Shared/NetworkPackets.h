@@ -92,27 +92,27 @@ namespace Net
 	struct CreateRoomRequest {};
 
 	// 사용: 클라 MainScene::JoinRoom() → 서버 RoomManager::JoinGameRoom() [선언]
-	struct JoinRoomRequest { RoomId m_nRoomId = 0; };
+	struct JoinRoomRequest { RoomId roomId = 0; };
 
 	// 사용: 서버 RoomManager::CreateGameRoom(), RoomManager::JoinGameRoom() → 클라 MainScene::JoinRoom() [선언]
 	struct RoomEnterResult
 	{
 		ErrorCode result = ErrorCode::Ok;
-		MembershipId m_nMembershipId = 0;
+		MembershipId membershipId = 0;
 		RoomStateData room;
 	};
 
 	// 사용: 클라 MainScene::ExitRoom() → 서버 Room::RemovePlayerFromRoom() [선언]
-	struct LeaveRoomRequest { RoomId m_nRoomId = 0; };
+	struct LeaveRoomRequest { RoomId roomId = 0; };
 
 	// 사용: 서버 Room::RemovePlayerFromRoom() → 클라 MainScene::OnRoomExited() [선언]
-	struct LeaveRoomResult { ErrorCode result = ErrorCode::Ok; RoomId m_nRoomId = 0; };
+	struct LeaveRoomResult { ErrorCode result = ErrorCode::Ok; RoomId roomId = 0; };
 
 	// 사용: 클라 ShootingScene::SendMapLoaded() → 서버 Room::SetPlayerLoaded() [선언]
-	struct MapLoaded { RoomId m_nRoomId = 0; };
+	struct MapLoaded { RoomId roomId = 0; };
 
 	// 사용: 클라 ShootingScene::RequestReadyChange() → 서버 Room::SetPlayerReady() [선언]
-	struct ReadyChangeRequest { RoomId m_nRoomId = 0; std::uint8_t ready = 0; };
+	struct ReadyChangeRequest { RoomId roomId = 0; std::uint8_t ready = 0; };
 
 	// 사용: 서버 Room::SendRoomState() → 클라 ShootingScene::OnRoomStateChanged() [선언] / 묶음: 참가자·준비·구역
 	struct RoomState { RoomStateData room; };
@@ -132,7 +132,7 @@ namespace Net
 	struct FireRequest
 	{
 		MatchContext context;
-		MembershipId m_nMembershipId = 0;
+		MembershipId membershipId = 0;
 		ShotId shotId = 0;
 		Sequence inputSequence = 0;
 		Mat4Data shooterTransform;

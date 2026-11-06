@@ -113,7 +113,7 @@ namespace Net
 	struct BoxData { Vec3Data min; Vec3Data max; };
 
 	// 사용: 클라 NetworkClient::UpdateNetwork(), 서버 Room::RecvPlayerInput(), Room::RecvShoot() [선언]
-	struct MatchContext { RoomId m_nRoomId = 0; MatchId matchId = 0; };
+	struct MatchContext { RoomId roomId = 0; MatchId matchId = 0; };
 
 	// 사용: 서버 Room::SendRoomState(), Room::SendShootResult() / 클라 ShootingScene::OnRoomStateChanged() [선언]
 	struct RoomVersion { MatchContext context; Revision revision = 0; };
@@ -151,7 +151,7 @@ namespace Net
 	// 사용: 서버 RoomManager::SendRoomList() / 클라 MainScene::UpdateRoomList(), MainScene::ShowRoomList() [선언]
 	struct RoomInfo
 	{
-		RoomId m_nRoomId = 0;
+		RoomId roomId = 0;
 		std::uint8_t playerCount = 0;
 		std::uint8_t capacity = MaxPlayers;
 		GameState state = GameState::Preparing;

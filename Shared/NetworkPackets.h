@@ -74,13 +74,8 @@ namespace Net
 		std::uint32_t serverTick = 0;
 	};
 
-<<<<<<< HEAD
 	// 사용: 서버 NetworkServer::AcceptPlayer() → 클라 NetworkClient::ConnectServer() [선언]
 	struct ConnectResult { ErrorCode result = ErrorCode::Ok; SessionToken sessionToken{};
-=======
-	// ???: ???? NetworkServer::AcceptPlayer() ?? ??? NetworkClient::ConnectServer() [????]
-	struct ConnectResult { ErrorCode result = ErrorCode::Ok; SessionToken m_sessionToken{};
->>>>>>> JihoonYoon
 
 		std::uint16_t udpPort = 0;
 		ServerTimeMs serverTimeMs = 0;

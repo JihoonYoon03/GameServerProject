@@ -19,14 +19,14 @@ namespace Net
         PacketData packet;
     };
 
-    struct RoomEnterCommand { bool UDPRegistered = false; };
+    struct RoomEnterCommand { bool m_bUDPRegistered = false; };
     struct ClientDisconnected {};
 
     // 서버는 TCP 연결 또는 등록된 UDP 주소로 발신자를 확인한 뒤 토큰을 채운다.
     // 요청 본문에 적힌 토큰만 신뢰하지 않으며, 방 스레드는 명령 큐를 통해 요청을 처리한다.
     struct RoomCommand
     {
-        SessionToken sessionToken{};
+        SessionToken m_sessionToken{};
         std::uint32_t requestId = 0;
         MatchContext context;
         MembershipId membershipId = 0;

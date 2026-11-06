@@ -3,10 +3,13 @@
 // 세션 토큰은 접속별 플레이어 식별자이며, 비밀 인증값으로 사용하지 않는다.
 // 구조체·벡터 메모리를 직접 보내지 않고 각 필드를 순서대로 직렬화한다.
 // 행렬은 열 우선 단정밀도 실수 16개이며, 전송 시 각 값의 비트를 네트워크 바이트 순서로 변환한다.
+
+//Shared 소스코드는 모두 이 헤더를 참조함. 여기에 공용 라이브러리 include 할 것
 #include <array>
 #include <cstddef>
 #include <cstdint>
 #include <vector>
+#include <numeric>
 
 namespace Net
 {
@@ -21,7 +24,11 @@ namespace Net
 	using SessionToken = std::array<std::uint8_t, 16>;
 	inline constexpr std::size_t SessionTokenBytes = 16;
 
-	bool IsValidSessionToken(const SessionToken& sessionToken);
+	//아래 함수는 크게 용도가 없지 않나
+	bool IsValidSessionToken(const SessionToken& m_sessionToken);
+
+	//뒤늦게 도착한 패킷 걸러내기
+	bool IsNewerSequence(Sequence incoming, Sequence previous);
 
 	inline constexpr std::uint8_t MaxPlayers = 4;
 	inline constexpr std::uint8_t MinPlayersToStart = 2;
@@ -106,7 +113,7 @@ namespace Net
 	struct BoxData { Vec3Data min; Vec3Data max; };
 
 	// 사용: 클라 NetworkClient::UpdateNetwork(), 서버 Room::RecvPlayerInput(), Room::RecvShoot() [선언]
-	struct MatchContext { RoomId roomId = 0; MatchId matchId = 0; };
+	struct MatchContext { RoomId m_nRoomId = 0; MatchId matchId = 0; };
 
 	// 사용: 서버 Room::SendRoomState(), Room::SendShootResult() / 클라 ShootingScene::OnRoomStateChanged() [선언]
 	struct RoomVersion { MatchContext context; Revision revision = 0; };
@@ -128,7 +135,7 @@ namespace Net
 
 	// 사용: 서버 Room::SetPlayerLoaded(), Room::SetPlayerReady(), Room::UpdatePlayerTransform() / 클라
 	//       ShootingScene::OnRoomStateChanged() [선언]
-	struct PlayerData { SessionToken sessionToken{};
+	struct PlayerData { SessionToken m_sessionToken{};
 
 		Mat4Data worldTransform;
 		std::uint8_t areaId = UnassignedArea;
@@ -144,7 +151,7 @@ namespace Net
 	// 사용: 서버 RoomManager::SendRoomList() / 클라 MainScene::UpdateRoomList(), MainScene::ShowRoomList() [선언]
 	struct RoomInfo
 	{
-		RoomId roomId = 0;
+		RoomId m_nRoomId = 0;
 		std::uint8_t playerCount = 0;
 		std::uint8_t capacity = MaxPlayers;
 		GameState state = GameState::Preparing;
@@ -152,7 +159,7 @@ namespace Net
 
 	// 사용: 서버 StageController::JudgeWhoWins(), StageController::SendGameResults() / 클라 ShootingScene::RecvGameResults(),
 	//       ShootingScene::ShowGameResult() [선언]
-	struct PlayerResult { SessionToken sessionToken{};
+	struct PlayerResult { SessionToken m_sessionToken{};
 
 		PlayerStats stats;
 		std::uint8_t rank = 0;
@@ -170,7 +177,7 @@ namespace Net
 	};
 
 	// 사용: 서버 Room::SendTransformData() / 클라 ShootingScene::RecvTransformData() [선언] / 위치·회전 통합 행렬
-	struct PlayerTransformEntry { SessionToken sessionToken{};
+	struct PlayerTransformEntry { SessionToken m_sessionToken{};
 
 		Mat4Data worldTransform;
 		Sequence lastProcessedInput = 0;

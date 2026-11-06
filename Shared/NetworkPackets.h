@@ -62,7 +62,7 @@ namespace Net
 		std::uint16_t magic = UdpMagic;
 		UdpType type = UdpType::RegisterRequest;
 		std::uint16_t size = UdpHeaderBytes;
-		SessionToken sessionToken{};
+		SessionToken m_sessionToken{};
 
 		Sequence sequence = 0;
 		MatchContext context;
@@ -71,7 +71,7 @@ namespace Net
 	};
 
 	// 사용: 서버 NetworkServer::AcceptPlayer() → 클라 NetworkClient::ConnectServer() [선언]
-	struct ConnectResult { ErrorCode result = ErrorCode::Ok; SessionToken sessionToken{};
+	struct ConnectResult { ErrorCode result = ErrorCode::Ok; SessionToken m_sessionToken{};
 
 		std::uint16_t udpPort = 0;
 		ServerTimeMs serverTimeMs = 0;
@@ -92,27 +92,27 @@ namespace Net
 	struct CreateRoomRequest {};
 
 	// 사용: 클라 MainScene::JoinRoom() → 서버 RoomManager::JoinGameRoom() [선언]
-	struct JoinRoomRequest { RoomId roomId = 0; };
+	struct JoinRoomRequest { RoomId m_nRoomId = 0; };
 
 	// 사용: 서버 RoomManager::CreateGameRoom(), RoomManager::JoinGameRoom() → 클라 MainScene::JoinRoom() [선언]
 	struct RoomEnterResult
 	{
 		ErrorCode result = ErrorCode::Ok;
-		MembershipId membershipId = 0;
+		MembershipId m_nMembershipId = 0;
 		RoomStateData room;
 	};
 
 	// 사용: 클라 MainScene::ExitRoom() → 서버 Room::RemovePlayerFromRoom() [선언]
-	struct LeaveRoomRequest { RoomId roomId = 0; };
+	struct LeaveRoomRequest { RoomId m_nRoomId = 0; };
 
 	// 사용: 서버 Room::RemovePlayerFromRoom() → 클라 MainScene::OnRoomExited() [선언]
-	struct LeaveRoomResult { ErrorCode result = ErrorCode::Ok; RoomId roomId = 0; };
+	struct LeaveRoomResult { ErrorCode result = ErrorCode::Ok; RoomId m_nRoomId = 0; };
 
 	// 사용: 클라 ShootingScene::SendMapLoaded() → 서버 Room::SetPlayerLoaded() [선언]
-	struct MapLoaded { RoomId roomId = 0; };
+	struct MapLoaded { RoomId m_nRoomId = 0; };
 
 	// 사용: 클라 ShootingScene::RequestReadyChange() → 서버 Room::SetPlayerReady() [선언]
-	struct ReadyChangeRequest { RoomId roomId = 0; std::uint8_t ready = 0; };
+	struct ReadyChangeRequest { RoomId m_nRoomId = 0; std::uint8_t ready = 0; };
 
 	// 사용: 서버 Room::SendRoomState() → 클라 ShootingScene::OnRoomStateChanged() [선언] / 묶음: 참가자·준비·구역
 	struct RoomState { RoomStateData room; };
@@ -132,7 +132,7 @@ namespace Net
 	struct FireRequest
 	{
 		MatchContext context;
-		MembershipId membershipId = 0;
+		MembershipId m_nMembershipId = 0;
 		ShotId shotId = 0;
 		Sequence inputSequence = 0;
 		Mat4Data shooterTransform;

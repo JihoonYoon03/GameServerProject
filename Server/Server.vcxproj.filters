@@ -7,14 +7,14 @@
     <Filter Include="Server\Header">
       <UniqueIdentifier>{0b2e784e-eefa-4501-93bd-49a137b97edc}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Server\Shared">
-      <UniqueIdentifier>{d98d7a26-dd3a-47ad-96bd-345c32bd0913}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Application">
       <UniqueIdentifier>{a58bc2f4-ee08-4767-86b4-5c8ac378c80b}</UniqueIdentifier>
     </Filter>
     <Filter Include="Server\Source">
       <UniqueIdentifier>{f8b587e9-9e8a-46da-8af1-5f55deff0f23}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Shared">
+      <UniqueIdentifier>{d98d7a26-dd3a-47ad-96bd-345c32bd0913}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -46,16 +46,16 @@
       <Filter>Application</Filter>
     </ClInclude>
     <ClInclude Include="..\Shared\NetworkConversions.h">
-      <Filter>Server\Shared</Filter>
+      <Filter>Shared</Filter>
     </ClInclude>
     <ClInclude Include="..\Shared\NetworkMessages.h">
-      <Filter>Server\Shared</Filter>
+      <Filter>Shared</Filter>
     </ClInclude>
     <ClInclude Include="..\Shared\NetworkPackets.h">
-      <Filter>Server\Shared</Filter>
+      <Filter>Shared</Filter>
     </ClInclude>
     <ClInclude Include="..\Shared\NetworkTypes.h">
-      <Filter>Server\Shared</Filter>
+      <Filter>Shared</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -66,6 +66,15 @@
       <Filter>Server\Source</Filter>
     </ClCompile>
     <ClCompile Include="NetworkServer.cpp">
+      <Filter>Server\Source</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Shared\NetworkConversions.cpp">
+      <Filter>Shared</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Shared\NetworkTypes.cpp">
+      <Filter>Shared</Filter>
+    </ClCompile>
+    <ClCompile Include="Client.cpp">
       <Filter>Server\Source</Filter>
     </ClCompile>
   </ItemGroup>

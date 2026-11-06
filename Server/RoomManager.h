@@ -9,9 +9,9 @@ public:
 	void CreateGameRoom(const Net::SessionToken& creator);
 	void JoinGameRoom(const Net::SessionToken& player,
 		const Net::JoinRoomRequest& request);
-	Net::ErrorCode CheckRoomJoin(Net::RoomId roomId) const;
+	Net::ErrorCode CheckRoomJoin(Net::RoomId m_nRoomId) const;
 	// 요청 전달 중지와 방 스레드 종료를 확인한 뒤 방 객체를 삭제한다.
-	void DeleteRoom(Net::RoomId roomId);
+	void DeleteRoom(Net::RoomId m_nRoomId);
 	void UpdateRooms();
 };
 

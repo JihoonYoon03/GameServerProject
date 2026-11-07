@@ -23,7 +23,7 @@ namespace NetworkFixtures
             area.movementBounds = {{-5.0f, 0.0f, -5.0f}, {5.0f, 3.0f, 5.0f}};
             room.areas.push_back(area);
             Net::PlayerData player;
-            player.sessionToken = Token(static_cast<std::uint8_t>(i * 16 + 1));
+            player.m_sessionToken = Token(static_cast<std::uint8_t>(i * 16 + 1));
             player.areaId = i;
             player.ready = Net::ReadyState::Ready;
             player.mapLoaded = 1;
@@ -52,7 +52,7 @@ namespace NetworkFixtures
     inline Net::UdpHeader Header()
     {
         Net::UdpHeader header;
-        header.sessionToken = Token();
+        header.m_sessionToken = Token();
         header.sequence = 42;
         header.context = {7, 3};
         header.membershipId = 2;

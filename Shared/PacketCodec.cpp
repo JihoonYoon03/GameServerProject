@@ -294,7 +294,7 @@ namespace Net
         }
         void WritePlayerData(std::vector<std::uint8_t>& bytes, const PlayerData& value)
         {
-            WriteSessionToken(bytes, value.sessionToken);
+            WriteSessionToken(bytes, value.m_sessionToken);
             WriteMat4Data(bytes, value.worldTransform);
             WriteU8(bytes, value.areaId);
             WriteU8(bytes, static_cast<std::uint8_t>(value.ready));
@@ -303,7 +303,7 @@ namespace Net
         }
         bool ReadPlayerData(const std::uint8_t* data, std::size_t size, std::size_t& offset, PlayerData& value)
         {
-            if (!ReadSessionToken(data, size, offset, value.sessionToken))
+            if (!ReadSessionToken(data, size, offset, value.m_sessionToken))
             {
                 return false;
             }
@@ -362,13 +362,13 @@ namespace Net
         }
         void WritePlayerResult(std::vector<std::uint8_t>& bytes, const PlayerResult& value)
         {
-            WriteSessionToken(bytes, value.sessionToken);
+            WriteSessionToken(bytes, value.m_sessionToken);
             WritePlayerStats(bytes, value.stats);
             WriteU8(bytes, value.rank);
         }
         bool ReadPlayerResult(const std::uint8_t* data, std::size_t size, std::size_t& offset, PlayerResult& value)
         {
-            if (!ReadSessionToken(data, size, offset, value.sessionToken))
+            if (!ReadSessionToken(data, size, offset, value.m_sessionToken))
             {
                 return false;
             }
@@ -449,13 +449,13 @@ namespace Net
         }
         void WritePlayerTransformEntry(std::vector<std::uint8_t>& bytes, const PlayerTransformEntry& value)
         {
-            WriteSessionToken(bytes, value.sessionToken);
+            WriteSessionToken(bytes, value.m_sessionToken);
             WriteMat4Data(bytes, value.worldTransform);
             WriteU32(bytes, value.lastProcessedInput);
         }
         bool ReadPlayerTransformEntry(const std::uint8_t* data, std::size_t size, std::size_t& offset, PlayerTransformEntry& value)
         {
-            if (!ReadSessionToken(data, size, offset, value.sessionToken))
+            if (!ReadSessionToken(data, size, offset, value.m_sessionToken))
             {
                 return false;
             }
@@ -526,7 +526,7 @@ namespace Net
             WriteU16(bytes, value.version);
             WriteU16(bytes, static_cast<std::uint16_t>(value.type));
             WriteU16(bytes, value.size);
-            WriteSessionToken(bytes, value.sessionToken);
+            WriteSessionToken(bytes, value.m_sessionToken);
             WriteU32(bytes, value.sequence);
             WriteMatchContext(bytes, value.context);
             WriteU32(bytes, value.membershipId);
@@ -552,7 +552,7 @@ namespace Net
             {
                 return false;
             }
-            if (!ReadSessionToken(data, size, offset, value.sessionToken))
+            if (!ReadSessionToken(data, size, offset, value.m_sessionToken))
             {
                 return false;
             }

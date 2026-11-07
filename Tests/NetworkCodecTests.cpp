@@ -282,7 +282,7 @@ namespace
         players.requiredRevision = 9;
         players.playerCount = Net::MaxPlayers;
         for (std::size_t i = 0; i < Net::MaxPlayers; ++i)
-            players.players[i] = {room.players[i].sessionToken, room.players[i].worldTransform, static_cast<Net::Sequence>(40 + i)};
+            players.players[i] = {room.players[i].m_sessionToken, room.players[i].worldTransform, static_cast<Net::Sequence>(40 + i)};
         CheckUdp(Net::UdpRegisterRequest{}, 44);
         CheckUdp(Net::UdpRegisterResult{Net::ErrorCode::Ok, 42}, 50);
         CheckUdp(Net::PlayerTransform{42, room.players[3].worldTransform}, 112);

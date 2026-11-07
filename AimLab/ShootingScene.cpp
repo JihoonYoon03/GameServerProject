@@ -1,6 +1,11 @@
 #include "pch.h"
 #include "ShootingScene.h"
 
+namespace
+{
+	constexpr float TargetAreaHalfSize = 5.0f;
+}
+
 Object* ShootingScene::AddProp(const std::string& name, const std::shared_ptr<Mesh>& mesh, const std::shared_ptr<Material>& material, const glm::vec3& position, const glm::vec3& scale, bool solid)
 {
 	auto object = std::make_unique<Object>(mesh, material);
@@ -45,20 +50,71 @@ void ShootingScene::Initialize()
 		}
 	}
 
-	auto* floor = AddProp("Ground", std::make_shared<Mesh>(std::move(floorVertices)), ground, {0, 0, 0}, {5, 1, 5});
-	floor->collider = ColliderType::Box;
+	AddProp("Ground", std::make_shared<Mesh>(std::move(floorVertices)), ground, {0, 0, 0}, {12, 1, 12});
 
-	auto fence = std::make_shared<Material>(shader);
-	fence->color = glm::vec3(0.9f);
-	AddProp("Shooting line", cube, fence, {0, 0.375f, -0.25f}, {5, 0.75f, 0.05f}, true);
+	auto targetAreaMaterial = std::make_shared<Material>(shader);
+	targetAreaMaterial->color = {0.12f, 0.55f, 0.45f};
+	constexpr float TargetPlateHalfThickness = 0.04f;
+	AddProp("Target spawn plate", cube, targetAreaMaterial, {0, TargetPlateHalfThickness, 0},
+		{TargetAreaHalfSize, TargetPlateHalfThickness, TargetAreaHalfSize});
 
-	auto* right = AddProp("Right fence", cube, fence, {5, 0.375f, 0}, {5, 0.75f, 0.05f}, true);
-	right->transform.rotation.y = 90.0f;
+	auto areaMaterial = std::make_shared<Material>(shader);
+	areaMaterial->color = {0.68f, 0.78f, 0.88f};
 
-	auto* left = AddProp("Left fence", cube, fence, {-5, 0.375f, 0}, {5, 0.75f, 0.05f}, true);
-	left->transform.rotation.y = 90.0f;
-	AddProp("Back fence", cube, fence, {0, 0.375f, 5}, {5, 0.75f, 0.05f}, true);
-	AddProp("Front fence", cube, fence, {0, 0.375f, -5}, {5, 0.75f, 0.05f}, true);
+	constexpr float AreaInnerHalfSize = 2.0f;
+	constexpr float WallHalfThickness = 0.1f;
+	constexpr float WallHalfHeight = 0.375f;
+	constexpr float FloorHalfThickness = 0.04f;
+	constexpr float WallOffset = AreaInnerHalfSize + WallHalfThickness;
+	constexpr float AreaOuterHalfSize = WallOffset + WallHalfThickness;
+	constexpr float WallCenterY = 2.0f * FloorHalfThickness + WallHalfHeight;
+
+	struct AreaPart
+	{
+		glm::vec3 offset;
+		glm::vec3 halfSize;
+		bool solid;
+	};
+	const std::array<AreaPart, 5> areaParts{{
+		{{0, FloorHalfThickness, 0}, {AreaOuterHalfSize, FloorHalfThickness, AreaOuterHalfSize}, false},
+		{{-WallOffset, WallCenterY, 0}, {WallHalfThickness, WallHalfHeight, AreaInnerHalfSize}, true},
+		{{WallOffset, WallCenterY, 0}, {WallHalfThickness, WallHalfHeight, AreaInnerHalfSize}, true},
+		{{0, WallCenterY, -WallOffset}, {AreaOuterHalfSize, WallHalfHeight, WallHalfThickness}, true},
+		{{0, WallCenterY, WallOffset}, {AreaOuterHalfSize, WallHalfHeight, WallHalfThickness}, true},
+	}};
+
+	std::vector<Vertex> areaVertices;
+	areaVertices.reserve(cube->GetVertices().size() * areaParts.size());
+	for (const auto& part : areaParts)
+	{
+		for (auto vertex : cube->GetVertices())
+		{
+			vertex.position = part.offset + vertex.position * part.halfSize;
+			areaVertices.push_back(vertex);
+		}
+	}
+	const auto areaMesh = std::make_shared<Mesh>(std::move(areaVertices));
+
+	constexpr float AreaDistance = 9.0f;
+	const glm::vec3 southArea{0, 0, AreaDistance};
+	const std::array<std::pair<const char*, glm::vec3>, 4> playerAreas{{
+		{"East player area", {AreaDistance, 0, 0}},
+		{"West player area", {-AreaDistance, 0, 0}},
+		{"North player area", {0, 0, -AreaDistance}},
+		{"South player area", southArea},
+	}};
+	for (const auto& [name, center] : playerAreas)
+	{
+		AddProp(name, areaMesh, areaMaterial, center, glm::vec3(1.0f));
+		for (const auto& part : areaParts)
+		{
+			if (part.solid)
+			{
+				auto* wall = AddProp(name, cube, areaMaterial, center + part.offset, part.halfSize, true);
+				wall->visible = false;
+			}
+		}
+	}
 
 	auto playerMaterial = std::make_shared<Material>(shader);
 	playerMaterial->color = {0.8f, 0.8f, 0.2f};
@@ -66,7 +122,7 @@ void ShootingScene::Initialize()
 	auto player = std::make_unique<Player>(cube, playerMaterial);
 	player_ = player.get();
 	player->name = "Local player";
-	player->transform.position = {0, 1, 1};
+	player->transform.position = southArea + glm::vec3(0, 1, 0);
 	player->transform.scale = glm::vec3(0.25f);
 	player->collider = ColliderType::Box;
 	AddObject(std::move(player));
@@ -157,12 +213,14 @@ void ShootingScene::ApplyPlayerCommand(const PlayerCommand& command, float delta
 
 void ShootingScene::SpawnTargets()
 {
-	std::uniform_real_distribution<float> x(-5.0f, 5.0f), y(0.5f, 2.0f), z(-5.0f, -0.5f);
-
+	constexpr float TargetScale = 0.15f;
+	constexpr float SpawnHalfSize = TargetAreaHalfSize - TargetScale;
+	std::uniform_real_distribution<float> horizontal(-SpawnHalfSize, SpawnHalfSize);
+	std::uniform_real_distribution<float> height(0.5f, 2.0f);
 
 	auto target = std::make_unique<Target>(targetMesh_, targetMaterial_);
-	target->transform.position = {x(random_), y(random_), z(random_)};
-	target->transform.scale = glm::vec3(0.15f);
+	target->transform.position = {horizontal(random_), height(random_), horizontal(random_)};
+	target->transform.scale = glm::vec3(TargetScale);
 	target->collider = ColliderType::Sphere;
 	Target* spawned = target.get();
 	AddObject(std::move(target));

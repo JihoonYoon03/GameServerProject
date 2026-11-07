@@ -21,6 +21,19 @@ public:
     //큐의 패킷을 실제로 보내고, 송신 완료한 패킷은 삭제
     void FlushSend();
 
+    // 접속 소켓의 소유권을 넘겨받고 발급한 토큰을 저장한다.
+    void SetConnection(SOCKET socket, const Net::SessionToken& token)
+    {
+        Close();
+        m_TCPSocket = socket;
+        m_sessionToken = token;
+    }
+    SOCKET GetTCPSocket() const { return m_TCPSocket; }
+    const Net::SessionToken& GetSessionToken() const { return m_sessionToken; }
+    bool HasPendingSend() const { return !m_qPendingSend.empty(); }
+    bool IsUDPRegistered() const { return m_bUDPRegistered; }
+    const sockaddr_in& GetUDPAddress() const { return m_UDPAddress; }
+
 private:
     Net::SessionToken           m_sessionToken{};
 

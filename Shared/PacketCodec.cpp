@@ -1,4 +1,4 @@
-ï»¿#include "PacketCodec.h"
+#include "PacketCodec.h"
 #include <cstring>
 #include <limits>
 
@@ -6,7 +6,7 @@ namespace Net
 {
     static_assert(sizeof(float) == 4 && std::numeric_limits<float>::is_iec559);
 
-    // í° ìë¦¿ìˆ˜ ë°”ì´íŠ¸ë¶€í„° ê¸°ë¡í•œë‹¤. êµ¬ì¡°ì²´ ì „ì²´ë¥¼ ë©”ëª¨ë¦¬ ë³µì‚¬í•´ ë³´ë‚´ì§€ ì•ŠëŠ”ë‹¤.
+    // Å« ÀÚ¸´¼ö ¹ÙÀÌÆ®ºÎÅÍ ±â·ÏÇÑ´Ù. ±¸Á¶Ã¼ ÀüÃ¼¸¦ ¸Ş¸ğ¸® º¹»çÇØ º¸³»Áö ¾Ê´Â´Ù.
     void WriteU8(std::vector<std::uint8_t>& bytes, std::uint8_t value)
     {
         bytes.push_back(value);
@@ -39,7 +39,7 @@ namespace Net
         WriteU32(bytes, bits);
     }
 
-    // ë‚¨ì€ ê¸¸ì´ë¥¼ ë¨¼ì € í™•ì¸í•˜ë¯€ë¡œ ì½ê¸° ì‹¤íŒ¨ ì‹œ ìœ„ì¹˜ì™€ ì¶œë ¥ê°’ì€ ê·¸ëŒ€ë¡œë‹¤.
+    // ³²Àº ±æÀÌ¸¦ ¸ÕÀú È®ÀÎÇÏ¹Ç·Î ÀĞ±â ½ÇÆĞ ½Ã À§Ä¡¿Í Ãâ·Â°ªÀº ±×´ë·Î´Ù.
     bool ReadU8(const std::uint8_t* data, std::size_t size,
         std::size_t& offset, std::uint8_t& value)
     {
@@ -118,7 +118,7 @@ namespace Net
 
     namespace
     {
-        // ë³¸ë¬¸ íƒ€ì…ë§ˆë‹¤ í•„ë“œë¥¼ ì„ ì–¸ëœ ìˆœì„œëŒ€ë¡œ ì½ê³  ì“´ë‹¤.
+        // º»¹® Å¸ÀÔ¸¶´Ù ÇÊµå¸¦ ¼±¾ğµÈ ¼ø¼­´ë·Î ÀĞ°í ¾´´Ù.
 
         void WriteSessionToken(std::vector<std::uint8_t>& bytes, const SessionToken& value)
         {
@@ -1197,7 +1197,7 @@ namespace Net
             }
             return true;
         }
-        // ì½”ë±ì€ ì „ì†¡ í˜•ì‹ë§Œ ê²€ì‚¬í•œë‹¤. ê²½ê¸° ê·œì¹™ê³¼ í–‰ë ¬ íŒì •ì€ ê° ë‹´ë‹¹ ë¡œì§ì—ì„œ ì²˜ë¦¬í•œë‹¤.
+        // ÄÚµ¦Àº Àü¼Û Çü½Ä¸¸ °Ë»çÇÑ´Ù. °æ±â ±ÔÄ¢°ú Çà·Ä ÆÇÁ¤Àº °¢ ´ã´ç ·ÎÁ÷¿¡¼­ Ã³¸®ÇÑ´Ù.
         bool Valid(ErrorCode value) { return value >= ErrorCode::Ok && value <= ErrorCode::ServerFull; }
         bool Valid(GameState value) { return value >= GameState::Preparing && value <= GameState::Results; }
         bool Valid(ReadyState value) { return value >= ReadyState::Connecting && value <= ReadyState::Playing; }
@@ -1230,7 +1230,7 @@ namespace Net
                 && value.areas.size() <= MaxPlayers && ValidPlayers(value.players);
         }
     }
-    // ê° í•¨ìˆ˜ê°€ ë°›ëŠ” ë³¸ë¬¸ íƒ€ì…ì´ ì •í•´ì ¸ ìˆì–´ ë‹¤ë¥¸ ì¢…ë¥˜ì˜ ë³¸ë¬¸ì„ ì„ì§€ ì•ŠëŠ”ë‹¤.
+    // °¢ ÇÔ¼ö°¡ ¹Ş´Â º»¹® Å¸ÀÔÀÌ Á¤ÇØÁ® ÀÖ¾î ´Ù¸¥ Á¾·ùÀÇ º»¹®À» ¼¯Áö ¾Ê´Â´Ù.
     bool PacketCodec::ValidateBody(const ConnectResult& value)
     {
         return Valid(value.result);
@@ -2117,6 +2117,7 @@ namespace Net
     }
     bool PacketCodec::ValidateHeader(const UdpHeader& header)
     {
+        //ProtocolVersion ±»ÀÌ ¾È³Ö¾îµµ µÉ °Í °°À½.
         if (header.version != ProtocolVersion || header.magic != UdpMagic
             || header.size < UdpHeaderBytes || header.size > MaxUdpPacketBytes)
         {

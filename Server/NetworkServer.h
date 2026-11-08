@@ -22,8 +22,14 @@ public:
 	void NetworkLoop();
 	void AcceptPlayer();
 
-	// 토큰과 실제 수신 주소를 연결한다. 토큰만으로 발신자를 인증하지 않는다.
+	//Player의 UDP 접속 요청 처리 함수
 	void RegisterPlayerUDP(const Net::UdpHeader& header, const sockaddr_in& sourceAddress);
+
+	//소켓을 통해 세션 토큰 찾는 함수
+    bool ValidateSender(SOCKET tcpSocket, Net::SessionToken& verifiedSender) const;
+	//UDP용 ValidateSender
+    bool ValidateSender(const Net::UdpHeader& header, const sockaddr_in& sourceAddress,
+        Net::SessionToken& verifiedSender);
 
 	void OnClientDisconnected(const Net::SessionToken& m_sessionToken);
 	// 확인된 발신자와 패킷을 방 명령 큐로 전달하며 게임 상태는 직접 바꾸지 않는다.
@@ -31,8 +37,17 @@ public:
 		const Net::PacketData& packet);
 	// 방 스레드의 송신 요청을 큐에 넣고 실제 소켓 송신은 통신 스레드가 담당한다.
 	bool SendPacket(const Net::SendRequest& request);
+
+    //클라-서버간 시각 동기화를 위한 함수
+	//((서버 수신 시각 - 클라 송신 시각) + (서버 송신 시각 - 클라 수신 시각)) / 2 로 계산
+	//통신이 왕복할 때 두 방향의 지연이 서로 같다고 가정함.
+	//결과값으로 서버 시계가 클라보다 얼마나 앞서는지 측정 가능함.
+	//이 값을 저장해 클라 시간값에 오프셋으로 더하면 됨.
+	//통신 시에 지연 시간을 측정하기 위한 함수로 대략적으로 사용할 수도 있음.
 	void ReplyTimeProbe(const Net::SessionToken& recipient,
-		const Net::TimeProbeRequest& request, Net::ServerTimeMs receivedAtMs);
+		const Net::TimeProbeRequest& request, Net::ServerTimeMs receivedAtMs,
+        std::uint32_t requestId = 0);
+
 	void StopNetwork();
 
 private:

@@ -57,6 +57,9 @@
     <ClInclude Include="..\Shared\NetworkTypes.h">
       <Filter>Shared</Filter>
     </ClInclude>
+    <ClInclude Include="..\Shared\PacketCodec.h">
+      <Filter>Shared</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="pch.cpp">
@@ -80,10 +83,16 @@
     <ClCompile Include="Client.cpp">
       <Filter>Server\Source</Filter>
     </ClCompile>
+    <ClCompile Include="..\Shared\PacketCodec.cpp">
+      <Filter>Shared</Filter>
+    </ClCompile>
+    <ClCompile Include="Room.cpp">
+      <Filter>Server\Source</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\Shared\PacketCodec.cpp"><Filter>Server\Shared</Filter></ClCompile>
-    <ClInclude Include="..\Shared\PacketCodec.h"><Filter>Server\Shared</Filter></ClInclude>
+    <ClInclude Include="ServerWeaponState.h">
+      <Filter>Server\Header</Filter>
+    </ClInclude>
   </ItemGroup>
-  <ItemGroup><ClInclude Include="ServerWeaponState.h"><Filter>Server\Header</Filter></ClInclude></ItemGroup>
 </Project>

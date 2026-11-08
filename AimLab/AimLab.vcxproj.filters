@@ -119,6 +119,9 @@
     <ClCompile Include="..\Shared\NetworkConversions.cpp">
       <Filter>Network\Shared</Filter>
     </ClCompile>
+    <ClCompile Include="..\Shared\PacketCodec.cpp">
+      <Filter>Network\Shared</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Gun.h">
@@ -228,7 +231,8 @@
     </Object>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\Shared\PacketCodec.cpp"><Filter>Network\Shared</Filter></ClCompile>
-    <ClInclude Include="..\Shared\PacketCodec.h"><Filter>Network\Shared</Filter></ClInclude>
+    <ClInclude Include="..\Shared\PacketCodec.h">
+      <Filter>Network\Shared</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

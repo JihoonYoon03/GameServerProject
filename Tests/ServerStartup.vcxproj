@@ -43,13 +43,11 @@
     <ClCompile Include="..\Server\Client.cpp">
       <DisableSpecificWarnings>4267;%(DisableSpecificWarnings)</DisableSpecificWarnings>
     </ClCompile>
-    <ClCompile Include="..\Server\NetworkServer.cpp">
-      <!-- 다른 담당의 아직 비어 있는 UDP 등록 함수는 유지한다. -->
-      <DisableSpecificWarnings>4100;%(DisableSpecificWarnings)</DisableSpecificWarnings>
-    </ClCompile>
+    <ClCompile Include="..\Server\NetworkServer.cpp" />
 
     <ClCompile Include="..\Server\Framework.cpp" />
     <ClCompile Include="..\Shared\PacketCodec.cpp" />
+    <ClCompile Include="..\Shared\NetworkTypes.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>

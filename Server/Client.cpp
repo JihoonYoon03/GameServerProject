@@ -12,6 +12,7 @@ Client::~Client()
 
 Client::Client(Client && other) noexcept
 {
+    //본인의 소켓 닫기
     Close();
     m_sessionToken = other.m_sessionToken;
     m_TCPSocket = std::move(other.m_TCPSocket);
@@ -23,9 +24,14 @@ Client::Client(Client && other) noexcept
     m_qPendingSend = std::move(other.m_qPendingSend);
     m_nSendOffset = other.m_nSendOffset;
     m_nNextMembershipId = other.m_nNextMembershipId;
+    m_nMatchId = other.m_nMatchId;
+    lastRegistrationSequence = other.lastRegistrationSequence;
+    hasRegistrationSequence = other.hasRegistrationSequence;
+    m_LastUdpSequence = other.m_LastUdpSequence;
+    m_HasUdpSequence = other.m_HasUdpSequence;
 
-    other.m_sessionToken.fill(0);
     other.m_TCPSocket = INVALID_SOCKET;
+    other.Close();
 }
 
 Client& Client::operator=(Client && other) noexcept
@@ -43,9 +49,14 @@ Client& Client::operator=(Client && other) noexcept
         m_qPendingSend = std::move(other.m_qPendingSend);
         m_nSendOffset = other.m_nSendOffset;
         m_nNextMembershipId = other.m_nNextMembershipId;
+        m_nMatchId = other.m_nMatchId;
+        lastRegistrationSequence = other.lastRegistrationSequence;
+        hasRegistrationSequence = other.hasRegistrationSequence;
+        m_LastUdpSequence = other.m_LastUdpSequence;
+        m_HasUdpSequence = other.m_HasUdpSequence;
 
-        other.m_sessionToken.fill(0);
         other.m_TCPSocket = INVALID_SOCKET;
+        other.Close();
 	}
 
 	return *this;
@@ -53,6 +64,19 @@ Client& Client::operator=(Client && other) noexcept
 
 void Client::Close()
 {
+    m_sessionToken.fill(0);
+    m_UDPAddress = {};
+    m_bUDPRegistered = false;
+    m_nRoomId = 0;
+    m_nMatchId = 0;
+    m_nMembershipId = 0;
+    lastRegistrationSequence = 0;
+    hasRegistrationSequence = false;
+    m_LastUdpSequence = 0;
+    m_HasUdpSequence = false;
+    m_vTcpReceiveBuffer.clear();
+    m_qPendingSend = {};
+    m_nSendOffset = 0;
     if (m_TCPSocket != INVALID_SOCKET)
     {
         int retval = closesocket(m_TCPSocket);
@@ -104,4 +128,17 @@ void Client::FlushSend()
             m_qPendingSend.pop();
         }
     }
+}
+
+void Client::SetMatchContext(Net::MatchContext context, Net::MembershipId membershipId)
+{
+    //방이 다르다 || 다른 경기이다 || 방에 입장해서 부여받은 ID가 다른가(재접속 구분용)
+    if (m_nRoomId != context.roomId || m_nMatchId != context.matchId ||
+        m_nMembershipId != membershipId)
+        //이동 데이터용 UDP 패킷을 0번부터 다시 받을 수 있도록 세팅
+        m_HasUdpSequence = false;
+
+    m_nRoomId = context.roomId;
+    m_nMatchId = context.matchId;
+    m_nMembershipId = membershipId;
 }

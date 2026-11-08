@@ -20,7 +20,7 @@ void Room::SendTargetPositions(SOCKET udpSocket, const std::vector<Client>& clie
 	const Net::Sequence sequence = ++targetSnapshotSequence_;
 	const auto serverTick = static_cast<std::uint32_t>(nowMs * Net::ServerTickRate / 1000);
 
-	// í˜„ì¬ UDP í—¤ë”ì—ëŠ” ë²„ì „ í•„ë“œê°€ ì—†ìœ¼ë¯€ë¡œ ì„ ì–¸ëœ í•„ë“œë§Œ ì§ë ¬í™”í•œë‹¤.
+	// ÇöÀç UDP Çì´õ¿¡´Â ¹öÀü ÇÊµå°¡ ¾øÀ¸¹Ç·Î ¼±¾ğµÈ ÇÊµå¸¸ Á÷·ÄÈ­ÇÑ´Ù.
 	constexpr std::uint16_t HeaderBytes = 2 + 2 + 2 + Net::SessionTokenBytes + 4 + 4 + 4 + 4 + 4;
 	constexpr std::uint16_t SnapshotMetadataBytes = 8 + 2 + 2 + 2 + 2;
 	constexpr std::uint16_t TargetBytes = 4 + 3 * 4 + 3 * 4;
@@ -37,7 +37,7 @@ void Room::SendTargetPositions(SOCKET udpSocket, const std::vector<Client>& clie
 
 		for (const auto& client : clients)
 		{
-			if (!client.UDPRegistered || client.roomId != targetContext_.roomId) continue;
+			if (!client.IsUDPRegistered() || client.GetRoomId() != targetContext_.roomId) continue;
 
 			std::vector<std::uint8_t> bytes;
 			bytes.reserve(packetSize);
@@ -45,11 +45,11 @@ void Room::SendTargetPositions(SOCKET udpSocket, const std::vector<Client>& clie
 			WriteUInt16(bytes, Net::UdpMagic);
 			WriteUInt16(bytes, static_cast<std::uint16_t>(Net::UdpType::TargetSnapshot));
 			WriteUInt16(bytes, packetSize);
-			bytes.insert(bytes.end(), client.sessionToken.begin(), client.sessionToken.end());
+			bytes.insert(bytes.end(), client.GetSessionToken().begin(), client.GetSessionToken().end());
 			WriteUInt32(bytes, sequence);
 			WriteUInt32(bytes, targetContext_.roomId);
 			WriteUInt32(bytes, targetContext_.matchId);
-			WriteUInt32(bytes, client.membershipId);
+			WriteUInt32(bytes, client.GetMembershipId());
 			WriteUInt32(bytes, serverTick);
 
 			WriteUInt64(bytes, nowMs);
@@ -69,16 +69,16 @@ void Room::SendTargetPositions(SOCKET udpSocket, const std::vector<Client>& clie
 				WriteFloat(bytes, target.velocity.z);
 			}
 
-			// ì´ ë°©ì— ì†í•˜ê³  UDP ë“±ë¡ì„ ë§ˆì¹œ ì°¸ê°€ìì˜ ì£¼ì†Œë¡œ ì „ì†¡í•œë‹¤.
+			// ÀÌ ¹æ¿¡ ¼ÓÇÏ°í UDP µî·ÏÀ» ¸¶Ä£ Âü°¡ÀÚÀÇ ÁÖ¼Ò·Î Àü¼ÛÇÑ´Ù.
 			const int result = sendto(udpSocket,
 				reinterpret_cast<const char*>(bytes.data()), static_cast<int>(bytes.size()),
-				0, reinterpret_cast<const sockaddr*>(&client.UDPAddress), sizeof(client.UDPAddress));
+				0, reinterpret_cast<const sockaddr*>(&client.GetUDPAddress()), sizeof(client.GetUDPAddress()));
 			if (result == SOCKET_ERROR) err_display("sendto()");
 		}
 	}
 }
 
-// ì›ë³¸ ê°’ì€ ìœ ì§€í•˜ê³  ì „ì†¡ ë²„í¼ì— ê¸°ë¡í•  ë•Œ ë„¤íŠ¸ì›Œí¬ ë°”ì´íŠ¸ ìˆœì„œë¡œ ë³€í™˜í•œë‹¤.
+// ¿øº» °ªÀº À¯ÁöÇÏ°í Àü¼Û ¹öÆÛ¿¡ ±â·ÏÇÒ ¶§ ³×Æ®¿öÅ© ¹ÙÀÌÆ® ¼ø¼­·Î º¯È¯ÇÑ´Ù.
 void Room::WriteUInt16(std::vector<std::uint8_t>& bytes, std::uint16_t value)
 {
 	const std::uint16_t networkValue = htons(value);
@@ -95,7 +95,7 @@ void Room::WriteUInt32(std::vector<std::uint8_t>& bytes, std::uint32_t value)
 
 void Room::WriteUInt64(std::vector<std::uint8_t>& bytes, std::uint64_t value)
 {
-	// ìƒìœ„ 32ë¹„íŠ¸ì™€ í•˜ìœ„ 32ë¹„íŠ¸ë¥¼ ì°¨ë¡€ë¡œ ë³€í™˜í•´ ê¸°ë¡í•œë‹¤.
+	// »óÀ§ 32ºñÆ®¿Í ÇÏÀ§ 32ºñÆ®¸¦ Â÷·Ê·Î º¯È¯ÇØ ±â·ÏÇÑ´Ù.
 	WriteUInt32(bytes, static_cast<std::uint32_t>(value >> 32));
 	WriteUInt32(bytes, static_cast<std::uint32_t>(value));
 }
@@ -103,7 +103,7 @@ void Room::WriteUInt64(std::vector<std::uint8_t>& bytes, std::uint64_t value)
 void Room::WriteFloat(std::vector<std::uint8_t>& bytes, float value)
 {
 	static_assert(sizeof(float) == 4 && std::numeric_limits<float>::is_iec559);
-	// ì‹¤ìˆ˜ëŠ” ë¹„íŠ¸ í‘œí˜„ì„ ë³µì‚¬í•œ ë’¤ ì •ìˆ˜ ë³€í™˜ í•¨ìˆ˜ë¥¼ ì ìš©í•œë‹¤.
+	// ½Ç¼ö´Â ºñÆ® Ç¥ÇöÀ» º¹»çÇÑ µÚ Á¤¼ö º¯È¯ ÇÔ¼ö¸¦ Àû¿ëÇÑ´Ù.
 	std::uint32_t bits;
 	std::memcpy(&bits, &value, sizeof(bits));
 	WriteUInt32(bytes, bits);

@@ -21,7 +21,7 @@ namespace NetworkFixtures
             Net::AreaData area;
             area.areaId = i;
             area.movementBounds = {{-5.0f, 0.0f, -5.0f}, {5.0f, 3.0f, 5.0f}};
-            room.areas.push_back(area);
+            room.vAreas.push_back(area);
             Net::PlayerData player;
             player.m_sessionToken = Token(static_cast<std::uint8_t>(i * 16 + 1));
             player.areaId = i;
@@ -29,7 +29,7 @@ namespace NetworkFixtures
             player.mapLoaded = 1;
             player.worldTransform.elements[12] = static_cast<float>(i);
             player.stats = {i * 2u, i * 3u};
-            room.players.push_back(player);
+            room.vPlayers.push_back(player);
         }
         return room;
     }

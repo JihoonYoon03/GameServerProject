@@ -78,6 +78,18 @@ namespace
         Net::PacketData encoded;
         Check(Net::PacketCodec::EncodeTcp(packet, encoded), "encode TCP case");
         Check(encoded.transport == Net::PacketTransport::Tcp && encoded.bytes.size() == length, "TCP exact wire length");
+        Net::PacketData inferred;
+        Check(Net::PacketCodec::EncodeTcp(body, packet.header.requestId, inferred)
+            && inferred.transport == encoded.transport && inferred.bytes == encoded.bytes,
+            "inferred TCP header preserves exact bytes");
+        Net::TcpHeader frameHeader;
+        frameHeader.requestId = 99;
+        Check(Net::PacketCodec::ReadTcpHeader(encoded.bytes.data(), encoded.bytes.size() - 1, frameHeader)
+            == Net::DecodeStatus::NeedMore && frameHeader.requestId == 99, "partial frame keeps header output");
+        Check(Net::PacketCodec::ReadTcpHeader(encoded.bytes.data(), encoded.bytes.size(), frameHeader)
+            == Net::DecodeStatus::Complete && frameHeader.size == length
+            && frameHeader.type == packet.header.type && frameHeader.requestId == packet.header.requestId,
+            "read complete TCP frame header without selecting a body");
         unsigned type = static_cast<unsigned>(packet.header.type);
         Check(encoded.bytes[4] == 0 && encoded.bytes[5] == 5
             && encoded.bytes[6] == (type >> 8) && encoded.bytes[7] == (type & 255)
@@ -151,6 +163,13 @@ namespace
         Net::UdpPacket<T> decoded;
         Check(Net::PacketCodec::DecodeUdp(bytes.data(), bytes.size(), decoded), "decode UDP case");
         Check(decoded.header.type == packet.header.type, "UDP message type");
+        Net::UdpHeader datagramHeader;
+        datagramHeader.sequence = 99;
+        Check(!Net::PacketCodec::ReadUdpHeader(bytes.data(), bytes.size() - 1, datagramHeader)
+            && datagramHeader.sequence == 99, "short datagram keeps header output");
+        Check(Net::PacketCodec::ReadUdpHeader(bytes.data(), bytes.size(), datagramHeader)
+            && datagramHeader.size == length && datagramHeader.type == packet.header.type
+            && datagramHeader.sequence == packet.header.sequence, "read complete UDP datagram header");
         Net::PacketData reencoded;
         Check(Net::PacketCodec::EncodeUdp(decoded, reencoded) && bytes == reencoded.bytes, "UDP round trip");
         T decodedBody;
@@ -243,7 +262,7 @@ namespace
         CheckTcp(MapLoaded{7}, 16);
         CheckTcp(ReadyChangeRequest{7, 1}, 17);
         CheckTcp(RoomState{room}, 758);
-        CheckTcp(GameStarted{room.version, 1000, 2000, 122000, room.rules, room.players}, 422);
+        CheckTcp(GameStarted{room.version, 1000, 2000, 122000, room.rules, room.vPlayers}, 422);
         CheckTcp(fire, 108);
         CheckTcp(ShotResolved{room.version, token, 11, ShotOutcome::HitTarget, 8, {12, 14}}, 57);
         CheckTcp(MatchTime{{7, 3}, 5000, 122000}, 36);
@@ -282,10 +301,10 @@ namespace
         players.requiredRevision = 9;
         players.playerCount = Net::MaxPlayers;
         for (std::size_t i = 0; i < Net::MaxPlayers; ++i)
-            players.players[i] = {room.players[i].m_sessionToken, room.players[i].worldTransform, static_cast<Net::Sequence>(40 + i)};
+            players.players[i] = {room.vPlayers[i].m_sessionToken, room.vPlayers[i].worldTransform, static_cast<Net::Sequence>(40 + i)};
         CheckUdp(Net::UdpRegisterRequest{}, 44);
         CheckUdp(Net::UdpRegisterResult{Net::ErrorCode::Ok, 42}, 50);
-        CheckUdp(Net::PlayerTransform{42, room.players[3].worldTransform}, 112);
+        CheckUdp(Net::PlayerTransform{42, room.vPlayers[3].worldTransform}, 112);
         CheckUdp(players, 393);
         CheckUdp(NetworkFixtures::Targets(), 1180);
         Check(udpCases == 5, "5 UDP messages tested");
@@ -368,10 +387,10 @@ namespace
 
         RejectTcpBody(Net::ReadyChangeRequest{7, 2}, 17);
         Net::RoomStateData room = NetworkFixtures::RoomState();
-        room.players[0].ready = static_cast<Net::ReadyState>(255); RejectTcpBody(Net::RoomState{room}, 758);
-        room = NetworkFixtures::RoomState(); room.players[0].mapLoaded = 2; RejectTcpBody(Net::RoomState{room}, 758);
-        room = NetworkFixtures::RoomState(); room.players.push_back(room.players[0]); RejectTcpBody(Net::RoomState{room}, 849);
-        room = NetworkFixtures::RoomState(); room.areas.push_back(room.areas[0]); RejectTcpBody(Net::RoomState{room}, 847);
+        room.vPlayers[0].ready = static_cast<Net::ReadyState>(255); RejectTcpBody(Net::RoomState{room}, 758);
+        room = NetworkFixtures::RoomState(); room.vPlayers[0].mapLoaded = 2; RejectTcpBody(Net::RoomState{room}, 758);
+        room = NetworkFixtures::RoomState(); room.vPlayers.push_back(room.vPlayers[0]); RejectTcpBody(Net::RoomState{room}, 849);
+        room = NetworkFixtures::RoomState(); room.vAreas.push_back(room.vAreas[0]); RejectTcpBody(Net::RoomState{room}, 847);
         room = NetworkFixtures::RoomState(); room.state = static_cast<Net::GameState>(255); RejectTcpBody(Net::RoomState{room}, 758);
         Net::RoomListResult tooMany; tooMany.rooms.resize(65); RejectTcpBody(tooMany, 473);
         Net::GameResults results; results.players.resize(5); RejectTcpBody(results, 174);
@@ -403,13 +422,13 @@ namespace
         // 경기·수학 담당이 판단할 값은 코덱이 바꾸거나 거절하지 않는다.
         Net::RoomStateData room = NetworkFixtures::RoomState();
         room.capacity = 2;
-        room.players.resize(2);
+        room.vPlayers.resize(2);
         room.rules.durationMs = 0;
         room.rules.pointsPerHit = 0;
-        room.areas[0].areaId = 255;
-        room.players[0].areaId = 200;
-        room.areas[0].movementBounds.min.x = 10.0f;
-        room.players[0].worldTransform.elements[0] = std::numeric_limits<float>::quiet_NaN();
+        room.vAreas[0].areaId = 255;
+        room.vPlayers[0].areaId = 200;
+        room.vAreas[0].movementBounds.min.x = 10.0f;
+        room.vPlayers[0].worldTransform.elements[0] = std::numeric_limits<float>::quiet_NaN();
         Net::TcpPacket<Net::RoomState> packet = MakeTcp(Net::RoomState{room}, 576);
         Net::PacketData encoded;
         Check(Net::PacketCodec::EncodeTcp(packet, encoded), "codec accepts values reserved for gameplay validation");
@@ -418,8 +437,8 @@ namespace
         Check(Net::PacketCodec::DecodeTcp(encoded.bytes.data(), encoded.bytes.size(), decoded, consumed) == Net::DecodeStatus::Complete,
             "wire values decode without gameplay policy");
         Check(decoded.packetData.room.rules.durationMs == 0 && decoded.packetData.room.rules.pointsPerHit == 0
-            && decoded.packetData.room.areas[0].areaId == 255 && decoded.packetData.room.players[0].areaId == 200
-            && decoded.packetData.room.areas[0].movementBounds.min.x == 10.0f, "wire values preserved");
+            && decoded.packetData.room.vAreas[0].areaId == 255 && decoded.packetData.room.vPlayers[0].areaId == 200
+            && decoded.packetData.room.vAreas[0].movementBounds.min.x == 10.0f, "wire values preserved");
         Net::PacketData reencoded;
         Check(Net::PacketCodec::EncodeTcp(decoded, reencoded) && encoded.bytes == reencoded.bytes, "NaN bits preserved in a complete packet");
         Net::GameStarted started;

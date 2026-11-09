@@ -208,6 +208,21 @@ namespace Net
             return EncodeTcpFrame(packet.header, bytes, output);
         }
 
+        // 서버에서 새로 만드는 TCP 패킷은 본문에서 종류와 길이를 결정한다.
+        template<class T>
+        static bool EncodeTcp(const T& body, std::uint32_t requestId, PacketData& output)
+        {
+            std::vector<std::uint8_t> bytes;
+            if (!EncodeBody(body, bytes) || bytes.size() > MaxTcpPacketBytes - TcpHeaderBytes)
+                return false;
+
+            TcpHeader header;
+            header.type = PacketTraits<T>::type;
+            header.requestId = requestId;
+            header.size = static_cast<std::uint32_t>(TcpHeaderBytes + bytes.size());
+            return EncodeTcpFrame(header, bytes, output);
+        }
+
         template<class T>
         static bool EncodeUdp(const UdpPacket<T>& packet, PacketData& output)
         {
@@ -229,7 +244,7 @@ namespace Net
         {
             consumed = 0;
             TcpHeader header;
-            const DecodeStatus status = ReadTcpHeader(data, size, PacketTraits<T>::type, header);
+            const DecodeStatus status = ReadTcpHeader(data, size, header, &PacketTraits<T>::type);
             if (status != DecodeStatus::Complete)
                 return status;
 
@@ -250,7 +265,7 @@ namespace Net
             UdpPacket<T>& output)
         {
             UdpHeader header;
-            if (!ReadUdpHeader(data, size, PacketTraits<T>::type, header))
+            if (!ReadUdpHeader(data, size, header) || header.type != PacketTraits<T>::type)
                 return false;
 
             T value{};
@@ -262,6 +277,11 @@ namespace Net
             output.packetData = value;
             return true;
         }
+
+        // 완성된 TCP 프레임 또는 UDP 데이터그램의 헤더를 읽는다.
+        // 실패하거나 더 받아야 할 때는 출력값을 바꾸지 않는다.
+        static DecodeStatus ReadTcpHeader(const std::uint8_t* data, std::size_t size, TcpHeader& output);
+        static bool ReadUdpHeader(const std::uint8_t* data, std::size_t size, UdpHeader& output);
 
         static bool ValidateHeader(const TcpHeader& header);
         static bool ValidateHeader(const UdpHeader& header);
@@ -354,8 +374,6 @@ namespace Net
         static bool EncodeUdpFrame(const UdpHeader& header,
             const std::vector<std::uint8_t>& bytes, PacketData& output);
         static DecodeStatus ReadTcpHeader(const std::uint8_t* data, std::size_t size,
-            TcpType expected, TcpHeader& output);
-        static bool ReadUdpHeader(const std::uint8_t* data, std::size_t size,
-            UdpType expected, UdpHeader& output);
+            TcpHeader& output, const TcpType* expected);
     };
 }

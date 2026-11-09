@@ -4,33 +4,59 @@
 
 namespace Net
 {
-    static_assert(sizeof(float) == 4 && std::numeric_limits<float>::is_iec559);
+    static_assert(sizeof(float) == sizeof(std::uint32_t) && std::numeric_limits<float>::is_iec559);
 
-    // 큰 자릿수 바이트부터 기록한다. 구조체 전체를 메모리 복사해 보내지 않는다.
+    namespace
+    {
+        constexpr int BitsPerByte = std::numeric_limits<std::uint8_t>::digits;
+
+        // 고정 폭 정수의 상위 바이트부터 기록한다.
+        void WriteInteger(std::vector<std::uint8_t>& bytes, std::uint64_t value, std::size_t width)
+        {
+            for (std::size_t remaining = width; remaining > 0; --remaining)
+            {
+                bytes.push_back(static_cast<std::uint8_t>(value >> ((remaining - 1) * BitsPerByte)));
+            }
+        }
+
+        // 남은 길이를 먼저 확인하므로 실패 시 위치와 출력값은 그대로다.
+        bool ReadInteger(const std::uint8_t* data, std::size_t size, std::size_t& offset,
+            std::size_t width, std::uint64_t& value)
+        {
+            if (data == nullptr || offset > size || width > size - offset)
+                return false;
+
+            std::uint64_t result = 0;
+            for (std::size_t i = 0; i < width; ++i)
+            {
+                result = (result << BitsPerByte) | data[offset + i];
+            }
+            offset += width;
+            value = result;
+            return true;
+        }
+
+        bool CanReadBody(const std::uint8_t* data, std::size_t size, std::size_t limit)
+        {
+            return size <= limit && (data != nullptr || size == 0);
+        }
+    }
+
     void WriteU8(std::vector<std::uint8_t>& bytes, std::uint8_t value)
     {
         bytes.push_back(value);
     }
     void WriteU16(std::vector<std::uint8_t>& bytes, std::uint16_t value)
     {
-        for (int shift = 8; shift >= 0; shift -= 8)
-        {
-            bytes.push_back(static_cast<std::uint8_t>(value >> shift));
-        }
+        WriteInteger(bytes, value, sizeof(value));
     }
     void WriteU32(std::vector<std::uint8_t>& bytes, std::uint32_t value)
     {
-        for (int shift = 24; shift >= 0; shift -= 8)
-        {
-            bytes.push_back(static_cast<std::uint8_t>(value >> shift));
-        }
+        WriteInteger(bytes, value, sizeof(value));
     }
     void WriteU64(std::vector<std::uint8_t>& bytes, std::uint64_t value)
     {
-        for (int shift = 56; shift >= 0; shift -= 8)
-        {
-            bytes.push_back(static_cast<std::uint8_t>(value >> shift));
-        }
+        WriteInteger(bytes, value, sizeof(value));
     }
     void WriteF32(std::vector<std::uint8_t>& bytes, float value)
     {
@@ -39,70 +65,40 @@ namespace Net
         WriteU32(bytes, bits);
     }
 
-    // 남은 길이를 먼저 확인하므로 읽기 실패 시 위치와 출력값은 그대로다.
     bool ReadU8(const std::uint8_t* data, std::size_t size,
         std::size_t& offset, std::uint8_t& value)
     {
-        if (data == nullptr || offset > size || 1 > size - offset)
-        {
+        if (data == nullptr || offset >= size)
             return false;
-        }
-        std::uint8_t result = 0;
-        for (std::size_t i = 0; i < 1; ++i)
-        {
-            result = static_cast<std::uint8_t>((result << 8) | data[offset + i]);
-        }
-        offset += 1;
-        value = result;
+
+        value = data[offset];
+        ++offset;
         return true;
     }
     bool ReadU16(const std::uint8_t* data, std::size_t size,
         std::size_t& offset, std::uint16_t& value)
     {
-        if (data == nullptr || offset > size || 2 > size - offset)
-        {
+        std::uint64_t result = 0;
+        if (!ReadInteger(data, size, offset, sizeof(value), result))
             return false;
-        }
-        std::uint16_t result = 0;
-        for (std::size_t i = 0; i < 2; ++i)
-        {
-            result = static_cast<std::uint16_t>((result << 8) | data[offset + i]);
-        }
-        offset += 2;
-        value = result;
+
+        value = static_cast<std::uint16_t>(result);
         return true;
     }
     bool ReadU32(const std::uint8_t* data, std::size_t size,
         std::size_t& offset, std::uint32_t& value)
     {
-        if (data == nullptr || offset > size || 4 > size - offset)
-        {
+        std::uint64_t result = 0;
+        if (!ReadInteger(data, size, offset, sizeof(value), result))
             return false;
-        }
-        std::uint32_t result = 0;
-        for (std::size_t i = 0; i < 4; ++i)
-        {
-            result = static_cast<std::uint32_t>((result << 8) | data[offset + i]);
-        }
-        offset += 4;
-        value = result;
+
+        value = static_cast<std::uint32_t>(result);
         return true;
     }
     bool ReadU64(const std::uint8_t* data, std::size_t size,
         std::size_t& offset, std::uint64_t& value)
     {
-        if (data == nullptr || offset > size || 8 > size - offset)
-        {
-            return false;
-        }
-        std::uint64_t result = 0;
-        for (std::size_t i = 0; i < 8; ++i)
-        {
-            result = static_cast<std::uint64_t>((result << 8) | data[offset + i]);
-        }
-        offset += 8;
-        value = result;
-        return true;
+        return ReadInteger(data, size, offset, sizeof(value), value);
     }
     bool ReadF32(const std::uint8_t* data, std::size_t size,
         std::size_t& offset, float& value)
@@ -141,7 +137,7 @@ namespace Net
         }
         void WriteMat4Data(std::vector<std::uint8_t>& bytes, const Mat4Data& value)
         {
-            for (std::size_t i = 0; i < 16; ++i)
+            for (std::size_t i = 0; i < value.elements.size(); ++i)
             {
                 WriteF32(bytes, value.elements[i]);
             }
@@ -149,7 +145,7 @@ namespace Net
 
         bool ReadMat4Data(const std::uint8_t* data, std::size_t size, std::size_t& offset, Mat4Data& value)
         {
-            for (std::size_t i = 0; i < 16; ++i)
+            for (std::size_t i = 0; i < value.elements.size(); ++i)
             {
                 if (!ReadF32(data, size, offset, value.elements[i]))
                 {
@@ -1373,8 +1369,8 @@ namespace Net
     bool PacketCodec::DecodeBody(TcpType type, const std::uint8_t* data,
         std::size_t size, ConnectResult& output)
     {
-        if (type != TcpType::ConnectResult || size > MaxTcpPacketBytes - TcpHeaderBytes
-            || (data == nullptr && size != 0))
+        if (type != PacketTraits<ConnectResult>::type
+            || !CanReadBody(data, size, MaxTcpPacketBytes - TcpHeaderBytes))
         {
             return false;
         }
@@ -1400,8 +1396,8 @@ namespace Net
     bool PacketCodec::DecodeBody(TcpType type, const std::uint8_t* data,
         std::size_t size, RequestRejected& output)
     {
-        if (type != TcpType::RequestRejected || size > MaxTcpPacketBytes - TcpHeaderBytes
-            || (data == nullptr && size != 0))
+        if (type != PacketTraits<RequestRejected>::type
+            || !CanReadBody(data, size, MaxTcpPacketBytes - TcpHeaderBytes))
         {
             return false;
         }
@@ -1427,8 +1423,8 @@ namespace Net
     bool PacketCodec::DecodeBody(TcpType type, const std::uint8_t* data,
         std::size_t size, RoomListRequest& output)
     {
-        if (type != TcpType::RoomListRequest || size > MaxTcpPacketBytes - TcpHeaderBytes
-            || (data == nullptr && size != 0))
+        if (type != PacketTraits<RoomListRequest>::type
+            || !CanReadBody(data, size, MaxTcpPacketBytes - TcpHeaderBytes))
         {
             return false;
         }
@@ -1454,8 +1450,8 @@ namespace Net
     bool PacketCodec::DecodeBody(TcpType type, const std::uint8_t* data,
         std::size_t size, RoomListResult& output)
     {
-        if (type != TcpType::RoomListResult || size > MaxTcpPacketBytes - TcpHeaderBytes
-            || (data == nullptr && size != 0))
+        if (type != PacketTraits<RoomListResult>::type
+            || !CanReadBody(data, size, MaxTcpPacketBytes - TcpHeaderBytes))
         {
             return false;
         }
@@ -1481,8 +1477,8 @@ namespace Net
     bool PacketCodec::DecodeBody(TcpType type, const std::uint8_t* data,
         std::size_t size, CreateRoomRequest& output)
     {
-        if (type != TcpType::CreateRoomRequest || size > MaxTcpPacketBytes - TcpHeaderBytes
-            || (data == nullptr && size != 0))
+        if (type != PacketTraits<CreateRoomRequest>::type
+            || !CanReadBody(data, size, MaxTcpPacketBytes - TcpHeaderBytes))
         {
             return false;
         }
@@ -1508,8 +1504,8 @@ namespace Net
     bool PacketCodec::DecodeBody(TcpType type, const std::uint8_t* data,
         std::size_t size, JoinRoomRequest& output)
     {
-        if (type != TcpType::JoinRoomRequest || size > MaxTcpPacketBytes - TcpHeaderBytes
-            || (data == nullptr && size != 0))
+        if (type != PacketTraits<JoinRoomRequest>::type
+            || !CanReadBody(data, size, MaxTcpPacketBytes - TcpHeaderBytes))
         {
             return false;
         }
@@ -1535,8 +1531,8 @@ namespace Net
     bool PacketCodec::DecodeBody(TcpType type, const std::uint8_t* data,
         std::size_t size, RoomEnterResult& output)
     {
-        if (type != TcpType::RoomEnterResult || size > MaxTcpPacketBytes - TcpHeaderBytes
-            || (data == nullptr && size != 0))
+        if (type != PacketTraits<RoomEnterResult>::type
+            || !CanReadBody(data, size, MaxTcpPacketBytes - TcpHeaderBytes))
         {
             return false;
         }
@@ -1562,8 +1558,8 @@ namespace Net
     bool PacketCodec::DecodeBody(TcpType type, const std::uint8_t* data,
         std::size_t size, LeaveRoomRequest& output)
     {
-        if (type != TcpType::LeaveRoomRequest || size > MaxTcpPacketBytes - TcpHeaderBytes
-            || (data == nullptr && size != 0))
+        if (type != PacketTraits<LeaveRoomRequest>::type
+            || !CanReadBody(data, size, MaxTcpPacketBytes - TcpHeaderBytes))
         {
             return false;
         }
@@ -1589,8 +1585,8 @@ namespace Net
     bool PacketCodec::DecodeBody(TcpType type, const std::uint8_t* data,
         std::size_t size, LeaveRoomResult& output)
     {
-        if (type != TcpType::LeaveRoomResult || size > MaxTcpPacketBytes - TcpHeaderBytes
-            || (data == nullptr && size != 0))
+        if (type != PacketTraits<LeaveRoomResult>::type
+            || !CanReadBody(data, size, MaxTcpPacketBytes - TcpHeaderBytes))
         {
             return false;
         }
@@ -1616,8 +1612,8 @@ namespace Net
     bool PacketCodec::DecodeBody(TcpType type, const std::uint8_t* data,
         std::size_t size, MapLoaded& output)
     {
-        if (type != TcpType::MapLoaded || size > MaxTcpPacketBytes - TcpHeaderBytes
-            || (data == nullptr && size != 0))
+        if (type != PacketTraits<MapLoaded>::type
+            || !CanReadBody(data, size, MaxTcpPacketBytes - TcpHeaderBytes))
         {
             return false;
         }
@@ -1643,8 +1639,8 @@ namespace Net
     bool PacketCodec::DecodeBody(TcpType type, const std::uint8_t* data,
         std::size_t size, ReadyChangeRequest& output)
     {
-        if (type != TcpType::ReadyChangeRequest || size > MaxTcpPacketBytes - TcpHeaderBytes
-            || (data == nullptr && size != 0))
+        if (type != PacketTraits<ReadyChangeRequest>::type
+            || !CanReadBody(data, size, MaxTcpPacketBytes - TcpHeaderBytes))
         {
             return false;
         }
@@ -1670,8 +1666,8 @@ namespace Net
     bool PacketCodec::DecodeBody(TcpType type, const std::uint8_t* data,
         std::size_t size, RoomState& output)
     {
-        if (type != TcpType::RoomState || size > MaxTcpPacketBytes - TcpHeaderBytes
-            || (data == nullptr && size != 0))
+        if (type != PacketTraits<RoomState>::type
+            || !CanReadBody(data, size, MaxTcpPacketBytes - TcpHeaderBytes))
         {
             return false;
         }
@@ -1697,8 +1693,8 @@ namespace Net
     bool PacketCodec::DecodeBody(TcpType type, const std::uint8_t* data,
         std::size_t size, GameStarted& output)
     {
-        if (type != TcpType::GameStarted || size > MaxTcpPacketBytes - TcpHeaderBytes
-            || (data == nullptr && size != 0))
+        if (type != PacketTraits<GameStarted>::type
+            || !CanReadBody(data, size, MaxTcpPacketBytes - TcpHeaderBytes))
         {
             return false;
         }
@@ -1724,8 +1720,8 @@ namespace Net
     bool PacketCodec::DecodeBody(TcpType type, const std::uint8_t* data,
         std::size_t size, FireRequest& output)
     {
-        if (type != TcpType::FireRequest || size > MaxTcpPacketBytes - TcpHeaderBytes
-            || (data == nullptr && size != 0))
+        if (type != PacketTraits<FireRequest>::type
+            || !CanReadBody(data, size, MaxTcpPacketBytes - TcpHeaderBytes))
         {
             return false;
         }
@@ -1751,8 +1747,8 @@ namespace Net
     bool PacketCodec::DecodeBody(TcpType type, const std::uint8_t* data,
         std::size_t size, ShotResolved& output)
     {
-        if (type != TcpType::ShotResolved || size > MaxTcpPacketBytes - TcpHeaderBytes
-            || (data == nullptr && size != 0))
+        if (type != PacketTraits<ShotResolved>::type
+            || !CanReadBody(data, size, MaxTcpPacketBytes - TcpHeaderBytes))
         {
             return false;
         }
@@ -1778,8 +1774,8 @@ namespace Net
     bool PacketCodec::DecodeBody(TcpType type, const std::uint8_t* data,
         std::size_t size, MatchTime& output)
     {
-        if (type != TcpType::MatchTime || size > MaxTcpPacketBytes - TcpHeaderBytes
-            || (data == nullptr && size != 0))
+        if (type != PacketTraits<MatchTime>::type
+            || !CanReadBody(data, size, MaxTcpPacketBytes - TcpHeaderBytes))
         {
             return false;
         }
@@ -1805,8 +1801,8 @@ namespace Net
     bool PacketCodec::DecodeBody(TcpType type, const std::uint8_t* data,
         std::size_t size, GameResults& output)
     {
-        if (type != TcpType::GameResults || size > MaxTcpPacketBytes - TcpHeaderBytes
-            || (data == nullptr && size != 0))
+        if (type != PacketTraits<GameResults>::type
+            || !CanReadBody(data, size, MaxTcpPacketBytes - TcpHeaderBytes))
         {
             return false;
         }
@@ -1832,8 +1828,8 @@ namespace Net
     bool PacketCodec::DecodeBody(TcpType type, const std::uint8_t* data,
         std::size_t size, ReloadRequest& output)
     {
-        if (type != TcpType::ReloadRequest || size > MaxTcpPacketBytes - TcpHeaderBytes
-            || (data == nullptr && size != 0))
+        if (type != PacketTraits<ReloadRequest>::type
+            || !CanReadBody(data, size, MaxTcpPacketBytes - TcpHeaderBytes))
         {
             return false;
         }
@@ -1859,8 +1855,8 @@ namespace Net
     bool PacketCodec::DecodeBody(TcpType type, const std::uint8_t* data,
         std::size_t size, WeaponState& output)
     {
-        if (type != TcpType::WeaponState || size > MaxTcpPacketBytes - TcpHeaderBytes
-            || (data == nullptr && size != 0))
+        if (type != PacketTraits<WeaponState>::type
+            || !CanReadBody(data, size, MaxTcpPacketBytes - TcpHeaderBytes))
         {
             return false;
         }
@@ -1886,8 +1882,8 @@ namespace Net
     bool PacketCodec::DecodeBody(TcpType type, const std::uint8_t* data,
         std::size_t size, TimeProbeRequest& output)
     {
-        if (type != TcpType::TimeProbeRequest || size > MaxTcpPacketBytes - TcpHeaderBytes
-            || (data == nullptr && size != 0))
+        if (type != PacketTraits<TimeProbeRequest>::type
+            || !CanReadBody(data, size, MaxTcpPacketBytes - TcpHeaderBytes))
         {
             return false;
         }
@@ -1913,8 +1909,8 @@ namespace Net
     bool PacketCodec::DecodeBody(TcpType type, const std::uint8_t* data,
         std::size_t size, TimeProbeResult& output)
     {
-        if (type != TcpType::TimeProbeResult || size > MaxTcpPacketBytes - TcpHeaderBytes
-            || (data == nullptr && size != 0))
+        if (type != PacketTraits<TimeProbeResult>::type
+            || !CanReadBody(data, size, MaxTcpPacketBytes - TcpHeaderBytes))
         {
             return false;
         }
@@ -1940,8 +1936,8 @@ namespace Net
     bool PacketCodec::DecodeBody(UdpType type, const std::uint8_t* data,
         std::size_t size, UdpRegisterRequest& output)
     {
-        if (type != UdpType::RegisterRequest || size > MaxUdpPacketBytes - UdpHeaderBytes
-            || (data == nullptr && size != 0))
+        if (type != PacketTraits<UdpRegisterRequest>::type
+            || !CanReadBody(data, size, MaxUdpPacketBytes - UdpHeaderBytes))
         {
             return false;
         }
@@ -1967,8 +1963,8 @@ namespace Net
     bool PacketCodec::DecodeBody(UdpType type, const std::uint8_t* data,
         std::size_t size, UdpRegisterResult& output)
     {
-        if (type != UdpType::RegisterResult || size > MaxUdpPacketBytes - UdpHeaderBytes
-            || (data == nullptr && size != 0))
+        if (type != PacketTraits<UdpRegisterResult>::type
+            || !CanReadBody(data, size, MaxUdpPacketBytes - UdpHeaderBytes))
         {
             return false;
         }
@@ -1994,8 +1990,8 @@ namespace Net
     bool PacketCodec::DecodeBody(UdpType type, const std::uint8_t* data,
         std::size_t size, PlayerTransform& output)
     {
-        if (type != UdpType::PlayerTransform || size > MaxUdpPacketBytes - UdpHeaderBytes
-            || (data == nullptr && size != 0))
+        if (type != PacketTraits<PlayerTransform>::type
+            || !CanReadBody(data, size, MaxUdpPacketBytes - UdpHeaderBytes))
         {
             return false;
         }
@@ -2021,8 +2017,8 @@ namespace Net
     bool PacketCodec::DecodeBody(UdpType type, const std::uint8_t* data,
         std::size_t size, PlayerSnapshot& output)
     {
-        if (type != UdpType::PlayerSnapshot || size > MaxUdpPacketBytes - UdpHeaderBytes
-            || (data == nullptr && size != 0))
+        if (type != PacketTraits<PlayerSnapshot>::type
+            || !CanReadBody(data, size, MaxUdpPacketBytes - UdpHeaderBytes))
         {
             return false;
         }
@@ -2048,8 +2044,8 @@ namespace Net
     bool PacketCodec::DecodeBody(UdpType type, const std::uint8_t* data,
         std::size_t size, TargetSnapshot& output)
     {
-        if (type != UdpType::TargetSnapshot || size > MaxUdpPacketBytes - UdpHeaderBytes
-            || (data == nullptr && size != 0))
+        if (type != PacketTraits<TargetSnapshot>::type
+            || !CanReadBody(data, size, MaxUdpPacketBytes - UdpHeaderBytes))
         {
             return false;
         }
@@ -2117,7 +2113,6 @@ namespace Net
     }
     bool PacketCodec::ValidateHeader(const UdpHeader& header)
     {
-        //ProtocolVersion 굳이 안넣어도 될 것 같음.
         if (header.version != ProtocolVersion || header.magic != UdpMagic
             || header.size < UdpHeaderBytes || header.size > MaxUdpPacketBytes)
         {
@@ -2153,8 +2148,13 @@ namespace Net
         output = packet;
         return true;
     }
+    DecodeStatus PacketCodec::ReadTcpHeader(const std::uint8_t* data, std::size_t size, TcpHeader& output)
+    {
+        return ReadTcpHeader(data, size, output, nullptr);
+    }
+
     DecodeStatus PacketCodec::ReadTcpHeader(const std::uint8_t* data, std::size_t size,
-        TcpType expected, TcpHeader& output)
+        TcpHeader& output, const TcpType* expected)
     {
         if (data == nullptr && size != 0)
         {
@@ -2166,7 +2166,8 @@ namespace Net
         }
         TcpHeader header;
         std::size_t offset = 0;
-        if (!ReadTcpFields(data, size, offset, header) || !ValidateHeader(header) || header.type != expected)
+        if (!ReadTcpFields(data, size, offset, header) || !ValidateHeader(header)
+            || (expected != nullptr && header.type != *expected))
         {
             return DecodeStatus::Invalid;
         }
@@ -2179,7 +2180,7 @@ namespace Net
     }
 
     bool PacketCodec::ReadUdpHeader(const std::uint8_t* data, std::size_t size,
-        UdpType expected, UdpHeader& output)
+        UdpHeader& output)
     {
         if (data == nullptr || size < UdpHeaderBytes || size > MaxUdpPacketBytes)
         {
@@ -2188,7 +2189,7 @@ namespace Net
         UdpHeader header;
         std::size_t offset = 0;
         if (!ReadUdpFields(data, size, offset, header) || !ValidateHeader(header)
-            || header.type != expected || header.size != size)
+            || header.size != size)
         {
             return false;
         }

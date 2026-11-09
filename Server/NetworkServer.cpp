@@ -1,6 +1,9 @@
 #include "pch.h"
 #include "NetworkServer.h"
 #include "../Shared/PacketCodec.h"
+#include <bcrypt.h>
+
+#pragma comment(lib, "bcrypt.lib")
 
 //UDP 주소 2개가 같은지 여부
 bool SameEndpoint(const sockaddr_in& first, const sockaddr_in& second)
@@ -148,7 +151,7 @@ void NetworkServer::ReplyTimeProbe(const Net::SessionToken& recipient,
 		SendPacket(send);
 }
 
-NetworkServer::NetworkServer()
+NetworkServer::NetworkServer() : m_ControlThreadId(GetCurrentThreadId())
 {
 	InitializeCriticalSection(&m_CSSendQueue);
 }
@@ -170,7 +173,16 @@ bool NetworkServer::SendPacket(const Net::SendRequest& request)
 		LeaveCriticalSection(&m_CSSendQueue);
 		return false;
 	}
-	m_qSendQueue.push(request);
+	// 요청을 복사하다 예외가 발생해도 다른 스레드가 큐를 사용할 수 있어야 한다.
+	try
+	{
+		m_qSendQueue.push(request);
+	}
+	catch (...)
+	{
+		LeaveCriticalSection(&m_CSSendQueue);
+		throw;
+	}
 	LeaveCriticalSection(&m_CSSendQueue);
 	return true;
 }
@@ -220,7 +232,6 @@ void NetworkServer::FlushSendQueue()
 void NetworkServer::SendTcpPending(Client& client)
 {
 	// 윤지훈 수정 필요: Client::FlushSend의 연결 오류에서 송신 위치에 -1을 더하지 않도록 처리한다.
-	// 윤지훈 수정 필요: Client 이동 생성과 대입에서 UDP 등록 순번과 등록 순번 보유 상태도 옮긴다.
 	// Client가 보관한 부분 송신 위치부터 이어서 전송한다.
 	if (client.GetTCPSocket() != INVALID_SOCKET && client.HasPendingSend())
 		client.FlushSend();
@@ -229,7 +240,7 @@ void NetworkServer::SendTcpPending(Client& client)
 
 bool NetworkServer::StartNetwork(std::uint16_t tcpPort, std::uint16_t udpPort)
 {
-	if (m_hNetworkThread != nullptr)
+	if (GetCurrentThreadId() != m_ControlThreadId || m_bCleanupInProgress || m_hNetworkThread != nullptr)
 		return false;
 
 	WSADATA data{};
@@ -279,10 +290,6 @@ bool NetworkServer::StartNetwork(std::uint16_t tcpPort, std::uint16_t udpPort)
 		return false;
 	}
 
-	FILETIME startedAt{};
-	GetSystemTimeAsFileTime(&startedAt);
-	m_ServerStartedAt = (static_cast<std::uint64_t>(startedAt.dwHighDateTime) << 32) |
-		startedAt.dwLowDateTime;
 	m_bStopRequested = false;
 	m_hNetworkThread = CreateThread(nullptr, 0, NetworkProc, this, 0, nullptr);
 	if (m_hNetworkThread == nullptr)
@@ -296,59 +303,333 @@ bool NetworkServer::StartNetwork(std::uint16_t tcpPort, std::uint16_t udpPort)
 DWORD WINAPI NetworkServer::NetworkProc(LPVOID parameter)
 {
 	NetworkServer* server = static_cast<NetworkServer*>(parameter);
+	DWORD expectedThreadId = 0;
+	if (!server->m_NetworkThreadId.compare_exchange_strong(expectedThreadId, GetCurrentThreadId()))
+		return 0;
 	server->NetworkLoop();
+	server->m_NetworkThreadId = 0;
 	return 0;
+}
+
+bool NetworkServer::SetCommandSink(const std::function<void(const Net::RoomCommand&)>& sink)
+{
+	if (GetCurrentThreadId() != m_ControlThreadId || m_bCleanupInProgress || m_hNetworkThread != nullptr)
+		return false;
+	m_commandSink = sink;
+	return true;
+}
+
+void NetworkServer::NotifyCommand(const Net::RoomCommand& command)
+{
+	if (!m_commandSink)
+		return;
+
+	// 방 명령 처리 중에는 같은 서버의 분배와 연결 정리를 다시 호출하지 않는다.
+	m_bInvokingCommandSink = true;
+	try
+	{
+		m_commandSink(command);
+	}
+	catch (...)
+	{
+		fprintf(stderr, "방 명령 콜백 처리 중 오류가 발생했습니다.\n");
+	}
+	m_bInvokingCommandSink = false;
+}
+
+bool NetworkServer::ReceiveTcp(Client& client)
+{
+	const SOCKET socketHandle = client.GetTCPSocket();
+	if (socketHandle == INVALID_SOCKET)
+		return false;
+
+	std::uint8_t bytes[4096];
+	const int received = recv(socketHandle, reinterpret_cast<char*>(bytes), static_cast<int>(sizeof(bytes)), 0);
+	if (received == 0)
+		return false;
+	if (received == SOCKET_ERROR)
+		return WSAGetLastError() == WSAEWOULDBLOCK;
+
+	Net::SessionToken sender{};
+	if (!ValidateSender(socketHandle, sender))
+		return false;
+
+	auto& buffer = client.m_vTcpReceiveBuffer;
+	buffer.insert(buffer.end(), bytes, bytes + received);
+	std::size_t offset = 0;
+	while (offset < buffer.size() && !m_bStopRequested)
+	{
+		Net::TcpHeader header;
+		const Net::DecodeStatus status = Net::PacketCodec::ReadTcpHeader(
+			buffer.data() + offset, buffer.size() - offset, header);
+		if (status == Net::DecodeStatus::NeedMore)
+			break;
+		if (status == Net::DecodeStatus::Invalid)
+			return false;
+
+		Net::PacketData packet;
+		packet.transport = Net::PacketTransport::Tcp;
+		const auto first = buffer.begin() + static_cast<std::ptrdiff_t>(offset);
+		packet.bytes.assign(first, first + header.size);
+		DispatchPacket(sender, packet);
+		offset += header.size;
+	}
+	// 처리한 프레임만 지우고 뒤에 이어지는 미완성 데이터는 보관한다.
+	buffer.erase(buffer.begin(), buffer.begin() + static_cast<std::ptrdiff_t>(offset));
+	return true;
+}
+
+void NetworkServer::ReceiveUdp()
+{
+	std::uint8_t bytes[Net::MaxUdpPacketBytes];
+	sockaddr_in sourceAddress{};
+	int addressLength = sizeof(sourceAddress);
+	const int received = recvfrom(m_SockUDP, reinterpret_cast<char*>(bytes), static_cast<int>(sizeof(bytes)), 0,
+		reinterpret_cast<sockaddr*>(&sourceAddress), &addressLength);
+	if (received <= 0)
+		return;
+
+	Net::UdpHeader header;
+	if (!Net::PacketCodec::ReadUdpHeader(bytes, static_cast<std::size_t>(received), header))
+		return;
+
+	if (header.type == Net::UdpType::RegisterRequest)
+	{
+		Net::UdpRegisterRequest request;
+		if (Net::PacketCodec::DecodeBody(header.type, bytes + Net::UdpHeaderBytes,
+			header.size - Net::UdpHeaderBytes, request))
+			RegisterPlayerUDP(header, sourceAddress);
+		return;
+	}
+
+	Net::SessionToken sender{};
+	if (!ValidateSender(header, sourceAddress, sender))
+		return;
+
+	Net::PacketData packet;
+	packet.transport = Net::PacketTransport::Udp;
+	packet.bytes.assign(bytes, bytes + received);
+	DispatchPacket(sender, packet);
+}
+
+void NetworkServer::DispatchPacket(const Net::SessionToken& verifiedSender, const Net::PacketData& packet)
+{
+	if (GetCurrentThreadId() != m_NetworkThreadId || m_bInvokingCommandSink || m_bStopRequested)
+		return;
+
+	const Client* sender = nullptr;
+	for (const Client& client : m_vClients)
+	{
+		if (client.GetTCPSocket() != INVALID_SOCKET && client.GetSessionToken() == verifiedSender)
+		{
+			sender = &client;
+			break;
+		}
+	}
+	if (sender == nullptr)
+		return;
+
+	Net::RoomCommand command;
+	command.sessionToken = verifiedSender;
+	command.context = { sender->GetRoomId(), sender->GetMatchId() };
+	command.membershipId = sender->GetMembershipId();
+	command.receivedAtMs = GetTickCount64();
+
+	const auto* bytes = packet.bytes.data();
+	const std::size_t size = packet.bytes.size();
+	if (packet.transport == Net::PacketTransport::Tcp)
+	{
+		Net::TcpHeader header;
+		if (Net::PacketCodec::ReadTcpHeader(bytes, size, header) != Net::DecodeStatus::Complete ||
+			header.size != size)
+			return;
+
+		const auto* body = bytes + Net::TcpHeaderBytes;
+		const std::size_t bodySize = size - Net::TcpHeaderBytes;
+		command.requestId = header.requestId;
+		if (header.type == Net::TcpType::TimeProbeRequest)
+		{
+			Net::TimeProbeRequest request;
+			if (Net::PacketCodec::DecodeBody(header.type, body, bodySize, request))
+				ReplyTimeProbe(verifiedSender, request, command.receivedAtMs, header.requestId);
+			return;
+		}
+		if (!m_commandSink || command.context.roomId == 0 || command.membershipId == 0)
+			return;
+
+		switch (header.type)
+		{
+		case Net::TcpType::LeaveRoomRequest:
+		{
+			Net::LeaveRoomRequest request;
+			if (!Net::PacketCodec::DecodeBody(header.type, body, bodySize, request) ||
+				request.roomId != command.context.roomId)
+				return;
+			command.body = request;
+			break;
+		}
+		case Net::TcpType::MapLoaded:
+		{
+			Net::MapLoaded request;
+			if (!Net::PacketCodec::DecodeBody(header.type, body, bodySize, request) ||
+				request.roomId != command.context.roomId)
+				return;
+			command.body = request;
+			break;
+		}
+		case Net::TcpType::ReadyChangeRequest:
+		{
+			Net::ReadyChangeRequest request;
+			if (!Net::PacketCodec::DecodeBody(header.type, body, bodySize, request) ||
+				request.roomId != command.context.roomId)
+				return;
+			command.body = request;
+			break;
+		}
+		case Net::TcpType::FireRequest:
+		{
+			Net::FireRequest request;
+			if (!Net::PacketCodec::DecodeBody(header.type, body, bodySize, request) ||
+				request.context.roomId != command.context.roomId || command.context.matchId == 0 ||
+				request.context.matchId != command.context.matchId || request.membershipId != command.membershipId)
+				return;
+			command.body = request;
+			break;
+		}
+		case Net::TcpType::ReloadRequest:
+		{
+			Net::ReloadRequest request;
+			if (!Net::PacketCodec::DecodeBody(header.type, body, bodySize, request) ||
+				request.context.roomId != command.context.roomId || command.context.matchId == 0 ||
+				request.context.matchId != command.context.matchId || request.membershipId != command.membershipId)
+				return;
+			command.body = request;
+			break;
+		}
+		default:
+			return;
+		}
+	}
+	else if (packet.transport == Net::PacketTransport::Udp)
+	{
+		if (!m_commandSink || command.context.roomId == 0 || command.context.matchId == 0 ||
+			command.membershipId == 0)
+			return;
+		Net::UdpHeader header;
+		if (!Net::PacketCodec::ReadUdpHeader(bytes, size, header) ||
+			header.type != Net::UdpType::PlayerTransform || header.m_sessionToken != verifiedSender ||
+			header.context.roomId != command.context.roomId || header.context.matchId != command.context.matchId ||
+			header.membershipId != command.membershipId)
+			return;
+
+		Net::PlayerTransform transform;
+		if (!Net::PacketCodec::DecodeBody(header.type, bytes + Net::UdpHeaderBytes,
+			size - Net::UdpHeaderBytes, transform))
+			return;
+		command.body = transform;
+	}
+	else
+		return;
+
+	NotifyCommand(command);
+}
+
+void NetworkServer::OnClientDisconnected(const Net::SessionToken& sessionToken)
+{
+	const DWORD threadId = GetCurrentThreadId();
+	if (threadId != m_NetworkThreadId && (threadId != m_ControlThreadId || !m_bCleanupInProgress))
+		return;
+	if (m_bInvokingCommandSink)
+		return;
+
+	for (auto client = m_vClients.begin(); client != m_vClients.end(); ++client)
+	{
+		if (client->GetSessionToken() != sessionToken)
+			continue;
+
+		Net::RoomCommand command;
+		command.sessionToken = client->GetSessionToken();
+		command.context = { client->GetRoomId(), client->GetMatchId() };
+		command.membershipId = client->GetMembershipId();
+		command.receivedAtMs = GetTickCount64();
+		command.body = Net::ClientDisconnected{};
+		m_vClients.erase(client);
+
+		if (command.context.roomId != 0 && command.membershipId != 0)
+			NotifyCommand(command);
+		return;
+	}
 }
 
 void NetworkServer::NetworkLoop()
 {
+	if (GetCurrentThreadId() != m_NetworkThreadId || m_bInvokingCommandSink)
+		return;
 	while (!m_bStopRequested)
 	{
 		FlushSendQueue();
 		fd_set readSet;
 		FD_ZERO(&readSet);
 		FD_SET(m_SockListen, &readSet);
+		FD_SET(m_SockUDP, &readSet);
 
-		// 접속 대기를 짧게 나누어 송신 큐와 종료 요청도 계속 확인한다.
+		// 짧게 대기해 송신 큐와 종료 요청을 계속 확인한다.
 		timeval timeout{};
 		timeout.tv_usec = 10000;
-		int ready = select(0, &readSet, nullptr, nullptr, &timeout);
+		const int ready = select(0, &readSet, nullptr, nullptr, &timeout);
 		if (ready == SOCKET_ERROR)
 		{
 			err_display("select()");
 			m_bStopRequested = true;
 			break;
 		}
+		if (m_bStopRequested)
+			break;
 		if (FD_ISSET(m_SockListen, &readSet))
 			AcceptPlayer();
+		if (FD_ISSET(m_SockUDP, &readSet))
+			ReceiveUdp();
 
-		for (Client& client : m_vClients)
-			SendTcpPending(client);
-		for (std::size_t i = 0; i < m_vClients.size();)
+		// 연결된 소켓은 비차단으로 읽으므로 연결 수가 select의 집합 한도를 넘더라도 읽을 수 있다.
+		for (std::size_t i = 0; i < m_vClients.size() && !m_bStopRequested;)
 		{
-			if (m_vClients[i].GetTCPSocket() == INVALID_SOCKET)
-				m_vClients.erase(m_vClients.begin() + i);
-			else
-				++i;
+			Client& client = m_vClients[i];
+			if (!ReceiveTcp(client))
+			{
+				const Net::SessionToken token = client.GetSessionToken();
+				OnClientDisconnected(token);
+				continue;
+			}
+			if (m_bStopRequested)
+				break;
+			SendTcpPending(client);
+			++i;
 		}
-		// 수신 프레이밍과 방 명령 전달은 계획서의 11/9 담당 구현에서 연결한다.
 	}
 }
 
 void NetworkServer::StopNetwork()
 {
-	// 오늘 실행한 통신 스레드를 먼저 종료한 뒤 소유 자원을 정리한다.
-	// 방 퇴장 통지와 방 스레드 종료 연결은 후속 일정에서 구현한다.
 	EnterCriticalSection(&m_CSSendQueue);
 	m_bStopRequested = true;
 	LeaveCriticalSection(&m_CSSendQueue);
+
+	// 통신 스레드나 정리 중인 콜백에서는 종료 요청만 남긴다.
+	if (GetCurrentThreadId() != m_ControlThreadId || m_bCleanupInProgress)
+		return;
+	m_bCleanupInProgress = true;
 	if (m_hNetworkThread != nullptr)
 	{
 		WaitForSingleObject(m_hNetworkThread, INFINITE);
 		CloseHandle(m_hNetworkThread);
 		m_hNetworkThread = nullptr;
 	}
-	m_vClients.clear();
+	// 통신 스레드가 끝난 뒤 남은 세션을 같은 경로로 정리한다.
+	while (!m_vClients.empty())
+	{
+		const Net::SessionToken token = m_vClients.back().GetSessionToken();
+		OnClientDisconnected(token);
+	}
 	if (m_SockListen != INVALID_SOCKET)
 	{
 		closesocket(m_SockListen);
@@ -368,11 +649,15 @@ void NetworkServer::StopNetwork()
 		WSACleanup();
 		m_bWinsockStarted = false;
 	}
+	m_bCleanupInProgress = false;
 }
 
 
 void NetworkServer::AcceptPlayer()
 {
+	if (GetCurrentThreadId() != m_NetworkThreadId || m_bInvokingCommandSink)
+		return;
+
 	sockaddr_in address{};
 	int addressSize = sizeof(address);
 	SOCKET socketHandle = accept(m_SockListen,
@@ -384,31 +669,38 @@ void NetworkServer::AcceptPlayer()
 		return;
 	}
 	u_long nonblocking = 1;
-	if (ioctlsocket(socketHandle, FIONBIO, &nonblocking) == SOCKET_ERROR || m_NextSessionId == 0)
+	if (ioctlsocket(socketHandle, FIONBIO, &nonblocking) == SOCKET_ERROR)
 	{
 		closesocket(socketHandle);
 		return;
 	}
 
-	// 실행 시각과 접속마다 증가하는 번호로 16바이트 식별자를 만든다.
+	// 운영체제 난수로 같은 주소의 다른 접속도 추측할 수 없는 토큰을 만든다.
 	Net::SessionToken token{};
-	for (int i = 0; i < 8; ++i)
+	const NTSTATUS result = BCryptGenRandom(nullptr, token.data(), static_cast<ULONG>(token.size()),
+		BCRYPT_USE_SYSTEM_PREFERRED_RNG);
+	if (result < 0 || !Net::IsValidSessionToken(token))
 	{
-		token[i] = static_cast<std::uint8_t>(m_ServerStartedAt >> (56 - i * 8));
-		token[i + 8] = static_cast<std::uint8_t>(m_NextSessionId >> (56 - i * 8));
+		closesocket(socketHandle);
+		return;
 	}
-	++m_NextSessionId;
+	for (const Client& connected : m_vClients)
+	{
+		if (connected.GetSessionToken() == token)
+		{
+			closesocket(socketHandle);
+			return;
+		}
+	}
 
 	Client client;
 	client.SetConnection(socketHandle, token);
-	Net::TcpPacket<Net::ConnectResult> response;
-	response.header.type = Net::TcpType::ConnectResult;
-	response.header.size = Net::TcpHeaderBytes + 2 + Net::SessionTokenBytes + 2 + 8 + 2;
-	response.packetData.sessionToken = token;
-	response.packetData.udpPort = m_UDPPort;
-	response.packetData.serverTimeMs = GetTickCount64();
+	Net::ConnectResult response;
+	response.sessionToken = token;
+	response.udpPort = m_UDPPort;
+	response.serverTimeMs = GetTickCount64();
 	Net::PacketData packet;
-	if (!Net::PacketCodec::EncodeTcp(response, packet))
+	if (!Net::PacketCodec::EncodeTcp(response, 0, packet))
 		return;
 	client.QueueSend(packet);
 	m_vClients.push_back(std::move(client));

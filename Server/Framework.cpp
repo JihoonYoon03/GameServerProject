@@ -10,8 +10,6 @@ Framework::~Framework()
     StopServer();
 }
 
-// 이성노 수정 필요: Room::SendTargetPositions의 이전 Client 필드 참조를 현재 인터페이스에 맞춘다.
-// 윤지훈 협의 필요: Room에서 조회할 방 번호와 멤버십 번호의 접근 인터페이스를 제공한다.
 // 이성노 후속 일정: 11/12 표적 송신을 버전 포함 44바이트 공용 코덱과 송신 큐로 이관한다.
 bool Framework::StartServer(std::uint16_t tcpPort, std::uint16_t udpPort)
 {
@@ -22,18 +20,41 @@ bool Framework::StartServer(std::uint16_t tcpPort, std::uint16_t udpPort)
     network_->SetRoomManager(roomManager_.get());
     if (!network_->StartNetwork(tcpPort, udpPort))
     {
-        StopServer();
+        network_.reset();
+        roomManager_.reset();
         return false;
     }
     return true;
 }
 
+void Framework::SetRoomStopCallback(const std::function<void()>& callback)
+{
+    // 실행 중인 종료 콜백이 자기 자신을 교체하지 못하게 한다.
+    if (!stopInProgress_)
+        roomStopCallback_ = callback;
+}
+
 void Framework::StopServer()
 {
-    if (network_ != nullptr)
-        network_->StopNetwork();
+    if (network_ == nullptr || stopInProgress_)
+        return;
+
+    stopInProgress_ = true;
+    // 방 종료를 먼저 요청하되 실패해도 통신 스레드와 소켓을 정리한다.
+    try
+    {
+        if (roomStopCallback_)
+            roomStopCallback_();
+    }
+    catch (...)
+    {
+        fputs("Room stop callback failed.\n", stderr);
+    }
+
+    network_->StopNetwork();
     network_.reset();
     roomManager_.reset();
+    stopInProgress_ = false;
 }
 
 

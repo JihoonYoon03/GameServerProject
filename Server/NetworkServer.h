@@ -18,8 +18,12 @@ public:
 	static DWORD WINAPI NetworkProc(LPVOID parameter);
 	void FlushSendQueue();
 	void SendTcpPending(Client& client);
+	// 생성한 제어 스레드에서 시작과 정리, 소멸을 수행한다.
 	bool StartNetwork(std::uint16_t tcpPort, std::uint16_t udpPort);
 	void NetworkLoop();
+	// 제어 스레드에서 시작 전에 지정한다. 종료가 끝날 때까지 콜백이 참조하는 객체를 유지한다.
+	// 콜백은 통신 스레드와 정리 중인 제어 스레드에서 호출된다. 명령 참조는 호출 중에만 유효하다.
+	bool SetCommandSink(const std::function<void(const Net::RoomCommand&)>& sink);
 	void AcceptPlayer();
 
 	//Player의 UDP 접속 요청 처리 함수
@@ -48,11 +52,21 @@ public:
 		const Net::TimeProbeRequest& request, Net::ServerTimeMs receivedAtMs,
         std::uint32_t requestId = 0);
 
+	// 통신 스레드에서는 종료를 요청만 한다. 제어 스레드가 다시 호출해 스레드와 소켓을 정리한다.
 	void StopNetwork();
 
 private:
-	std::uint64_t m_ServerStartedAt = 0;
-	std::uint64_t m_NextSessionId = 1;
+#ifdef SERVER_NETWORK_TEST
+	friend class NetworkServerTestAccess;
+#endif
+	bool ReceiveTcp(Client& client);
+	void ReceiveUdp();
+	void NotifyCommand(const Net::RoomCommand& command);
+	std::function<void(const Net::RoomCommand&)> m_commandSink;
+	const DWORD m_ControlThreadId;
+	std::atomic<DWORD> m_NetworkThreadId{0};
+	bool m_bInvokingCommandSink = false;
+	bool m_bCleanupInProgress = false;
 	bool m_bWinsockStarted = false;
 	std::uint16_t m_UDPPort = 0;
 	SOCKET							m_SockListen = INVALID_SOCKET;

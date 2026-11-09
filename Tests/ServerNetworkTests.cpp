@@ -4,6 +4,7 @@
 #include "../Shared/PacketCodec.h"
 #include <cstdio>
 #include <cstdlib>
+#include <stdexcept>
 
 // 부분 송신과 송신 대기는 운영체제 버퍼 크기에 의존하지 않도록 대역으로 재현한다.
 namespace
@@ -42,6 +43,25 @@ namespace
 #define send FixtureSend
 #include "../Server/Client.cpp"
 #undef send
+
+// 방 관리자가 연결되기 전에는 시작 전에 정해진 접속 상태를 넣는다.
+class NetworkServerTestAccess
+{
+public:
+    static void AddClient(NetworkServer& server, SOCKET socketHandle, const Net::SessionToken& token,
+        Net::MatchContext context, Net::MembershipId membershipId)
+    {
+        Client client;
+        client.SetConnection(socketHandle, token);
+        client.SetMatchContext(context, membershipId);
+        server.m_vClients.push_back(std::move(client));
+    }
+
+    static std::uint16_t UdpPort(const NetworkServer& server)
+    {
+        return server.m_UDPPort;
+    }
+};
 
 namespace
 {
@@ -237,6 +257,280 @@ namespace
         server.StopNetwork();
     }
 
+    void SendBytes(SOCKET socketHandle, const std::uint8_t* bytes, std::size_t size)
+    {
+        std::size_t offset = 0;
+        while (offset < size)
+        {
+            const int sent = send(socketHandle, reinterpret_cast<const char*>(bytes + offset),
+                static_cast<int>(size - offset), 0);
+            Check(sent > 0, "send fixture bytes");
+            offset += static_cast<std::size_t>(sent);
+        }
+    }
+
+    SOCKET ConnectFixture(SOCKET& accepted)
+    {
+        const SOCKET listener = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+        Check(listener != INVALID_SOCKET, "fixture listener");
+        sockaddr_in tcpAddress{};
+        tcpAddress.sin_family = AF_INET;
+        tcpAddress.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+        int addressSize = sizeof(tcpAddress);
+        Check(bind(listener, reinterpret_cast<sockaddr*>(&tcpAddress), addressSize) == 0 &&
+            listen(listener, 1) == 0 &&
+            getsockname(listener, reinterpret_cast<sockaddr*>(&tcpAddress), &addressSize) == 0,
+            "bind fixture listener");
+        const SOCKET peer = Connect(ntohs(tcpAddress.sin_port));
+        accepted = accept(listener, nullptr, nullptr);
+        closesocket(listener);
+        u_long nonblocking = 1;
+        Check(accepted != INVALID_SOCKET && ioctlsocket(accepted, FIONBIO, &nonblocking) == 0,
+            "nonblocking fixture connection");
+        return peer;
+    }
+
+    SOCKET ConnectUdp(std::uint16_t port)
+    {
+        const SOCKET udp = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+        Check(udp != INVALID_SOCKET, "create UDP fixture peer");
+        const DWORD timeout = 3000;
+        Check(setsockopt(udp, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char*>(&timeout),
+            sizeof(timeout)) == 0, "UDP fixture timeout");
+        sockaddr_in address{};
+        address.sin_family = AF_INET;
+        address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+        address.sin_port = htons(port);
+        Check(connect(udp, reinterpret_cast<const sockaddr*>(&address), sizeof(address)) == 0,
+            "connect UDP fixture peer");
+        return udp;
+    }
+
+    void TestReceiveAndDispatch()
+    {
+        SOCKET accepted = INVALID_SOCKET;
+        const SOCKET peer = ConnectFixture(accepted);
+        Net::SessionToken token{};
+        token[0] = 1;
+        const Net::MatchContext context{7, 3};
+        const Net::MembershipId membershipId = 11;
+        const HANDLE movementReceived = CreateEvent(nullptr, FALSE, FALSE, nullptr);
+        Check(movementReceived != nullptr, "create movement event");
+        Net::PacketData nestedRequest;
+        Check(Net::PacketCodec::EncodeTcp(Net::MapLoaded{context.roomId}, 99, nestedRequest),
+            "encode reentrant dispatch");
+        std::vector<Net::RoomCommand> commands;
+        NetworkServer server;
+        Check(server.SetCommandSink([&](const Net::RoomCommand& command)
+        {
+            commands.push_back(command);
+            if (command.requestId == 17)
+            {
+                // 콜백에서 같은 접속을 정리하거나 분배를 중첩해도 현재 수신 버퍼는 유지되어야 한다.
+                server.DispatchPacket(command.sessionToken, nestedRequest);
+                server.OnClientDisconnected(command.sessionToken);
+                throw std::runtime_error("fixture dispatch exception");
+            }
+            if (std::holds_alternative<Net::PlayerTransform>(command.body))
+                SetEvent(movementReceived);
+        }), "install recording command sink");
+        NetworkServerTestAccess::AddClient(server, accepted, token, context, membershipId);
+        const std::uint16_t serverPort = FreePort();
+        Check(server.StartNetwork(serverPort, 0), "start receive network");
+        Check(!server.SetCommandSink({}), "running network keeps its command sink");
+        const Net::ServerTimeMs started = GetTickCount64();
+
+        Net::PacketData ready;
+        Net::PacketData reload;
+        Net::PacketData wrongRoom;
+        Net::PacketData wrongMembership;
+        Net::PacketData probe;
+        Check(Net::PacketCodec::EncodeTcp(Net::ReadyChangeRequest{context.roomId, 1}, 17, ready) &&
+            Net::PacketCodec::EncodeTcp(Net::ReloadRequest{context, membershipId}, 18, reload) &&
+            Net::PacketCodec::EncodeTcp(Net::MapLoaded{context.roomId + 1}, 19, wrongRoom) &&
+            Net::PacketCodec::EncodeTcp(Net::ReloadRequest{context, membershipId - 1}, 20, wrongMembership) &&
+            Net::PacketCodec::EncodeTcp(Net::TimeProbeRequest{123}, 21, probe), "encode TCP requests");
+
+        // 첫 요청은 헤더 가운데에서 나누고 나머지는 여러 요청과 함께 보낸다.
+        SendBytes(peer, ready.bytes.data(), 3);
+        Sleep(30);
+        std::vector<std::uint8_t> combined(ready.bytes.begin() + 3, ready.bytes.end());
+        combined.insert(combined.end(), reload.bytes.begin(), reload.bytes.end());
+        combined.insert(combined.end(), wrongRoom.bytes.begin(), wrongRoom.bytes.end());
+        combined.insert(combined.end(), wrongMembership.bytes.begin(), wrongMembership.bytes.end());
+        ready.bytes.back() = 2;
+        combined.insert(combined.end(), ready.bytes.begin(), ready.bytes.end());
+        combined.insert(combined.end(), probe.bytes.begin(), probe.bytes.end());
+        SendBytes(peer, combined.data(), combined.size());
+
+        const auto probeBytes = Receive(peer, Net::TcpHeaderBytes + 8 + 8 + 8);
+        Net::TcpPacket<Net::TimeProbeResult> probeReply;
+        std::size_t consumed = 0;
+        Check(Net::PacketCodec::DecodeTcp(probeBytes.data(), probeBytes.size(), probeReply, consumed)
+            == Net::DecodeStatus::Complete && probeReply.header.requestId == 21 &&
+            probeReply.packetData.clientSendMs == 123 && probeReply.packetData.serverReceiveMs >= started &&
+            probeReply.packetData.serverSendMs >= probeReply.packetData.serverReceiveMs,
+            "time probe after split and coalesced requests");
+
+        const SOCKET udp = ConnectUdp(NetworkServerTestAccess::UdpPort(server));
+
+        Net::UdpPacket<Net::UdpRegisterRequest> registration;
+        registration.header.m_sessionToken = token;
+        registration.header.sequence = 1;
+        Net::PacketData packet;
+        Check(Net::PacketCodec::EncodeUdp(registration, packet), "encode UDP registration");
+        std::vector<std::uint8_t> oversized(Net::MaxUdpPacketBytes + 1);
+        Check(send(udp, reinterpret_cast<const char*>(oversized.data()), static_cast<int>(oversized.size()), 0)
+            == static_cast<int>(oversized.size()), "send oversized datagram");
+        Check(send(udp, reinterpret_cast<const char*>(packet.bytes.data()), static_cast<int>(packet.bytes.size()), 0)
+            == static_cast<int>(packet.bytes.size()), "send UDP registration");
+        const auto registrationBytes = Receive(udp, Net::UdpHeaderBytes + 2 + 4);
+        Net::UdpPacket<Net::UdpRegisterResult> registrationReply;
+        Check(Net::PacketCodec::DecodeUdp(registrationBytes.data(), registrationBytes.size(), registrationReply) &&
+            registrationReply.header.m_sessionToken == token &&
+            registrationReply.packetData.registrationSequence == registration.header.sequence, "receive UDP registration");
+
+        Net::UdpPacket<Net::PlayerTransform> movement;
+        movement.header.type = Net::UdpType::PlayerTransform;
+        movement.header.size = Net::UdpHeaderBytes + 4 + 16 * 4;
+        movement.header.m_sessionToken = token;
+        movement.header.context = context;
+        movement.header.membershipId = membershipId - 1;
+        movement.header.sequence = 2;
+        movement.packetData.inputSequence = 22;
+        Check(Net::PacketCodec::EncodeUdp(movement, packet), "encode stale movement");
+        Check(send(udp, reinterpret_cast<const char*>(packet.bytes.data()), static_cast<int>(packet.bytes.size()), 0)
+            == static_cast<int>(packet.bytes.size()), "send stale movement");
+        movement.header.membershipId = membershipId;
+        Check(Net::PacketCodec::EncodeUdp(movement, packet), "encode valid movement");
+        Check(send(udp, reinterpret_cast<const char*>(packet.bytes.data()), static_cast<int>(packet.bytes.size()), 0)
+            == static_cast<int>(packet.bytes.size()), "send valid movement");
+        Check(WaitForSingleObject(movementReceived, 3000) == WAIT_OBJECT_0, "route UDP movement");
+        closesocket(udp);
+
+        Check(shutdown(peer, SD_SEND) == 0, "send TCP EOF");
+        char byte = 0;
+        Check(recv(peer, &byte, 1, 0) == 0, "server disconnects on TCP EOF");
+        closesocket(peer);
+
+        // 다른 접속의 잘못된 헤더도 정리하며 다음 접속은 정상 처리한다.
+        const SOCKET invalidPeer = Connect(serverPort);
+        Receive(invalidPeer, Net::TcpHeaderBytes + 2 + Net::SessionTokenBytes + 2 + 8 + 2);
+        probe.bytes[5] ^= 1;
+        SendBytes(invalidPeer, probe.bytes.data(), probe.bytes.size());
+        Check(recv(invalidPeer, &byte, 1, 0) == 0, "server closes invalid TCP header");
+        closesocket(invalidPeer);
+        const SOCKET nextPeer = Connect(serverPort);
+        Receive(nextPeer, Net::TcpHeaderBytes + 2 + Net::SessionTokenBytes + 2 + 8 + 2);
+        server.StopNetwork();
+        Check(recv(nextPeer, &byte, 1, 0) == 0, "stop closes remaining TCP peer");
+        closesocket(nextPeer);
+        CloseHandle(movementReceived);
+
+        Check(commands.size() == 4, "route only validated commands and one disconnect");
+        Check(std::holds_alternative<Net::ReadyChangeRequest>(commands[0].body) && commands[0].requestId == 17 &&
+            std::get<Net::ReadyChangeRequest>(commands[0].body).ready == 1, "dispatch ready command");
+        Check(std::holds_alternative<Net::ReloadRequest>(commands[1].body) && commands[1].requestId == 18,
+            "dispatch reload command");
+        Check(std::holds_alternative<Net::PlayerTransform>(commands[2].body) &&
+            std::get<Net::PlayerTransform>(commands[2].body).inputSequence == 22, "dispatch UDP transform");
+        Check(std::holds_alternative<Net::ClientDisconnected>(commands[3].body), "dispatch disconnect");
+        for (const auto& command : commands)
+            Check(command.sessionToken == token && command.context.roomId == context.roomId &&
+                command.context.matchId == context.matchId && command.membershipId == membershipId &&
+                command.receivedAtMs >= started, "dispatch server-owned session metadata");
+    }
+
+    void TestStopFromCallback()
+    {
+        SOCKET accepted = INVALID_SOCKET;
+        const SOCKET peer = ConnectFixture(accepted);
+        Net::SessionToken token{};
+        token[0] = 1;
+        const std::uint16_t port = FreePort();
+        const HANDLE stopReturned = CreateEvent(nullptr, FALSE, FALSE, nullptr);
+        Check(stopReturned != nullptr, "create callback stop event");
+        std::vector<Net::RoomCommand> commands;
+        NetworkServer server;
+        Check(server.SetCommandSink([&](const Net::RoomCommand& command)
+        {
+            commands.push_back(command);
+            if (std::holds_alternative<Net::ClientDisconnected>(command.body))
+            {
+                // 통신 스레드를 합친 뒤 호출되는 퇴장 콜백에서도 종료와 시작을 중첩하지 않는다.
+                server.StopNetwork();
+                Check(!server.StartNetwork(port, 0), "cleanup callback cannot restart network");
+                Check(!server.SetCommandSink({}), "cleanup callback cannot replace itself");
+                throw std::runtime_error("fixture disconnect exception");
+            }
+            server.StopNetwork();
+            SetEvent(stopReturned);
+        }), "install shutdown command sink");
+        NetworkServerTestAccess::AddClient(server, accepted, token, {7, 3}, 11);
+        Check(server.StartNetwork(port, 0), "start callback stop network");
+
+        Net::PacketData first;
+        Net::PacketData second;
+        Check(Net::PacketCodec::EncodeTcp(Net::ReadyChangeRequest{7, 1}, 31, first) &&
+            Net::PacketCodec::EncodeTcp(Net::ReadyChangeRequest{7, 0}, 32, second),
+            "encode requests around stop");
+        first.bytes.insert(first.bytes.end(), second.bytes.begin(), second.bytes.end());
+        SendBytes(peer, first.bytes.data(), first.bytes.size());
+        Check(WaitForSingleObject(stopReturned, 3000) == WAIT_OBJECT_0, "worker stop returns without joining itself");
+        Check(!server.StartNetwork(port, 0), "control thread must finish shutdown before restarting");
+        Net::SendRequest pending;
+        pending.recipientToken = token;
+        pending.packet = second;
+        Check(!server.SendPacket(pending), "worker stop request rejects new sends");
+
+        server.StopNetwork();
+        server.StopNetwork();
+        char byte = 0;
+        const int received = recv(peer, &byte, 1, 0);
+        Check(received == 0 || (received == SOCKET_ERROR && WSAGetLastError() == WSAECONNRESET),
+            "control thread closes stopped client");
+        closesocket(peer);
+        CloseHandle(stopReturned);
+        Check(commands.size() == 2 && commands[0].requestId == 31 &&
+            std::holds_alternative<Net::ClientDisconnected>(commands[1].body),
+            "shutdown leaves one request and one disconnect");
+        Check(server.StartNetwork(port, 0), "restart after callback shutdown");
+        server.StopNetwork();
+    }
+
+    void TestGuessedUdpToken(std::uint16_t udpPort, const Net::SessionToken& known,
+        const Net::SessionToken& target)
+    {
+        const SOCKET udp = ConnectUdp(udpPort);
+        Net::UdpPacket<Net::UdpRegisterRequest> registration;
+        registration.header.m_sessionToken = known;
+
+        // 이전의 순번 방식이면 첫 접속 토큰에 1을 더해 다음 접속의 토큰을 맞출 수 있었다.
+        for (std::size_t i = known.size(); i > 0; --i)
+        {
+            ++registration.header.m_sessionToken[i - 1];
+            if (registration.header.m_sessionToken[i - 1] != 0)
+                break;
+        }
+        registration.header.sequence = 10;
+        Net::PacketData packet;
+        Check(Net::PacketCodec::EncodeUdp(registration, packet), "encode guessed UDP token");
+        Check(send(udp, reinterpret_cast<const char*>(packet.bytes.data()), static_cast<int>(packet.bytes.size()), 0)
+            == static_cast<int>(packet.bytes.size()), "send guessed UDP token");
+
+        registration.header.m_sessionToken = target;
+        registration.header.sequence = 11;
+        Check(Net::PacketCodec::EncodeUdp(registration, packet), "encode legitimate UDP token");
+        Check(send(udp, reinterpret_cast<const char*>(packet.bytes.data()), static_cast<int>(packet.bytes.size()), 0)
+            == static_cast<int>(packet.bytes.size()), "send legitimate UDP token");
+        const auto bytes = Receive(udp, Net::UdpHeaderBytes + 2 + 4);
+        Net::UdpPacket<Net::UdpRegisterResult> response;
+        Check(Net::PacketCodec::DecodeUdp(bytes.data(), bytes.size(), response) &&
+            response.header.m_sessionToken == target && response.packetData.registrationSequence == 11,
+            "only legitimate UDP token registers");
+        closesocket(udp);
+    }
+
     void TestServer()
     {
         NetworkServer server;
@@ -266,6 +560,7 @@ namespace
             for (int j = 0; j < i; ++j)
                 Check(tokens[i] != tokens[j], "unique tokens");
         }
+        TestGuessedUdpToken(NetworkServerTestAccess::UdpPort(server), tokens[0], tokens[1]);
         // 실제 방 대신 송신 요청을 기록하고 서버 큐부터 실제 수신까지 검사한다.
         std::vector<Net::SendRequest> roomRequests;
         Net::TcpPacket<Net::MatchTime> roomPacket;
@@ -349,12 +644,29 @@ namespace
         Check(server.StartNetwork(port, 0), "restart network");
         server.StopNetwork();
 
+        int roomStops = 0;
         Framework framework;
+        framework.SetRoomStopCallback([&]
+        {
+            ++roomStops;
+            // 종료 콜백이 재진입하거나 예외를 던져도 소켓을 정리해야 한다.
+            framework.StopServer();
+            framework.SetRoomStopCallback({});
+            throw std::runtime_error("room stop fixture");
+        });
         Check(framework.StartServer(port, 0), "framework start");
         Check(!framework.StartServer(port, 0), "framework duplicate start");
+        const SOCKET frameworkPeer = Connect(port);
+        Receive(frameworkPeer, Net::TcpHeaderBytes + 2 + Net::SessionTokenBytes + 2 + 8 + 2);
         framework.StopServer();
-        Check(framework.StartServer(port, 0), "framework restart");
         framework.StopServer();
+        char frameworkByte = 0;
+        Check(recv(frameworkPeer, &frameworkByte, 1, 0) == 0, "framework closes socket after throwing callback");
+        closesocket(frameworkPeer);
+        Check(roomStops == 1, "stop room once despite reentry");
+        Check(framework.StartServer(port, 0), "framework restart after throwing callback");
+        framework.StopServer();
+        Check(roomStops == 2, "stop callback remains installed after attempted self-replacement");
     }
 }
 
@@ -369,6 +681,8 @@ int main(int argc, char* argv[])
         return 44;
     }
     TestServer();
+    TestReceiveAndDispatch();
+    TestStopFromCallback();
     TestPartialSend();
     TestStartFailure();
     TestUdpFailureAndShutdown();

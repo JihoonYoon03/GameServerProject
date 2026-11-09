@@ -36,6 +36,8 @@ namespace Net
 	inline constexpr std::uint16_t MaxTargets = 90;
 	inline constexpr std::uint16_t MaxRoomsPerPage = 64;
 	inline constexpr std::uint32_t ServerTickRate = 30;
+	inline constexpr float PlayerMoveSpeed = 10.0f / 3.6f;
+	inline constexpr float PlayerHalfExtent = 0.25f;
 	inline constexpr std::uint32_t MatchDurationMs = 120000;
 	inline constexpr std::uint32_t TargetLifetimeMs = 3000;
 	inline constexpr std::uint8_t MagazineCapacity = 6;
@@ -172,8 +174,8 @@ namespace Net
 		GameState state = GameState::Preparing;
 		std::uint8_t capacity = MaxPlayers;
 		MatchRules rules;
-		std::vector<AreaData> areas;
-		std::vector<PlayerData> players;
+		std::vector<AreaData> vAreas;
+		std::vector<PlayerData> vPlayers;
 	};
 
 	// 사용: 서버 Room::SendTransformData() / 클라 ShootingScene::RecvTransformData() [선언] / 위치·회전 통합 행렬

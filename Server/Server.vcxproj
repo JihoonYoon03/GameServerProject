@@ -193,6 +193,7 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="Client.cpp" />
+    <ClCompile Include="ClientPlayer.cpp" />
     <ClCompile Include="Framework.cpp" />
     <ClCompile Include="NetworkServer.cpp" />
     <ClCompile Include="Room.cpp" />

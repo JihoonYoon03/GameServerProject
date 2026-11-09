@@ -150,6 +150,7 @@
     <ClCompile Include="..\Shared\Collision.cpp" />
     <ClCompile Include="..\Shared\NetworkConversions.cpp" />
     <ClCompile Include="..\Server\Target.cpp" />
+    <ClCompile Include="..\Server\ClientPlayer.cpp" />
     <ClCompile Include="..\Shared\NetworkTypes.cpp" />
     <ClCompile Include="..\Shared\PacketCodec.cpp" />
     <ClCompile Include="ProtocolPeer.cpp" />

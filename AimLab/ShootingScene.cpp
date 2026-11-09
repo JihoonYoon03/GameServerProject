@@ -123,7 +123,7 @@ void ShootingScene::Initialize()
 	player_ = player.get();
 	player->name = "Local player";
 	player->transform.position = southArea + glm::vec3(0, 1, 0);
-	player->transform.scale = glm::vec3(0.25f);
+	player->transform.scale = glm::vec3(Net::PlayerHalfExtent);
 	player->collider = ColliderType::Box;
 	AddObject(std::move(player));
 	player_->UpdateCamera(camera_);

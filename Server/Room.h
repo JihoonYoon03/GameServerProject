@@ -1,4 +1,4 @@
-ï»¿#pragma once
+#pragma once
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
@@ -15,14 +15,14 @@
 #include <functional>
 #include <utility>
 
-// ê²½ê¸° ìƒíƒœëŠ” ì´ ë°©ì˜ ìŠ¤ë ˆë“œì—ì„œë§Œ ë³€ê²½í•œë‹¤. ì™¸ë¶€ ìš”ì²­ì€ AddCommand()ë¡œ ì „ë‹¬í•œë‹¤.
+// °æ±â »óÅÂ´Â ÀÌ ¹æÀÇ ½º·¹µå¿¡¼­¸¸ º¯°æÇÑ´Ù. ¿ÜºÎ ¿äÃ»Àº AddCommand()·Î Àü´ŞÇÑ´Ù.
 class Client;
 class RoomManager;
 
 class Room
 {
 public:
-	// ìˆ˜ì‹  ëŒ€ìƒì€ ëª¨ë‘ UDP ë“±ë¡ì„ ì™„ë£Œí•˜ê³  ì´ ë°©ì— ì†í•œ ì°¸ê°€ìì´ë‹¤.
+	// ¼ö½Å ´ë»óÀº ¸ğµÎ UDP µî·ÏÀ» ¿Ï·áÇÏ°í ÀÌ ¹æ¿¡ ¼ÓÇÑ Âü°¡ÀÚÀÌ´Ù.
 	struct TargetRecipient
 	{
 		Net::SessionToken sessionToken{};
@@ -37,7 +37,7 @@ public:
 		  targetRecipients_(std::move(recipients)), sendPacket_(std::move(sender))
 	{
 	}
-	// ë°©ì˜ ìƒíƒœì™€ ì ê¸ˆ ì €ì¥ ê³µê°„ì€ ë³µì‚¬í•˜ê±°ë‚˜ ì´ë™í•˜ì§€ ì•ŠëŠ”ë‹¤.
+	// ¹æÀÇ »óÅÂ¿Í Àá±İ ÀúÀå °ø°£Àº º¹»çÇÏ°Å³ª ÀÌµ¿ÇÏÁö ¾Ê´Â´Ù.
 	Room(const Room&) = delete;
 	Room& operator=(const Room&) = delete;
 	Room(Room&&) = delete;
@@ -46,26 +46,36 @@ public:
 	void AssignPlayerAreas();
 	void SetPlayerLoaded(const Net::SessionToken& player);
 	void RemovePlayerFromRoom(const Net::SessionToken& player);
+
 	void SetPlayerReady(const Net::SessionToken& player, bool ready);
+
 	void SendRoomState();
+
 	bool AreAllPlayersReady() const;
 	void StartGameIfReady();
+
 	void Tick();
+
 	void StartRoomThread();
+
 	void AddCommand(const Net::RoomCommand& command);
 	void ProcessCommands();
+
 	void StopRoom();
+
+	//¹æ¿¡¼­ ÇÃ·¹ÀÌ¾î ÀÌµ¿ ¿äÃ» ¹ŞÀ½
+	//UpdatePlayerTransform¿¡ ³Ñ±è?
 	void RecvPlayerInput(const Net::SessionToken& player,
-		const Net::PlayerTransform& input);
+		const Net::PlayerTransform& input, Net::ServerTimeMs receivedAtMs);
 	bool UpdatePlayerTransform(const Net::SessionToken& player,
-		const Net::PlayerTransform& input);
-	void CheckPlayerCollision(const Net::SessionToken& player);
+		const Net::PlayerTransform& input, Net::ServerTimeMs receivedAtMs);
 	void SendTransformData();
+
 	void RecvShoot(const Net::SessionToken& player, const Net::FireRequest& request);
 	Net::ShotResolved JudgeShoot(const Net::SessionToken& player,
 		const Net::FireRequest& request);
 	void SendShootResult(const Net::ShotResolved& result);
-	// í™œì„± í‘œì  ì „ì²´ ëª©ë¡ì„ ë™ì¼ ì‹œì  ê¸°ì¤€ìœ¼ë¡œ ë‚˜ëˆ  UDP ì „ì†¡í•œë‹¤.
+	// È°¼º Ç¥Àû ÀüÃ¼ ¸ñ·ÏÀ» µ¿ÀÏ ½ÃÁ¡ ±âÁØÀ¸·Î ³ª´² UDP Àü¼ÛÇÑ´Ù.
 	void SendTargetPositions(SOCKET udpSocket, const std::vector<Client>& clients,
 		Net::ServerTimeMs nowMs);
 private:
@@ -74,20 +84,20 @@ private:
 	static void WriteUInt64(std::vector<std::uint8_t>& bytes, std::uint64_t value);
 	static void WriteFloat(std::vector<std::uint8_t>& bytes, float value);
 
-	// ê²½ê¸° ìƒíƒœëŠ” ë°© ìŠ¤ë ˆë“œë§Œ ë°”ê¾¼ë‹¤. ìƒì„±ìì™€ ìŠ¤ë ˆë“œ ìˆ˜ëª… ì²˜ë¦¬ëŠ” í›„ì† ì¼ì •ì—ì„œ êµ¬í˜„í•œë‹¤.
-	Net::RoomStateData state_{};
-	std::vector<ClientPlayer> players_;
+	// °æ±â »óÅÂ´Â ¹æ ½º·¹µå¸¸ ¹Ù²Û´Ù. »ı¼ºÀÚ¿Í ½º·¹µå ¼ö¸í Ã³¸®´Â ÈÄ¼Ó ÀÏÁ¤¿¡¼­ ±¸ÇöÇÑ´Ù.
+	Net::RoomStateData m_state{};
+	std::vector<ClientPlayer> m_vPlayers;
 	Target targetController_;
 	StageController stageController_;
 	RoomManager* manager_ = nullptr;
-	std::vector<Net::BoxData> worldBoxes_;
+	std::vector<Net::BoxData> m_vWorldBoxes;
 	static DWORD WINAPI RoomProc(LPVOID parameter);
 	HANDLE roomThread_ = nullptr;
 	std::atomic<bool> stopRequested_{false};
-	CRITICAL_SECTION commandCS_{}; // ì‚¬ìš© ì „ ì´ˆê¸°í™”í•˜ê³  ìŠ¤ë ˆë“œ ì¢…ë£Œ ëŒ€ê¸° í›„ í•´ì œí•œë‹¤.
+	CRITICAL_SECTION commandCS_{}; // »ç¿ë Àü ÃÊ±âÈ­ÇÏ°í ½º·¹µå Á¾·á ´ë±â ÈÄ ÇØÁ¦ÇÑ´Ù.
 	std::queue<Net::RoomCommand> commandQueue_;
 	Net::MatchContext targetContext_{};
-	Target* targets_ = &targetController_; // ì£¼ì…ëœ í‘œì  ê´€ë¦¬ìëŠ” ë°©ë³´ë‹¤ ì˜¤ë˜ ìœ ì§€ë˜ì–´ì•¼ í•œë‹¤.
+	Target* targets_ = &targetController_; // ÁÖÀÔµÈ Ç¥Àû °ü¸®ÀÚ´Â ¹æº¸´Ù ¿À·¡ À¯ÁöµÇ¾î¾ß ÇÑ´Ù.
 	std::vector<TargetRecipient> targetRecipients_;
 	PacketSender sendPacket_;
 	Net::Sequence targetSnapshotSequence_ = 0;

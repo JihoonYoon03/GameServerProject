@@ -24,7 +24,7 @@ public:
 	glm::mat4 GetModelMatrix() const override;
 	float yaw = 0.0f;
 	float pitch = 0.0f;
-	float moveSpeed = 10.0f / 3.6f;
+	float moveSpeed = Net::PlayerMoveSpeed;
 	float sensitivity = 0.2f;
 
 	// 화면 객체 ID와 네트워크 세션 토큰은 서로 다른 식별자이다.

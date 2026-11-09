@@ -388,15 +388,15 @@ namespace Net
             WriteU8(bytes, static_cast<std::uint8_t>(value.state));
             WriteU8(bytes, value.capacity);
             WriteMatchRules(bytes, value.rules);
-            WriteU16(bytes, static_cast<std::uint16_t>(value.areas.size()));
-            for (std::size_t i = 0; i < value.areas.size(); ++i)
+            WriteU16(bytes, static_cast<std::uint16_t>(value.vAreas.size()));
+            for (std::size_t i = 0; i < value.vAreas.size(); ++i)
             {
-                WriteAreaData(bytes, value.areas[i]);
+                WriteAreaData(bytes, value.vAreas[i]);
             }
-            WriteU16(bytes, static_cast<std::uint16_t>(value.players.size()));
-            for (std::size_t i = 0; i < value.players.size(); ++i)
+            WriteU16(bytes, static_cast<std::uint16_t>(value.vPlayers.size()));
+            for (std::size_t i = 0; i < value.vPlayers.size(); ++i)
             {
-                WritePlayerData(bytes, value.players[i]);
+                WritePlayerData(bytes, value.vPlayers[i]);
             }
         }
         bool ReadRoomStateData(const std::uint8_t* data, std::size_t size, std::size_t& offset, RoomStateData& value)
@@ -424,10 +424,10 @@ namespace Net
             {
                 return false;
             }
-            value.areas.resize(areasCount);
-            for (std::size_t i = 0; i < value.areas.size(); ++i)
+            value.vAreas.resize(areasCount);
+            for (std::size_t i = 0; i < value.vAreas.size(); ++i)
             {
-                if (!ReadAreaData(data, size, offset, value.areas[i]))
+                if (!ReadAreaData(data, size, offset, value.vAreas[i]))
                 {
                     return false;
                 }
@@ -437,10 +437,10 @@ namespace Net
             {
                 return false;
             }
-            value.players.resize(playersCount);
-            for (std::size_t i = 0; i < value.players.size(); ++i)
+            value.vPlayers.resize(playersCount);
+            for (std::size_t i = 0; i < value.vPlayers.size(); ++i)
             {
-                if (!ReadPlayerData(data, size, offset, value.players[i]))
+                if (!ReadPlayerData(data, size, offset, value.vPlayers[i]))
                 {
                     return false;
                 }
@@ -1227,7 +1227,7 @@ namespace Net
         bool Valid(const RoomStateData& value)
         {
             return value.capacity <= MaxPlayers && Valid(value.state) && Valid(value.rules)
-                && value.areas.size() <= MaxPlayers && ValidPlayers(value.players);
+                && value.vAreas.size() <= MaxPlayers && ValidPlayers(value.vPlayers);
         }
     }
     // 각 함수가 받는 본문 타입이 정해져 있어 다른 종류의 본문을 섞지 않는다.

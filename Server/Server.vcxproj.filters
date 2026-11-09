@@ -77,6 +77,9 @@
     <ClCompile Include="Target.cpp">
       <Filter>Server\Source</Filter>
     </ClCompile>
+    <ClCompile Include="ClientPlayer.cpp">
+      <Filter>Server\Source</Filter>
+    </ClCompile>
     <ClCompile Include="NetworkServer.cpp">
       <Filter>Server\Source</Filter>
     </ClCompile>

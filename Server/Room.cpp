@@ -6,6 +6,37 @@
 #include <cstring>
 #include <limits>
 
+void Room::RecvPlayerInput(const Net::SessionToken& player,
+	const Net::PlayerTransform& input, Net::ServerTimeMs receivedAtMs)
+{
+	UpdatePlayerTransform(player, input, receivedAtMs);
+}
+
+bool Room::UpdatePlayerTransform(const Net::SessionToken& token,
+	const Net::PlayerTransform& input, Net::ServerTimeMs receivedAtMs)
+{
+	//방이 플레이 중인가
+	if (m_state.state != Net::GameState::Playing)
+		return false;
+
+	//토큰과 일치하는 플레이어 찾기
+	const auto player = std::find_if(m_vPlayers.begin(), m_vPlayers.end(), [&](const ClientPlayer& entry)
+	{
+		return entry.state.m_sessionToken == token;
+	});
+	if (player == m_vPlayers.end())
+		return false;
+
+	//찾은 플레이어가 배정받은 구역과 일치하는 구역 탐색(이동 구역 경계 제한을 위해)
+	const auto area = std::find_if(m_state.vAreas.begin(), m_state.vAreas.end(), [&](const Net::AreaData& entry)
+	{
+		return entry.areaId == player->state.areaId;
+	});
+
+	//구역 탐색 성공한 경우 이동 계산 후 리턴
+	return area != m_state.vAreas.end() && player->ApplyMovement(input, *area, m_vWorldBoxes, receivedAtMs);
+}
+
 void Room::SendTargetPositions(SOCKET udpSocket, const std::vector<Client>& clients,
 	Net::ServerTimeMs nowMs)
 {

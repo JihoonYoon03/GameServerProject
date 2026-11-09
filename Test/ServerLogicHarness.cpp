@@ -1,8 +1,10 @@
 #include "../Server/Target.h"
 #include <iostream>
 
+bool RunProtocolPeerTests();
+
 // 서버 로직 테스트용 코드
-// 현재는 타겟의 생성, 수명, 이동에 대한 테스트
+// 표적의 생성·이동·수명과 테스트 클라이언트의 패킷 처리를 검증합니다.
 int main()
 {
     Target targets;
@@ -37,7 +39,7 @@ int main()
         return 1;
     }
 
-    // 전부 통과 후 성공 메시지 출력
+    // 표적 테스트 결과를 출력한 뒤 네트워크 테스트를 실행합니다.
     std::cout << "PASS: spawn limit, movement, expiration\n";
-    return 0;
+    return RunProtocolPeerTests() ? 0 : 1;
 }

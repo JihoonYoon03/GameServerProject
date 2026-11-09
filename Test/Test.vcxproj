@@ -141,12 +141,22 @@
       <EnableSegmentHeap>true</EnableSegmentHeap>
     </Manifest>
   </ItemDefinitionGroup>
+  <ItemDefinitionGroup>
+    <Link>
+      <AdditionalDependencies>ws2_32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="..\Server\Target.cpp" />
+    <ClCompile Include="..\Shared\NetworkTypes.cpp" />
+    <ClCompile Include="..\Shared\PacketCodec.cpp" />
+    <ClCompile Include="ProtocolPeer.cpp" />
+    <ClCompile Include="ProtocolPeerTests.cpp" />
     <ClCompile Include="ServerLogicHarness.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\Server\Target.h" />
+    <ClInclude Include="ProtocolPeer.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

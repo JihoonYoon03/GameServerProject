@@ -29,14 +29,13 @@ public:
 		Net::MembershipId membershipId = 0;
 	};
 	using PacketSender = Net::PacketSender;
+	using CommandHandler = std::function<void(const Net::RoomCommand&)>;
+	using TickHandler = std::function<void()>;
 
-	Room() = default;
+	Room();
 	Room(Net::MatchContext context, Target& targets,
-		std::vector<TargetRecipient> recipients, PacketSender sender)
-		: targetContext_(context), targets_(&targets),
-		  targetRecipients_(std::move(recipients)), sendPacket_(std::move(sender))
-	{
-	}
+		std::vector<TargetRecipient> recipients, PacketSender sender);
+	~Room();
 	// 방의 상태와 잠금 저장 공간은 복사하거나 이동하지 않는다.
 	Room(const Room&) = delete;
 	Room& operator=(const Room&) = delete;
@@ -54,13 +53,19 @@ public:
 	bool AreAllPlayersReady() const;
 	void StartGameIfReady();
 
+	// 관리 스레드는 방 스레드를 시작하기 전에 콜백을 설정한다.
+	void SetHandlers(CommandHandler commandHandler, TickHandler tickHandler);
+
+	// 방 스레드는 큐에 쌓인 명령을 처리한 뒤 한 번의 갱신을 진행한다.
 	void Tick();
 
+	// 관리 스레드가 방 스레드를 시작한다.
 	void StartRoomThread();
 
 	void AddCommand(const Net::RoomCommand& command);
 	void ProcessCommands();
 
+	// 방 스레드는 종료만 요청한다. 관리 스레드는 종료를 기다린 뒤 정리한다.
 	void StopRoom();
 
 	//방에서 플레이어 이동 요청 받음
@@ -84,7 +89,7 @@ private:
 	static void WriteUInt64(std::vector<std::uint8_t>& bytes, std::uint64_t value);
 	static void WriteFloat(std::vector<std::uint8_t>& bytes, float value);
 
-	// 경기 상태는 방 스레드만 바꾼다. 생성자와 스레드 수명 처리는 후속 일정에서 구현한다.
+	// 경기 상태는 방 스레드만 바꾼다.
 	Net::RoomStateData m_state{};
 	std::vector<ClientPlayer> m_vPlayers;
 	Target targetController_;
@@ -93,9 +98,12 @@ private:
 	std::vector<Net::BoxData> m_vWorldBoxes;
 	static DWORD WINAPI RoomProc(LPVOID parameter);
 	HANDLE roomThread_ = nullptr;
+	std::atomic<DWORD> roomThreadId_{0};
 	std::atomic<bool> stopRequested_{false};
 	CRITICAL_SECTION commandCS_{}; // 사용 전 초기화하고 스레드 종료 대기 후 해제한다.
 	std::queue<Net::RoomCommand> commandQueue_;
+	CommandHandler commandHandler_;
+	TickHandler tickHandler_;
 	Net::MatchContext targetContext_{};
 	Target* targets_ = &targetController_; // 주입된 표적 관리자는 방보다 오래 유지되어야 한다.
 	std::vector<TargetRecipient> targetRecipients_;

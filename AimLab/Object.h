@@ -3,15 +3,7 @@
 #include "Mesh.h"
 #include "Material.h"
 
-struct Transform
-{
-	glm::vec3 position{0.0f};
-	glm::vec3 rotation{0.0f}; // 도 단위: X(pitch), Y(yaw), Z(roll)
-	glm::vec3 scale{1.0f};	  // 각 축은 0이 아닌 값을 사용합니다.
-	glm::mat4 GetMatrix() const;
-};
-
-// Scene가 Object를 소유하고, Object는 Mesh와 Material을 공유합니다.
+//Scene이 Object를 소유, Object는 Mesh와 Material을 공유
 class Object
 {
 public:
@@ -21,9 +13,9 @@ public:
 	Object& operator=(const Object&) = delete;
 
 	virtual void Update(float deltaTime) { (void)deltaTime; }
-	uint32_t GetId() const { return id_; }
-	const std::shared_ptr<Mesh>& GetMesh() const { return mesh_; }
-	const std::shared_ptr<Material>& GetMaterial() const { return material_; }
+	uint32_t GetId() const { return m_nId; }
+	const std::shared_ptr<Mesh>& GetMesh() const { return m_spMesh; }
+	const std::shared_ptr<Material>& GetMaterial() const { return m_spMaterial; }
 	virtual glm::mat4 GetModelMatrix() const { return transform.GetMatrix(); }
 
 	Box GetWorldBox() const;
@@ -38,7 +30,7 @@ public:
 
 private:
 	friend class Scene;
-	uint32_t				  id_ = 0; // Scene 내부 식별자. 네트워크 ID 매핑은 서버 계층에서 관리합니다.
-	std::shared_ptr<Mesh>	  mesh_;
-	std::shared_ptr<Material> material_;
+	uint32_t				  m_nId = 0; // Scene 내부 식별자. 네트워크 ID 매핑은 서버에서 관리
+	std::shared_ptr<Mesh>	  m_spMesh;
+	std::shared_ptr<Material> m_spMaterial;
 };

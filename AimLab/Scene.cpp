@@ -21,7 +21,7 @@ Object* Scene::AddObject(std::unique_ptr<Object> object)
 		throw std::invalid_argument("Cannot add a null object");
 	}
 
-	object->id_ = nextObjectId_++;
+	object->m_nId = nextObjectId_++;
 	Object* result = object.get();
 	objects_.push_back(std::move(object));
 

@@ -70,8 +70,8 @@
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <IncludePath>E:\GameServerProject\Server;$(IncludePath)</IncludePath>
+  <PropertyGroup>
+    <IncludePath>$(ProjectDir)..;$(ProjectDir)..\Server;$(IncludePath)</IncludePath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
@@ -147,6 +147,8 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="..\Shared\Collision.cpp" />
+    <ClCompile Include="..\Shared\NetworkConversions.cpp" />
     <ClCompile Include="..\Server\Target.cpp" />
     <ClCompile Include="..\Shared\NetworkTypes.cpp" />
     <ClCompile Include="..\Shared\PacketCodec.cpp" />
@@ -155,6 +157,7 @@
     <ClCompile Include="ServerLogicHarness.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\Shared\Collision.h" />
     <ClInclude Include="..\Server\Target.h" />
     <ClInclude Include="ProtocolPeer.h" />
   </ItemGroup>

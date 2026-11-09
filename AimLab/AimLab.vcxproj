@@ -206,7 +206,9 @@
     </ClCompile>
     <ClCompile Include="Assets.cpp" />
     <ClCompile Include="Camera.cpp" />
-    <ClCompile Include="Collision.cpp" />
+    <ClCompile Include="..\Shared\Collision.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
     <ClCompile Include="Framework.cpp" />
     <ClCompile Include="Gun.cpp" />
     <ClCompile Include="Light.cpp" />
@@ -238,7 +240,7 @@
     <ClInclude Include="NetworkClient.h" />
     <ClInclude Include="Assets.h" />
     <ClInclude Include="Camera.h" />
-    <ClInclude Include="Collision.h" />
+    <ClInclude Include="..\Shared\Collision.h" />
     <ClInclude Include="Framework.h" />
     <ClInclude Include="Gun.h" />
     <ClInclude Include="Input.h" />

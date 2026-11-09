@@ -1,6 +1,16 @@
 #pragma once
-#include "pch.h"
-#include "Shared/NetworkTypes.h"
+#include "NetworkTypes.h"
+#include <GL/glm/glm.hpp>
+#include <cstddef>
+#include <vector>
+
+struct Transform
+{
+	glm::vec3 position{0.0f};
+	glm::vec3 rotation{0.0f}; // 도 단위임: X(pitch), Y(yaw), Z(roll)
+	glm::vec3 scale{1.0f};
+	glm::mat4 GetMatrix() const;
+};
 
 struct Box
 {
@@ -30,6 +40,9 @@ enum class ColliderType
 // 그래픽 API와 무관한 순수 계산입니다. 서버에서도 같은 판정을 사용할 수 있습니다.
 namespace Collision
 {
+	Box GetWorldBox(const Box& local, const Transform& transform);
+	Sphere GetWorldSphere(const Box& local, const Transform& transform);
+
     // 표적 배열은 호출부의 표적 식별자 목록과 같은 순서이며, 가장 가까운 대상만 명중 처리한다.
     Net::ShotOutcome FindNearestHit(const Ray& ray,
         const std::vector<Box>& obstacles, const std::vector<Sphere>& targets,

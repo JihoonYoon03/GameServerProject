@@ -1,6 +1,6 @@
 #pragma once
 #include "pch.h"
-#include "Collision.h"
+#include "../Shared/Collision.h"
 
 struct Vertex
 {

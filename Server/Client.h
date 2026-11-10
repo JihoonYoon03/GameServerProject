@@ -82,6 +82,4 @@ private:
     // 첫 UDP 등록 전에는 기준 순번이 없음
     //아래는 UDP 주소를 접속 도중 변경하는 경우를 위해 존재함
     //우리 프로젝트 설계상 게임 접속 = UDP 등록이므로 사용할 필요 없음
-    Net::Sequence lastRegistrationSequence = 0;
-    bool hasRegistrationSequence = false;
 };

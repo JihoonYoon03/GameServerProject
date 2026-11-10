@@ -31,9 +31,7 @@ public:
 	void RecvShootResult(const Net::ShotResolved& result);
 	void ApplyTargetPositions(const Net::UdpHeader& header,
 	    const Net::TargetSnapshot& snapshot);
-	void ApplyTargetSnapshot(const std::vector<Net::TargetMotionData>& targets,
-	    std::uint32_t serverTick, Net::ServerTimeMs serverTimeMs);
-	void InterpolateTargets(Net::ServerTimeMs renderServerTimeMs);
+	void ApplyTargetSnapshot(const Net::TargetSnapshot& snapshot);
 	void UpdateMatchTime(const Net::MatchTime& time);
 	void RecvGameResults(const Net::GameResults& results);
 	void OnGameEnded();

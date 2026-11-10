@@ -17,8 +17,6 @@ public:
     bool SendPacket(const Net::PacketData& packet);
     // 메인 스레드에서만 수신 큐를 꺼내 장면에 반영한다.
     void UpdateNetwork();
-    void SendTimeProbe();
-    void ApplyTimeProbe(const Net::TimeProbeResult& result);
     // 종료 요청 후 통신 스레드가 끝났는지 확인하고 연결 자원을 정리한다.
     void DisconnectServer();
 
@@ -40,7 +38,6 @@ private:
 
     //서버에게 줄 데이터와 받은 데이터를 큐에 저장하고
     //관련 처리 함수에서 일괄적으로 처리함.
-    //SendRequest엔 현재 클라의 토큰과 패킷 데이터가 있음
-    std::queue<Net::SendRequest>    m_qSendQueue;
+    std::queue<Net::PacketData>    m_qSendQueue;
     std::queue<Net::PacketData>    m_qReceiveQueue;
 };

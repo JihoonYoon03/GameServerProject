@@ -25,8 +25,6 @@ Client::Client(Client && other) noexcept
     m_nSendOffset = other.m_nSendOffset;
     m_nNextMembershipId = other.m_nNextMembershipId;
     m_nMatchId = other.m_nMatchId;
-    lastRegistrationSequence = other.lastRegistrationSequence;
-    hasRegistrationSequence = other.hasRegistrationSequence;
     m_LastUdpSequence = other.m_LastUdpSequence;
     m_HasUdpSequence = other.m_HasUdpSequence;
 
@@ -50,8 +48,6 @@ Client& Client::operator=(Client && other) noexcept
         m_nSendOffset = other.m_nSendOffset;
         m_nNextMembershipId = other.m_nNextMembershipId;
         m_nMatchId = other.m_nMatchId;
-        lastRegistrationSequence = other.lastRegistrationSequence;
-        hasRegistrationSequence = other.hasRegistrationSequence;
         m_LastUdpSequence = other.m_LastUdpSequence;
         m_HasUdpSequence = other.m_HasUdpSequence;
 
@@ -70,8 +66,6 @@ void Client::Close()
     m_nRoomId = 0;
     m_nMatchId = 0;
     m_nMembershipId = 0;
-    lastRegistrationSequence = 0;
-    hasRegistrationSequence = false;
     m_LastUdpSequence = 0;
     m_HasUdpSequence = false;
     m_vTcpReceiveBuffer.clear();

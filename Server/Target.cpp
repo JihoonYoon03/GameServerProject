@@ -6,13 +6,12 @@
 
 namespace
 {
-	constexpr Net::ServerTimeMs TargetLifetimeMs = 3000;
-	constexpr float TargetLifetimeSeconds = TargetLifetimeMs / 1000.0f;
+	constexpr float TargetLifetimeSeconds = Net::TargetLifetimeMs / 1000.0f;
 }
 
 void Target::SpawnTargets(const Net::MatchRules& rules, Net::ServerTimeMs nowMs)
 {
-	if (targets_.size() >= rules.activeTargetCount) return;
+	if (targets_.size() >= (std::min)(rules.activeTargetCount, Net::MaxTargets)) return;
 
 	std::uniform_real_distribution<float> x(-5.0f, 5.0f);
 	std::uniform_real_distribution<float> y(0.5f, 2.0f);
@@ -22,10 +21,9 @@ void Target::SpawnTargets(const Net::MatchRules& rules, Net::ServerTimeMs nowMs)
 	const float inverseLength = 1.0f / std::sqrt(directionX * directionX + 1.0f);
 
 	Net::TargetMotionData motion;
-	motion.targetId = nextTargetId_++;
 	motion.position = {x(random_), y(random_), z(random_)};
 	motion.velocity = {directionX * inverseLength, inverseLength, 0.0f};
-	targets_.push_back({motion, nowMs});
+	targets_.push_back({nextTargetId_++, motion, nowMs});
 }
 
 void Target::UpdateTargets(float deltaTime, Net::ServerTimeMs nowMs)
@@ -46,7 +44,7 @@ void Target::UpdateTargets(float deltaTime, Net::ServerTimeMs nowMs)
 	targets_.erase(std::remove_if(targets_.begin(), targets_.end(), [nowMs](const ActiveTarget& target)
 	{
 		return target.elapsedSeconds >= TargetLifetimeSeconds ||
-			(nowMs >= target.spawnedAtMs && nowMs - target.spawnedAtMs >= TargetLifetimeMs);
+			(nowMs >= target.spawnedAtMs && nowMs - target.spawnedAtMs >= Net::TargetLifetimeMs);
 	}), targets_.end());
 }
 
@@ -57,7 +55,7 @@ std::vector<Net::TargetMotionData> Target::GetActiveTargets(Net::ServerTimeMs no
 	for (const auto& target : targets_)
 	{
 		if (target.elapsedSeconds < TargetLifetimeSeconds &&
-			nowMs >= target.spawnedAtMs && nowMs - target.spawnedAtMs < TargetLifetimeMs)
+			nowMs >= target.spawnedAtMs && nowMs - target.spawnedAtMs < Net::TargetLifetimeMs)
 		{
 			activeTargets.push_back(target.motion);
 		}

@@ -166,7 +166,6 @@
     <ClInclude Include="..\Shared\PacketCodec.h" />
     <ClInclude Include="Client.h" />
     <ClInclude Include="ClientPlayer.h" />
-    <ClInclude Include="ServerWeaponState.h" />
     <ClInclude Include="Framework.h" />
     <ClInclude Include="NetworkServer.h" />
     <ClInclude Include="pch.h" />

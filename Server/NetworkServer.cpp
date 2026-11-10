@@ -41,14 +41,8 @@ void NetworkServer::RegisterPlayerUDP(const Net::UdpHeader& header, const sockad
 			tcpPeer.sin_family != AF_INET || tcpPeer.sin_addr.s_addr != sourceAddress.sin_addr.s_addr)
 			return;
 
-		//만약 UDP가 이미 등록 된 클라이고 2개의 주소가 같은 경우 갱신하지 않음.
-		if (client.m_bUDPRegistered && !SameEndpoint(client.m_UDPAddress, sourceAddress))
-			return;
-
-		//최초 요청이 아님 && 등록 요청 순번이 다름 && 지금 처리하는 요청이 새로운 요청이 아닌 경우
-		//갱신하지 않음. 이외는 새로 등록 or 등록 재시도로 판단되어 계속 진행
-		if (client.hasRegistrationSequence && header.sequence != client.lastRegistrationSequence &&
-			!Net::IsNewerSequence(header.sequence, client.lastRegistrationSequence))
+		// UDP 주소는 이 TCP 연결에서 한 번만 등록한다.
+		if (client.m_bUDPRegistered)
 			return;
 
 		//등록에 대한 응답 데이터 생성
@@ -72,8 +66,6 @@ void NetworkServer::RegisterPlayerUDP(const Net::UdpHeader& header, const sockad
 		//클라이언트 객체에 정보 등록 후 큐에 패킷 푸쉬하기
 		client.m_UDPAddress = sourceAddress;
 		client.m_bUDPRegistered = true;
-		client.lastRegistrationSequence = header.sequence;
-		client.hasRegistrationSequence = true;
 		SendPacket(send);
 		return;
 	}
@@ -122,33 +114,6 @@ bool NetworkServer::ValidateSender(const Net::UdpHeader& header, const sockaddr_
 		return true;
 	}
 	return false;
-}
-
-//recipient = 검증 끝난 클라이언트의 토큰
-void NetworkServer::ReplyTimeProbe(const Net::SessionToken& recipient,
-	const Net::TimeProbeRequest& request, Net::ServerTimeMs receivedAtMs, std::uint32_t requestId)
-{
-	Net::TcpPacket<Net::TimeProbeResult> response;
-	response.header.type = Net::TcpType::TimeProbeResult;
-	//사이즈 계산
-	response.header.size = Net::TcpHeaderBytes + 8 + 8 + 8;
-	//TCP 통신 순번
-	response.header.requestId = requestId;
-	//클라이언트가 요청했을 때의 시각 그대로 보내줌
-	response.packetData.clientSendMs = request.clientSendMs;
-	//서버가 이 요청을 받았을 때의 서버 시각
-	response.packetData.serverReceiveMs = receivedAtMs;
-	//서버가 요청을 받고 다시 보냈을 때의 서버 시각 
-	response.packetData.serverSendMs = GetTickCount64();
-
-	//서버가 요청 받은 시각보다 다시 보낼때 시각이 더 빠른 경우는 존재하면 안 됨
-	if (receivedAtMs > response.packetData.serverSendMs)
-		return;
-
-	Net::SendRequest send;
-	send.recipientToken = recipient;
-	if (Net::PacketCodec::EncodeTcp(response, send.packet))
-		SendPacket(send);
 }
 
 NetworkServer::NetworkServer() : m_ControlThreadId(GetCurrentThreadId())
@@ -240,7 +205,7 @@ void NetworkServer::SendTcpPending(Client& client)
 
 bool NetworkServer::StartNetwork(std::uint16_t tcpPort, std::uint16_t udpPort)
 {
-	if (GetCurrentThreadId() != m_ControlThreadId || m_bCleanupInProgress || m_hNetworkThread != nullptr)
+	if (GetCurrentThreadId() != m_ControlThreadId || m_bCleanupInProgress || m_bWinsockStarted)
 		return false;
 
 	WSADATA data{};
@@ -291,29 +256,12 @@ bool NetworkServer::StartNetwork(std::uint16_t tcpPort, std::uint16_t udpPort)
 	}
 
 	m_bStopRequested = false;
-	m_hNetworkThread = CreateThread(nullptr, 0, NetworkProc, this, 0, nullptr);
-	if (m_hNetworkThread == nullptr)
-	{
-		StopNetwork();
-		return false;
-	}
 	return true;
-}
-
-DWORD WINAPI NetworkServer::NetworkProc(LPVOID parameter)
-{
-	NetworkServer* server = static_cast<NetworkServer*>(parameter);
-	DWORD expectedThreadId = 0;
-	if (!server->m_NetworkThreadId.compare_exchange_strong(expectedThreadId, GetCurrentThreadId()))
-		return 0;
-	server->NetworkLoop();
-	server->m_NetworkThreadId = 0;
-	return 0;
 }
 
 bool NetworkServer::SetCommandSink(const std::function<void(const Net::RoomCommand&)>& sink)
 {
-	if (GetCurrentThreadId() != m_ControlThreadId || m_bCleanupInProgress || m_hNetworkThread != nullptr)
+	if (GetCurrentThreadId() != m_ControlThreadId || m_bCleanupInProgress || m_bWinsockStarted)
 		return false;
 	m_commandSink = sink;
 	return true;
@@ -414,7 +362,7 @@ void NetworkServer::ReceiveUdp()
 
 void NetworkServer::DispatchPacket(const Net::SessionToken& verifiedSender, const Net::PacketData& packet)
 {
-	if (GetCurrentThreadId() != m_NetworkThreadId || m_bInvokingCommandSink || m_bStopRequested)
+	if (GetCurrentThreadId() != m_ControlThreadId || !m_bLoopRunning || m_bInvokingCommandSink || m_bStopRequested)
 		return;
 
 	const Client* sender = nullptr;
@@ -447,13 +395,6 @@ void NetworkServer::DispatchPacket(const Net::SessionToken& verifiedSender, cons
 		const auto* body = bytes + Net::TcpHeaderBytes;
 		const std::size_t bodySize = size - Net::TcpHeaderBytes;
 		command.requestId = header.requestId;
-		if (header.type == Net::TcpType::TimeProbeRequest)
-		{
-			Net::TimeProbeRequest request;
-			if (Net::PacketCodec::DecodeBody(header.type, body, bodySize, request))
-				ReplyTimeProbe(verifiedSender, request, command.receivedAtMs, header.requestId);
-			return;
-		}
 		if (!m_commandSink || command.context.roomId == 0 || command.membershipId == 0)
 			return;
 
@@ -496,16 +437,6 @@ void NetworkServer::DispatchPacket(const Net::SessionToken& verifiedSender, cons
 			command.body = request;
 			break;
 		}
-		case Net::TcpType::ReloadRequest:
-		{
-			Net::ReloadRequest request;
-			if (!Net::PacketCodec::DecodeBody(header.type, body, bodySize, request) ||
-				request.context.roomId != command.context.roomId || command.context.matchId == 0 ||
-				request.context.matchId != command.context.matchId || request.membershipId != command.membershipId)
-				return;
-			command.body = request;
-			break;
-		}
 		default:
 			return;
 		}
@@ -536,8 +467,7 @@ void NetworkServer::DispatchPacket(const Net::SessionToken& verifiedSender, cons
 
 void NetworkServer::OnClientDisconnected(const Net::SessionToken& sessionToken)
 {
-	const DWORD threadId = GetCurrentThreadId();
-	if (threadId != m_NetworkThreadId && (threadId != m_ControlThreadId || !m_bCleanupInProgress))
+	if (GetCurrentThreadId() != m_ControlThreadId || (!m_bLoopRunning && !m_bCleanupInProgress))
 		return;
 	if (m_bInvokingCommandSink)
 		return;
@@ -561,12 +491,26 @@ void NetworkServer::OnClientDisconnected(const Net::SessionToken& sessionToken)
 	}
 }
 
-void NetworkServer::NetworkLoop()
+void NetworkServer::NetworkLoop(const std::function<bool()>& shouldStop)
 {
-	if (GetCurrentThreadId() != m_NetworkThreadId || m_bInvokingCommandSink)
+	if (GetCurrentThreadId() != m_ControlThreadId || !m_bWinsockStarted ||
+		m_bLoopRunning || m_bCleanupInProgress)
 		return;
+
+	m_bLoopRunning = true;
+	struct LoopGuard
+	{
+		bool& running;
+		~LoopGuard() { running = false; }
+	} guard{m_bLoopRunning};
+
 	while (!m_bStopRequested)
 	{
+		if (shouldStop && shouldStop())
+		{
+			StopNetwork();
+			break;
+		}
 		FlushSendQueue();
 		fd_set readSet;
 		FD_ZERO(&readSet);
@@ -614,17 +558,10 @@ void NetworkServer::StopNetwork()
 	m_bStopRequested = true;
 	LeaveCriticalSection(&m_CSSendQueue);
 
-	// 통신 스레드나 정리 중인 콜백에서는 종료 요청만 남긴다.
-	if (GetCurrentThreadId() != m_ControlThreadId || m_bCleanupInProgress)
+	// Wait until the owner has returned from the loop before releasing its sockets.
+	if (GetCurrentThreadId() != m_ControlThreadId || m_bLoopRunning || m_bCleanupInProgress)
 		return;
 	m_bCleanupInProgress = true;
-	if (m_hNetworkThread != nullptr)
-	{
-		WaitForSingleObject(m_hNetworkThread, INFINITE);
-		CloseHandle(m_hNetworkThread);
-		m_hNetworkThread = nullptr;
-	}
-	// 통신 스레드가 끝난 뒤 남은 세션을 같은 경로로 정리한다.
 	while (!m_vClients.empty())
 	{
 		const Net::SessionToken token = m_vClients.back().GetSessionToken();
@@ -655,7 +592,7 @@ void NetworkServer::StopNetwork()
 
 void NetworkServer::AcceptPlayer()
 {
-	if (GetCurrentThreadId() != m_NetworkThreadId || m_bInvokingCommandSink)
+	if (GetCurrentThreadId() != m_ControlThreadId || !m_bLoopRunning || m_bInvokingCommandSink)
 		return;
 
 	sockaddr_in address{};

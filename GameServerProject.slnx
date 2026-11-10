@@ -5,5 +5,4 @@
   </Configurations>
   <Project Path="AimLab/AimLab.vcxproj" Id="34a73ebc-3b44-45ae-968c-53217113a66d" />
   <Project Path="Server/Server.vcxproj" Id="2914ca70-fa91-45c4-ba11-1b9f1a44e177" />
-  <Project Path="Test/Test.vcxproj" Id="9a75a15d-150b-4b7d-97f4-745aa64fea12" />
 </Solution>

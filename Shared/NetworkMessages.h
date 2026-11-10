@@ -36,7 +36,7 @@ namespace Net
         MembershipId membershipId = 0;
         ServerTimeMs receivedAtMs = 0;
         std::variant<RoomEnterCommand, LeaveRoomRequest, MapLoaded,
-            ReadyChangeRequest, PlayerTransform, FireRequest, ReloadRequest, ClientDisconnected> body;
+            ReadyChangeRequest, PlayerTransform, FireRequest, ClientDisconnected> body;
     };
 
     enum class RoomManagementEventType : std::uint8_t { SummaryChanged, RoomEmpty };

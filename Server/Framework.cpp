@@ -10,7 +10,6 @@ Framework::~Framework()
     StopServer();
 }
 
-// 이성노 후속 일정: 11/12 표적 송신을 버전 포함 44바이트 공용 코덱과 송신 큐로 이관한다.
 bool Framework::StartServer(std::uint16_t tcpPort, std::uint16_t udpPort)
 {
     if (network_ != nullptr)
@@ -27,6 +26,20 @@ bool Framework::StartServer(std::uint16_t tcpPort, std::uint16_t udpPort)
     return true;
 }
 
+void Framework::RunServer(const std::function<bool()>& shouldStop)
+{
+    if (network_ == nullptr || runInProgress_ || stopInProgress_)
+        return;
+
+    runInProgress_ = true;
+    struct RunGuard
+    {
+        bool& running;
+        ~RunGuard() { running = false; }
+    } guard{runInProgress_};
+    network_->NetworkLoop(shouldStop);
+}
+
 void Framework::SetRoomStopCallback(const std::function<void()>& callback)
 {
     // 실행 중인 종료 콜백이 자기 자신을 교체하지 못하게 한다.
@@ -38,6 +51,12 @@ void Framework::StopServer()
 {
     if (network_ == nullptr || stopInProgress_)
         return;
+
+    if (runInProgress_)
+    {
+        network_->StopNetwork();
+        return;
+    }
 
     stopInProgress_ = true;
     // 방 종료를 먼저 요청하되 실패해도 통신 스레드와 소켓을 정리한다.
@@ -58,9 +77,46 @@ void Framework::StopServer()
 }
 
 
-#ifndef SERVER_NETWORK_TEST
 namespace
 {
+    bool StopFromInput()
+    {
+        const HANDLE input = GetStdHandle(STD_INPUT_HANDLE);
+        DWORD mode = 0;
+        if (GetConsoleMode(input, &mode))
+        {
+            DWORD pending = 0;
+            if (!GetNumberOfConsoleInputEvents(input, &pending))
+                return true;
+
+            while (pending-- > 0)
+            {
+                INPUT_RECORD event{};
+                DWORD read = 0;
+                if (!ReadConsoleInputW(input, &event, 1, &read))
+                    return true;
+                if (read != 0 && event.EventType == KEY_EVENT && event.Event.KeyEvent.bKeyDown &&
+                    event.Event.KeyEvent.wVirtualKeyCode == VK_RETURN)
+                    return true;
+            }
+            return false;
+        }
+
+        char buffer[256];
+        DWORD available = sizeof(buffer);
+        if (GetFileType(input) == FILE_TYPE_PIPE)
+        {
+            if (!PeekNamedPipe(input, nullptr, 0, nullptr, &available, nullptr))
+                return true;
+            if (available == 0)
+                return false;
+        }
+        DWORD read = 0;
+        const DWORD length = (available < sizeof(buffer)) ? available : sizeof(buffer);
+        return !ReadFile(input, buffer, length, &read, nullptr) || read == 0 ||
+            memchr(buffer, '\n', read) != nullptr || memchr(buffer, '\r', read) != nullptr;
+    }
+
     bool ReadPort(const char* text, std::uint16_t& port)
     {
         unsigned int value = 0;
@@ -97,8 +153,7 @@ int main(int argc, char* argv[])
         return 1;
     }
     printf("Server started: TCP %u / UDP %u. Press Enter to stop.\n", tcpPort, udpPort);
-    getchar();
+    framework.RunServer(StopFromInput);
     framework.StopServer();
     return 0;
 }
-#endif

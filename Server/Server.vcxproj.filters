@@ -100,8 +100,5 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="ServerWeaponState.h">
-      <Filter>Server\Header</Filter>
-    </ClInclude>
   </ItemGroup>
 </Project>

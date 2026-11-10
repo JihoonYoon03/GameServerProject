@@ -33,8 +33,8 @@ namespace Net
 	inline constexpr std::uint8_t MaxPlayers = 4;
 	inline constexpr std::uint8_t MinPlayersToStart = 2;
 	inline constexpr std::uint8_t UnassignedArea = 255;
-	inline constexpr std::uint16_t MaxTargets = 90;
-	inline constexpr std::uint16_t MaxRoomsPerPage = 64;
+	inline constexpr std::uint16_t MaxTargets = 6;
+	inline constexpr std::uint16_t MaxRooms = 64;
 	inline constexpr std::uint32_t ServerTickRate = 30;
 	inline constexpr float PlayerMoveSpeed = 10.0f / 3.6f;
 	inline constexpr float PlayerHalfExtent = 0.25f;
@@ -127,7 +127,7 @@ namespace Net
 	struct MatchRules
 	{
 		std::uint32_t durationMs = MatchDurationMs;
-		std::uint16_t activeTargetCount = 10;
+		std::uint16_t activeTargetCount = MaxTargets;
 		std::uint16_t pointsPerHit = 1;
 	};
 
@@ -146,9 +146,8 @@ namespace Net
 		PlayerStats stats;
 	};
 
-	// 사용: 서버 Room::SendTargetPositions() → 클라 ShootingScene::ApplyTargetSnapshot(), InterpolateTargets() [선언] / 전송 전용:
-	//       식별자·위치·초당 이동 벡터
-	struct TargetMotionData { TargetId targetId = 0; Vec3Data position; Vec3Data velocity; };
+	// 표적 이동은 월드 좌표와 초당 이동 벡터로 전송한다.
+	struct TargetMotionData { Vec3Data position; Vec3Data velocity; };
 
 	// 사용: 서버 RoomManager::SendRoomList() / 클라 MainScene::UpdateRoomList(), MainScene::ShowRoomList() [선언]
 	struct RoomInfo

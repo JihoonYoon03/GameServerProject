@@ -17,6 +17,7 @@ public:
 private:
 	struct ActiveTarget
 	{
+		Net::TargetId targetId;
 		Net::TargetMotionData motion;
 		Net::ServerTimeMs spawnedAtMs;
 		float elapsedSeconds = 0.0f;

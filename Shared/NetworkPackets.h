@@ -1,20 +1,21 @@
 #pragma once
 #include "NetworkTypes.h"
 
-// 프로토콜 5: 공통 헤더 뒤에 본문 필드를 기록한다. 구조체의 메모리 크기를 전송 크기로 쓰지 않는다.
+// 프로토콜 6: 공통 헤더 뒤에 본문 필드를 기록한다. 구조체의 메모리 크기를 전송 크기로 쓰지 않는다.
 // 헤더의 길이 필드는 헤더를 포함한 전체 패킷 길이이다. 정수와 실수의 비트는
 // 빅 엔디언으로 전송하고, 가변 목록은 개수와 유효 항목만 기록한다.
 // UDP 토큰은 클라→서버에서 발신자, 서버→클라에서 수신자를 나타낸다.
 namespace Net
 {
-	inline constexpr std::uint16_t ProtocolVersion = 5;
+	inline constexpr std::uint16_t ProtocolVersion = 6;
 	inline constexpr std::uint16_t UdpMagic = 0x4347;
 	inline constexpr std::uint32_t TcpHeaderBytes = 12;
 	inline constexpr std::uint32_t MaxTcpPacketBytes = 65536;
 	inline constexpr std::uint16_t UdpHeaderBytes = 44;
 	inline constexpr std::uint16_t MaxUdpPacketBytes = 1200;
-	inline constexpr std::uint16_t MaxTargetsPerSnapshot = 40;
-	inline constexpr std::uint16_t MaxTargetSnapshotChunks = (MaxTargets + MaxTargetsPerSnapshot - 1) / MaxTargetsPerSnapshot;
+	inline constexpr std::uint16_t TargetSnapshotFixedBytes = UdpHeaderBytes + 2;
+	inline constexpr std::uint16_t TargetMotionBytes = 24;
+	static_assert(TargetSnapshotFixedBytes + MaxTargets * TargetMotionBytes <= MaxUdpPacketBytes);
 
 	enum class TcpType : std::uint16_t
 	{
@@ -35,10 +36,6 @@ namespace Net
 		ShotResolved = 0x0303,
 		MatchTime = 0x0305,
 		GameResults = 0x0306,
-		ReloadRequest = 0x0307,
-		WeaponState = 0x0308,
-		TimeProbeRequest = 0x0401,
-		TimeProbeResult = 0x0402
 	};
 
 	enum class UdpType : std::uint16_t
@@ -87,10 +84,10 @@ namespace Net
 	struct RequestRejected { ErrorCode reason = ErrorCode::InvalidRequest; MatchContext context; };
 
 	// 사용: 클라 MainScene::SearchRoomList() → 서버 RoomManager::SendRoomList() [선언]
-	struct RoomListRequest { RoomId afterRoomId = 0; };
+	struct RoomListRequest {};
 
 	// 사용: 서버 RoomManager::SendRoomList() → 클라 MainScene::UpdateRoomList() [선언]
-	struct RoomListResult { RoomId nextAfterRoomId = 0; std::vector<RoomInfo> rooms; };
+	struct RoomListResult { std::vector<RoomInfo> rooms; };
 
 	// 사용: 클라 MainScene::RequestGameRoom() → 서버 RoomManager::CreateGameRoom() [선언]
 	struct CreateRoomRequest {};
@@ -143,29 +140,12 @@ namespace Net
 		Vec3Data origin;
 	};
 
-	struct ReloadRequest
-	{
-		MatchContext context;
-		MembershipId membershipId = 0;
-	};
-
-	struct WeaponState
-	{
-		RoomVersion version;
-		SessionToken playerToken{};
-		std::uint8_t ammo = MagazineCapacity;
-		std::uint8_t reloading = 0;
-		ServerTimeMs nextFireAtMs = 0;
-		ServerTimeMs reloadEndsAtMs = 0;
-	};
-
 	// 사용: 서버 Room::SendShootResult() → 클라 ShootingScene::RecvShootResult() [선언] / 묶음: 발사자 토큰·명중 결과·점수·탄
 	//       수, 표적 생성·삭제와 반동 적용 없음
 	struct ShotResolved { RoomVersion version; SessionToken shooterToken{};
 
 		ShotId shotId = 0;
 		ShotOutcome outcome = ShotOutcome::Miss;
-		TargetId hitTargetId = 0;
 		PlayerStats shooterStats;
 	};
 
@@ -180,17 +160,6 @@ namespace Net
 		ServerTimeMs endedAtMs = 0;
 		MatchEndReason reason = MatchEndReason::TimeLimit;
 		std::vector<PlayerResult> players;
-	};
-
-	// 사용: 클라 NetworkClient::SendTimeProbe() → 서버 NetworkServer::ReplyTimeProbe() [선언]
-	struct TimeProbeRequest { std::uint64_t clientSendMs = 0; };
-
-	// 사용: 서버 NetworkServer::ReplyTimeProbe() → 클라 NetworkClient::ApplyTimeProbe() [선언]
-	struct TimeProbeResult
-	{
-		std::uint64_t clientSendMs = 0;
-		ServerTimeMs serverReceiveMs = 0;
-		ServerTimeMs serverSendMs = 0;
 	};
 
 	// 사용: 클라 NetworkClient::RegisterUDP() → 서버 NetworkServer::RegisterPlayerUDP() [선언]
@@ -213,18 +182,11 @@ namespace Net
 
 	};
 
-	// 사용: 서버 Room::SendTargetPositions() → 클라 ShootingScene::ApplyTargetPositions() [선언] / 살아 있는 전체 목록의 한 조각, 최대 40개
+	// 한 UDP 데이터그램에 생존 표적 전체를 담는다.
 	struct TargetSnapshot
 	{
-		// 같은 서버 계산 시점의 전체 표적 목록을 나눈 조각. 모두 수신한 뒤에만 반영한다.
-		// 표적이 없어도 targetCount가 0인 조각 하나를 보내 기존 표적을 지운다.
-		ServerTimeMs serverTimeMs = 0;
-		std::uint16_t totalTargetCount = 0;
-		std::uint16_t chunkIndex = 0;
-		std::uint16_t chunkCount = 1;
 		std::uint16_t targetCount = 0;
-		std::array<TargetMotionData, MaxTargetsPerSnapshot> targets{};
-
+		std::array<TargetMotionData, MaxTargets> targets{};
 	};
 
 }

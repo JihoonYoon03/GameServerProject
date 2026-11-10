@@ -108,30 +108,6 @@ namespace Net
         static constexpr TcpType type = TcpType::GameResults;
     };
 
-    template<> struct PacketTraits<ReloadRequest>
-    {
-        static constexpr PacketTransport transport = PacketTransport::Tcp;
-        static constexpr TcpType type = TcpType::ReloadRequest;
-    };
-
-    template<> struct PacketTraits<WeaponState>
-    {
-        static constexpr PacketTransport transport = PacketTransport::Tcp;
-        static constexpr TcpType type = TcpType::WeaponState;
-    };
-
-    template<> struct PacketTraits<TimeProbeRequest>
-    {
-        static constexpr PacketTransport transport = PacketTransport::Tcp;
-        static constexpr TcpType type = TcpType::TimeProbeRequest;
-    };
-
-    template<> struct PacketTraits<TimeProbeResult>
-    {
-        static constexpr PacketTransport transport = PacketTransport::Tcp;
-        static constexpr TcpType type = TcpType::TimeProbeResult;
-    };
-
     template<> struct PacketTraits<UdpRegisterRequest>
     {
         static constexpr PacketTransport transport = PacketTransport::Udp;
@@ -304,10 +280,6 @@ namespace Net
         static bool DecodeBody(TcpType type, const std::uint8_t* data, std::size_t size, ShotResolved& output);
         static bool DecodeBody(TcpType type, const std::uint8_t* data, std::size_t size, MatchTime& output);
         static bool DecodeBody(TcpType type, const std::uint8_t* data, std::size_t size, GameResults& output);
-        static bool DecodeBody(TcpType type, const std::uint8_t* data, std::size_t size, ReloadRequest& output);
-        static bool DecodeBody(TcpType type, const std::uint8_t* data, std::size_t size, WeaponState& output);
-        static bool DecodeBody(TcpType type, const std::uint8_t* data, std::size_t size, TimeProbeRequest& output);
-        static bool DecodeBody(TcpType type, const std::uint8_t* data, std::size_t size, TimeProbeResult& output);
         static bool DecodeBody(UdpType type, const std::uint8_t* data, std::size_t size, UdpRegisterRequest& output);
         static bool DecodeBody(UdpType type, const std::uint8_t* data, std::size_t size, UdpRegisterResult& output);
         static bool DecodeBody(UdpType type, const std::uint8_t* data, std::size_t size, PlayerTransform& output);
@@ -331,10 +303,6 @@ namespace Net
         static bool ValidateBody(const ShotResolved& body);
         static bool ValidateBody(const MatchTime& body);
         static bool ValidateBody(const GameResults& body);
-        static bool ValidateBody(const ReloadRequest& body);
-        static bool ValidateBody(const WeaponState& body);
-        static bool ValidateBody(const TimeProbeRequest& body);
-        static bool ValidateBody(const TimeProbeResult& body);
         static bool ValidateBody(const UdpRegisterRequest& body);
         static bool ValidateBody(const UdpRegisterResult& body);
         static bool ValidateBody(const PlayerTransform& body);
@@ -359,10 +327,6 @@ namespace Net
         static bool EncodeBody(const ShotResolved& body, std::vector<std::uint8_t>& bytes);
         static bool EncodeBody(const MatchTime& body, std::vector<std::uint8_t>& bytes);
         static bool EncodeBody(const GameResults& body, std::vector<std::uint8_t>& bytes);
-        static bool EncodeBody(const ReloadRequest& body, std::vector<std::uint8_t>& bytes);
-        static bool EncodeBody(const WeaponState& body, std::vector<std::uint8_t>& bytes);
-        static bool EncodeBody(const TimeProbeRequest& body, std::vector<std::uint8_t>& bytes);
-        static bool EncodeBody(const TimeProbeResult& body, std::vector<std::uint8_t>& bytes);
         static bool EncodeBody(const UdpRegisterRequest& body, std::vector<std::uint8_t>& bytes);
         static bool EncodeBody(const UdpRegisterResult& body, std::vector<std::uint8_t>& bytes);
         static bool EncodeBody(const PlayerTransform& body, std::vector<std::uint8_t>& bytes);

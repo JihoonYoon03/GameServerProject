@@ -16,7 +16,7 @@ namespace
 		buffer << file.rdbuf();
 		const std::string text = buffer.str();
 		const char* source = text.c_str();
-		const GLuint shader = glCreateShader(type);
+		GLuint shader = glCreateShader(type);
 		glShaderSource(shader, 1, &source, nullptr);
 		glCompileShader(shader);
 		GLint success = GL_FALSE;
@@ -36,7 +36,7 @@ namespace
 
 Shader::Shader(const std::string& vertexPath, const std::string& fragmentPath)
 {
-	const GLuint vertex = Compile(GL_VERTEX_SHADER, vertexPath);
+	GLuint vertex = Compile(GL_VERTEX_SHADER, vertexPath);
 	GLuint fragment = 0;
 
 	try
@@ -83,11 +83,11 @@ void Shader::Use() const
 
 GLint Shader::Location(const std::string& name) const
 {
-	const auto found = locations_.find(name);
+	auto found = locations_.find(name);
 
 	if (found != locations_.end()) return found->second;
 
-	const GLint location = glGetUniformLocation(program_, name.c_str());
+	GLint location = glGetUniformLocation(program_, name.c_str());
 	locations_[name] = location;
 
 	return location;

@@ -20,7 +20,7 @@ void NetworkServer::RegisterPlayerUDP(const Net::UdpHeader& header, const sockad
 	//헤더 변수 중, 등록 요청과 상관없는 값이 기본값이 아닌지 ||
 	//접속 요청한 클라 주소가 IPv4가 아닌지 || 포트가 0으로 되어있는지
 	if (m_bStopRequested || !Net::PacketCodec::ValidateHeader(header) ||
-		header.type != Net::UdpType::RegisterRequest || header.size != Net::UdpHeaderBytes ||
+		header.type != Net::UdpType::RegisterRequest ||
 		header.context.roomId != 0 || header.context.matchId != 0 ||
 		header.membershipId != 0 || header.serverTick != 0 ||
 		sourceAddress.sin_family != AF_INET || sourceAddress.sin_port == 0)
@@ -48,10 +48,6 @@ void NetworkServer::RegisterPlayerUDP(const Net::UdpHeader& header, const sockad
 		//등록에 대한 응답 데이터 생성
 		Net::UdpPacket<Net::UdpRegisterResult> response;
 		response.header.type = Net::UdpType::RegisterResult;
-		//UdpHeader 바이트수 상수 + UdpRegisterResult 멤버 변수 바이트 수
-		//sizeof()시 바이트 패딩이 적용되어 상수값으로 더한 것인데
-		//패킷 구조체를 pragma pack 적용하면 sizeof로 써도 됨.
-		response.header.size = Net::UdpHeaderBytes + 2 + 4;
 		response.header.m_sessionToken = client.GetSessionToken();
 		//UDP 통신 순번
 		response.header.sequence = header.sequence;
@@ -89,9 +85,9 @@ bool NetworkServer::ValidateSender(SOCKET tcpSocket, Net::SessionToken& verified
 bool NetworkServer::ValidateSender(const Net::UdpHeader& header, const sockaddr_in& sourceAddress,
 	Net::SessionToken& verifiedSender)
 {
-	//메시지 종류(PlayerTransform)와 크기 확인
+	// Check the registered sender after the movement body has been decoded.
 	if (!Net::PacketCodec::ValidateHeader(header) || header.type != Net::UdpType::PlayerTransform ||
-		header.size != Net::UdpHeaderBytes + 4 + 64 || header.serverTick != 0)
+		header.serverTick != 0)
 		return false;
 	for (Client& client : m_vClients)
 	{
@@ -292,7 +288,7 @@ bool NetworkServer::ReceiveTcp(Client& client)
 		return false;
 
 	std::uint8_t bytes[4096];
-	const int received = recv(socketHandle, reinterpret_cast<char*>(bytes), static_cast<int>(sizeof(bytes)), 0);
+	int received = recv(socketHandle, reinterpret_cast<char*>(bytes), static_cast<int>(sizeof(bytes)), 0);
 	if (received == 0)
 		return false;
 	if (received == SOCKET_ERROR)
@@ -302,7 +298,7 @@ bool NetworkServer::ReceiveTcp(Client& client)
 	if (!ValidateSender(socketHandle, sender))
 		return false;
 
-	auto& buffer = client.m_vTcpReceiveBuffer;
+	std::vector<std::uint8_t>& buffer = client.m_vTcpReceiveBuffer;
 	buffer.insert(buffer.end(), bytes, bytes + received);
 	std::size_t offset = 0;
 	while (offset < buffer.size() && !m_bStopRequested)
@@ -332,7 +328,7 @@ void NetworkServer::ReceiveUdp()
 	std::uint8_t bytes[Net::MaxUdpPacketBytes];
 	sockaddr_in sourceAddress{};
 	int addressLength = sizeof(sourceAddress);
-	const int received = recvfrom(m_SockUDP, reinterpret_cast<char*>(bytes), static_cast<int>(sizeof(bytes)), 0,
+	int received = recvfrom(m_SockUDP, reinterpret_cast<char*>(bytes), static_cast<int>(sizeof(bytes)), 0,
 		reinterpret_cast<sockaddr*>(&sourceAddress), &addressLength);
 	if (received <= 0)
 		return;
@@ -345,10 +341,15 @@ void NetworkServer::ReceiveUdp()
 	{
 		Net::UdpRegisterRequest request;
 		if (Net::PacketCodec::DecodeBody(header.type, bytes + Net::UdpHeaderBytes,
-			header.size - Net::UdpHeaderBytes, request))
+			static_cast<std::size_t>(received) - Net::UdpHeaderBytes, request))
 			RegisterPlayerUDP(header, sourceAddress);
 		return;
 	}
+
+	Net::PlayerTransform transform;
+	if (!Net::PacketCodec::DecodeBody(header.type, bytes + Net::UdpHeaderBytes,
+		static_cast<std::size_t>(received) - Net::UdpHeaderBytes, transform))
+		return;
 
 	Net::SessionToken sender{};
 	if (!ValidateSender(header, sourceAddress, sender))
@@ -383,8 +384,8 @@ void NetworkServer::DispatchPacket(const Net::SessionToken& verifiedSender, cons
 	command.membershipId = sender->GetMembershipId();
 	command.receivedAtMs = GetTickCount64();
 
-	const auto* bytes = packet.bytes.data();
-	const std::size_t size = packet.bytes.size();
+	const std::uint8_t* bytes = packet.bytes.data();
+	std::size_t size = packet.bytes.size();
 	if (packet.transport == Net::PacketTransport::Tcp)
 	{
 		Net::TcpHeader header;
@@ -392,8 +393,8 @@ void NetworkServer::DispatchPacket(const Net::SessionToken& verifiedSender, cons
 			header.size != size)
 			return;
 
-		const auto* body = bytes + Net::TcpHeaderBytes;
-		const std::size_t bodySize = size - Net::TcpHeaderBytes;
+		const std::uint8_t* body = bytes + Net::TcpHeaderBytes;
+		std::size_t bodySize = size - Net::TcpHeaderBytes;
 		command.requestId = header.requestId;
 		if (!m_commandSink || command.context.roomId == 0 || command.membershipId == 0)
 			return;
@@ -520,7 +521,7 @@ void NetworkServer::NetworkLoop(const std::function<bool()>& shouldStop)
 		// 짧게 대기해 송신 큐와 종료 요청을 계속 확인한다.
 		timeval timeout{};
 		timeout.tv_usec = 10000;
-		const int ready = select(0, &readSet, nullptr, nullptr, &timeout);
+		int ready = select(0, &readSet, nullptr, nullptr, &timeout);
 		if (ready == SOCKET_ERROR)
 		{
 			err_display("select()");

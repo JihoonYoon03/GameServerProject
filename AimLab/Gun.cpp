@@ -100,8 +100,8 @@ void Gun::FollowCamera(const Camera& camera, const glm::vec3& playerPosition)
 
 glm::mat4 Gun::GetModelMatrix() const
 {
-	const glm::vec3 localPosition = glm::vec3(0.0f, 0.1f, -0.2f) * m_fRecoilProgress / transform.scale;
-	const auto pitchRotation = glm::angleAxis(glm::radians(-15.0f * m_fRecoilProgress), glm::vec3(1, 0, 0));
+	glm::vec3 localPosition = glm::vec3(0.0f, 0.1f, -0.2f) * m_fRecoilProgress / transform.scale;
+	glm::quat pitchRotation = glm::angleAxis(glm::radians(-15.0f * m_fRecoilProgress), glm::vec3(1, 0, 0));
 	glm::mat4 animation = glm::mat4_cast(pitchRotation);
 	animation = glm::translate(animation, localPosition);
 

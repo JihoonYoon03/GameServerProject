@@ -98,7 +98,7 @@ int Framework::Run(int argc, char** argv, std::unique_ptr<Scene> scene)
 
 	if (window_ > 0)
 	{
-		const int window = window_;
+		int window = window_;
 		window_ = 0;
 		glutDestroyWindow(window);
 	}
@@ -110,8 +110,8 @@ int Framework::Run(int argc, char** argv, std::unique_ptr<Scene> scene)
 
 void Framework::Tick()
 {
-	const auto now = std::chrono::steady_clock::now();
-	const float elapsed = std::chrono::duration<float>(now - previousTime_).count();
+	std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
+	float elapsed = std::chrono::duration<float>(now - previousTime_).count();
 	previousTime_ = now;
 
 	scene_->Update(elapsed, input_);
@@ -130,7 +130,7 @@ void Framework::UploadLights(const Shader& shader) const
 	shader.Set("ambientLight", scene_->ambientLight);
 	int count = 0;
 
-	for (const auto& light : scene_->GetLights())
+	for (const Light& light : scene_->GetLights())
 	{
 		if (!light.enabled)
 		{
@@ -149,8 +149,8 @@ void Framework::UploadLights(const Shader& shader) const
 		shader.Set(prefix + "position", light.position);
 		shader.Set(prefix + "direction", light.direction);
 		shader.Set(prefix + "range", std::max(light.range, 0.0f));
-		const float outer = std::clamp(light.outerAngle, 0.1f, 89.0f);
-		const float inner = std::clamp(light.innerAngle, 0.0f, outer - 0.1f);
+		float outer = std::clamp(light.outerAngle, 0.1f, 89.0f);
+		float inner = std::clamp(light.innerAngle, 0.0f, outer - 0.1f);
 		shader.Set(prefix + "innerCos", std::cos(glm::radians(inner)));
 		shader.Set(prefix + "outerCos", std::cos(glm::radians(outer)));
 	}
@@ -160,20 +160,20 @@ void Framework::UploadLights(const Shader& shader) const
 
 void Framework::DrawObjects()
 {
-	const auto& camera = scene_->GetCamera();
-	const glm::mat4 projection = camera.GetProjection(static_cast<float>(width_) / height_);
-	const glm::mat4 view = camera.GetView();
+	const Camera& camera = scene_->GetCamera();
+	glm::mat4 projection = camera.GetProjection(static_cast<float>(width_) / height_);
+	glm::mat4 view = camera.GetView();
 	const Shader* previousShader = nullptr;
 
-	for (const auto& object : scene_->GetObjects())
+	for (const std::unique_ptr<Object>& object : scene_->GetObjects())
 	{
 		if (!object->active || !object->visible)
 		{
 			continue;
 		}
 
-		const auto& mesh = object->GetMesh();
-		const auto& material = object->GetMaterial();
+		const std::shared_ptr<Mesh>& mesh = object->GetMesh();
+		const std::shared_ptr<Material>& material = object->GetMaterial();
 
 		if (!mesh || !material || !material->shader)
 		{
@@ -213,18 +213,18 @@ void Framework::DrawColliders()
 	glDisable(GL_CULL_FACE);
 	//LegacyGL
 	glMatrixMode(GL_PROJECTION);
-	const auto projection = scene_->GetCamera().GetProjection(static_cast<float>(width_) / height_);
+	glm::mat4 projection = scene_->GetCamera().GetProjection(static_cast<float>(width_) / height_);
 	//LegacyGL
 	glLoadMatrixf(glm::value_ptr(projection));
 	//LegacyGL
 	glMatrixMode(GL_MODELVIEW);
-	const auto view = scene_->GetCamera().GetView();
+	glm::mat4 view = scene_->GetCamera().GetView();
 	//LegacyGL
 	glLoadMatrixf(glm::value_ptr(view));
 	//LegacyGL
 	glColor3f(1, 0, 0);
 
-	for (const auto& object : scene_->GetObjects())
+	for (const std::unique_ptr<Object>& object : scene_->GetObjects())
 	{
 		if (!object->active || object->collider == ColliderType::None)
 		{
@@ -236,9 +236,9 @@ void Framework::DrawColliders()
 
 		if (object->collider == ColliderType::Box)
 		{
-			const auto box = object->GetWorldBox();
-			const auto center = (box.min + box.max) * 0.5f;
-			const auto size = box.max - box.min;
+			Box box = object->GetWorldBox();
+			glm::vec3 center = (box.min + box.max) * 0.5f;
+			glm::vec3 size = box.max - box.min;
 			//LegacyGL
 			glTranslatef(center.x, center.y, center.z);
 			//LegacyGL
@@ -249,7 +249,7 @@ void Framework::DrawColliders()
 		}
 		else
 		{
-			const auto sphere = object->GetWorldSphere();
+			Sphere sphere = object->GetWorldSphere();
 			//LegacyGL
 			glTranslatef(sphere.center.x, sphere.center.y, sphere.center.z);
 			// GLUT drawing helper used with the legacy fixed-function pipeline here.
@@ -405,7 +405,7 @@ void Framework::MouseCallback(int button, int state, int, int)
 
 void Framework::MotionCallback(int x, int y)
 {
-	const int dx = x - current_->width_ / 2, dy = y - current_->height_ / 2;
+	int dx = x - current_->width_ / 2, dy = y - current_->height_ / 2;
 
 	if (dx == 0 && dy == 0) return;
 

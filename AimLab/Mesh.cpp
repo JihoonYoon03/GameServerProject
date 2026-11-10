@@ -5,8 +5,8 @@ namespace
 {
 	int ParseIndex(const std::string& token, size_t count)
 	{
-		const int index = std::stoi(token);
-		const int resolved = index > 0 ? index - 1 : static_cast<int>(count) + index;
+		int index = std::stoi(token);
+		int resolved = index > 0 ? index - 1 : static_cast<int>(count) + index;
 
 		if (index == 0 || resolved < 0 || resolved >= static_cast<int>(count))
 		{
@@ -120,10 +120,10 @@ Mesh::Mesh(const std::string& filename)
 
 				if (missingNormal)
 				{
-					const auto cross = glm::cross(triangle[1].position - triangle[0].position, triangle[2].position - triangle[0].position);
-					const auto normal = glm::length(cross) > 0.000001f ? glm::normalize(cross) : glm::vec3(0, 1, 0);
+					glm::vec3 cross = glm::cross(triangle[1].position - triangle[0].position, triangle[2].position - triangle[0].position);
+					glm::vec3 normal = glm::length(cross) > 0.000001f ? glm::normalize(cross) : glm::vec3(0, 1, 0);
 
-					for (auto& vertex : triangle)
+					for (Vertex& vertex : triangle)
 					{
 						vertex.normal = normal;
 					}
@@ -156,7 +156,7 @@ void Mesh::Upload()
 {
 	bounds_.min = bounds_.max = vertices_.front().position;
 
-	for (const auto& vertex : vertices_)
+	for (const Vertex& vertex : vertices_)
 	{
 		bounds_.min = glm::min(bounds_.min, vertex.position);
 		bounds_.max = glm::max(bounds_.max, vertex.position);

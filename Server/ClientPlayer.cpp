@@ -13,18 +13,18 @@ namespace
 		const Net::AreaData& area, const std::vector<Net::BoxData>& obstacles)
 	{
 		float half = Net::PlayerHalfExtent;
-		auto areaMin = Net::FromWire(area.movementBounds.min);
-		auto areaMax = Net::FromWire(area.movementBounds.max);
+		glm::vec3 areaMin = area.movementBounds.min;
+		glm::vec3 areaMax = area.movementBounds.max;
 		float start = position[axis];
 		float limit = std::clamp(start + movement,
 			areaMin[axis] + half, areaMax[axis] - half);
 		movement = limit - start;
 
-		const int crossAxis = axis == 0 ? 2 : 0;
-		for (const auto& obstacle : obstacles)
+		int crossAxis = axis == 0 ? 2 : 0;
+		for (const Net::BoxData& obstacle : obstacles)
 		{
-			auto min = Net::FromWire(obstacle.min);
-			auto max = Net::FromWire(obstacle.max);
+			glm::vec3 min = obstacle.min;
+			glm::vec3 max = obstacle.max;
 			if (position[crossAxis] + half <= min[crossAxis] ||
 				position[crossAxis] - half >= max[crossAxis])
 				continue;
@@ -50,40 +50,47 @@ bool ClientPlayer::ApplyMovement(const Net::PlayerTransform& input,
 			receivedAtMs < m_nLastMovementTimeMs)))
 		return false;
 
-	glm::vec3 requestedPosition;
-	float yaw = 0.0f;
-	float pitch = 0.0f;
-	if (!Net::TryReadPlayerTransform(input.worldTransform, requestedPosition, yaw, pitch))
+	// The request supplies a goal pose. Movement starts from the server's stored position.
+	if (!Net::IsFinitePlayerPose(input.pose))
 		return false;
 
-	glm::vec3 position = glm::vec3(Net::FromWire(m_PlayerData.worldTransform)[3]);
-	auto min = Net::FromWire(area.movementBounds.min) + glm::vec3(Net::PlayerHalfExtent);
-	auto max = Net::FromWire(area.movementBounds.max) - glm::vec3(Net::PlayerHalfExtent);
+	glm::vec3 position = m_PlayerData.pose.position;
+	//충돌 범위 설정. min은 영역의 최소값 + 플레이어 중심에서 충돌박스 가장자리 까지 거리의 절반.
+	//max는 영역 최댓값 - ''
+	glm::vec3 min = area.movementBounds.min + glm::vec3(Net::PlayerHalfExtent);
+	glm::vec3 max = area.movementBounds.max - glm::vec3(Net::PlayerHalfExtent);
+	//현재 서버 위치가 영역을 벗어난다고 판단되는 경우 종료
 	if (!(position.x >= min.x && position.x <= max.x && position.z >= min.z && position.z <= max.z))
 		return false;
 
 	//서버 시각과 속도로 이동량 계산
-	//첫 요청은 lastMovement 값이 없으므로 고정값을 줌
-	auto elapsedMs = m_bHasProcessedInput
+	Net::ServerTimeMs elapsedMs = m_bHasProcessedInput
+		//요청 받은 시각과 마지막으로 움직인 시각의 차이를 구함.
+		//이 수치가 이동에 소요 가능한 최대 대기 시간보다 많으면 min으로 자름.
+		//최대 대기 시간 제한이 없으면, 가만히 있다가 움직이는 경우
+		//한 번에 많은 거리를 이동하게 되어버림.
 		? (std::min)(receivedAtMs - m_nLastMovementTimeMs, MaxMovementBudgetMs)
+		//첫 요청은 lastMovement 값이 없으므로 고정값을 줌
 		: 1000 / Net::ServerTickRate;
 
 	double maxDistance = Net::PlayerMoveSpeed * (elapsedMs / 1000.0);
 
 	//현재 서버 위치에서 목표까지의 차이 x, z
-	double dx = static_cast<double>(requestedPosition.x) - position.x;
-	double dz = static_cast<double>(requestedPosition.z) - position.z;
+	double dx = static_cast<double>(input.pose.position.x) - position.x;
+	double dz = static_cast<double>(input.pose.position.z) - position.z;
+	//hypot: 빗변 길이 구하기
 	double distance = std::hypot(dx, dz);
 
+	//이동 속도를 적용한 최대 이동 거리보다 더 멀리 이동함을 방지.
 	double fraction = distance > maxDistance ? maxDistance / distance : 1.0;
 
-	//이동 후 플레이어 중심 기준 갈 수 있는 범위 구하기
+	//이동 후 충돌에 대한 보정 수행
 	position.x += ClipAxis(position, static_cast<float>(dx * fraction), 0, area, obstacles);
 	position.z += ClipAxis(position, static_cast<float>(dz * fraction), 2, area, obstacles);
 
-	m_PlayerData.worldTransform = Net::MakePlayerTransform(position, yaw, std::clamp(pitch, -89.0f, 89.0f));
+	//최종적으로 플레이어 위치 갱신
+	m_PlayerData.pose = {position, std::fmod(input.pose.yaw, 360.0f), std::clamp(input.pose.pitch, -89.0f, 89.0f)};
 
-	m_mtx4LastProcessedTransform = m_PlayerData.worldTransform;
 	m_nLastProcessedInput = input.inputSequence;
 	m_nLastMovementTimeMs = receivedAtMs;
 	m_bHasProcessedInput = true;

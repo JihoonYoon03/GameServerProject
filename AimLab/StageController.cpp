@@ -34,7 +34,7 @@ StageEvents StageController::Update(float deltaTime)
 
 	// control.cpp와 같이 임계값을 먼저 확인하고, 미달일 때만 시간을 누적합니다.
 	// 표적 생성 주기는 ShootingScene에서 별도로 관리합니다.
-	const float interval = state_ == StageState::Playing ? 1.0f : 2.0f;
+	float interval = state_ == StageState::Playing ? 1.0f : 2.0f;
 
 	if (stateTime_ < interval)
 	{

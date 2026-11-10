@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "Player.h"
 #include "Scene.h"
+#include "../Shared/NetworkConversions.h"
 
 void Player::ApplyCommand(const PlayerCommand& command, float deltaTime, const Scene& scene)
 {
@@ -13,8 +14,8 @@ void Player::ApplyCommand(const PlayerCommand& command, float deltaTime, const S
 		movement = glm::normalize(movement);
 	}
 
-	const auto rotation = glm::mat4_cast(glm::angleAxis(glm::radians(m_fYaw), glm::vec3(0, 1, 0)));
-	const glm::vec3 displacement =
+	glm::mat4 rotation = glm::mat4_cast(glm::angleAxis(glm::radians(m_fYaw), glm::vec3(0, 1, 0)));
+	glm::vec3 displacement =
 		glm::vec3(rotation * glm::vec4(movement.x, 0, movement.y, 0)) * m_fMoveSpeed * deltaTime;
 	// 원본은 X/Z 중심 판정 후 이번 이동 전체를 취소합니다.
 
@@ -26,7 +27,7 @@ void Player::ApplyCommand(const PlayerCommand& command, float deltaTime, const S
 		m_bEyeInitialized = true;
 	}
 
-	for (const auto& object : scene.GetObjects())
+	for (const std::unique_ptr<Object>& object : scene.GetObjects())
 	{
 		if (object.get() != this && object->active && object->blocksMovement && object->collider == ColliderType::Box && Collision::OverlapsXZ(GetWorldBox(), object->GetWorldBox()))
 		{
@@ -45,9 +46,28 @@ void Player::UpdateCamera(Camera& camera) const
 
 glm::mat4 Player::GetModelMatrix() const
 {
-	const glm::vec3 eye = m_bEyeInitialized ? m_vec3EyePosition : transform.position + glm::vec3(0.0f, 0.75f, -0.4f);
+	glm::vec3 eye = m_bEyeInitialized ? m_vec3EyePosition : transform.position + glm::vec3(0.0f, 0.75f, -0.4f);
 	glm::mat4 pivot = glm::translate(glm::mat4(1), eye);
 	pivot *= glm::mat4_cast(glm::angleAxis(glm::radians(m_fYaw), glm::vec3(0, 1, 0)));
 
 	return glm::translate(pivot, -eye) * transform.GetMatrix();
+}
+
+Net::PlayerPose Player::GetNetworkPose() const
+{
+	return {transform.position, m_fYaw, m_fPitch};
+}
+
+bool Player::ApplyNetworkPose(const Net::PlayerPose& pose)
+{
+	if (!Net::IsFinitePlayerPose(pose))
+		return false;
+
+	transform.position = pose.position;
+	m_fYaw = pose.yaw;
+	m_fPitch = pose.pitch;
+	m_vec3EyePosition = transform.position + glm::vec3(0.0f, 0.75f, -0.4f);
+	m_bEyeInitialized = true;
+	m_vec3LastDisplacement = glm::vec3(0.0f);
+	return true;
 }

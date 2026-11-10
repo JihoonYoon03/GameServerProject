@@ -10,7 +10,7 @@ public:
 	// 경기 진행 중 표적 생성 주기마다 한 번 호출한다.
 	void SpawnTargets(const Net::MatchRules& rules, Net::ServerTimeMs nowMs);
 	void UpdateTargets(float deltaTime, Net::ServerTimeMs nowMs);
-	Net::ShotOutcome TargetHits(const Net::Vec3Data& shooterPosition, const Net::Vec3Data& aimDirection,
+	Net::ShotOutcome TargetHits(const glm::vec3& shooterPosition, const glm::vec3& aimDirection,
 		const std::vector<Net::BoxData>& worldBoxes, const Net::MatchRules& rules, Net::ServerTimeMs nowMs);
 	void ClearTargets();
 	std::vector<Net::TargetMotionData> GetActiveTargets(Net::ServerTimeMs nowMs) const;

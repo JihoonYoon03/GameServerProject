@@ -3,8 +3,8 @@
 
 glm::mat4 Camera::GetRotation() const
 {
-	const auto pitchRotation = glm::angleAxis(glm::radians(pitch), glm::vec3(1, 0, 0));
-	const auto yawRotation = glm::angleAxis(glm::radians(yaw), glm::vec3(0, 1, 0));
+	glm::quat pitchRotation = glm::angleAxis(glm::radians(pitch), glm::vec3(1, 0, 0));
+	glm::quat yawRotation = glm::angleAxis(glm::radians(yaw), glm::vec3(0, 1, 0));
 
 	return glm::mat4_cast(yawRotation * pitchRotation);
 }

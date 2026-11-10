@@ -1,17 +1,14 @@
 #pragma once
 #include "NetworkTypes.h"
 
-// 프로토콜 6: 공통 헤더 뒤에 본문 필드를 기록한다. 구조체의 메모리 크기를 전송 크기로 쓰지 않는다.
-// 헤더의 길이 필드는 헤더를 포함한 전체 패킷 길이이다. 정수와 실수의 비트는
-// 빅 엔디언으로 전송하고, 가변 목록은 개수와 유효 항목만 기록한다.
-// UDP 토큰은 클라→서버에서 발신자, 서버→클라에서 수신자를 나타낸다.
+// TCP uses its frame length. UDP uses the received datagram length and body counts.
+// PacketCodec writes fields in network byte order without copying object padding.
 namespace Net
 {
-	inline constexpr std::uint16_t ProtocolVersion = 6;
 	inline constexpr std::uint16_t UdpMagic = 0x4347;
-	inline constexpr std::uint32_t TcpHeaderBytes = 12;
+	inline constexpr std::uint32_t TcpHeaderBytes = 10;
 	inline constexpr std::uint32_t MaxTcpPacketBytes = 65536;
-	inline constexpr std::uint16_t UdpHeaderBytes = 44;
+	inline constexpr std::uint16_t UdpHeaderBytes = 40;
 	inline constexpr std::uint16_t MaxUdpPacketBytes = 1200;
 	inline constexpr std::uint16_t TargetSnapshotFixedBytes = UdpHeaderBytes + 2;
 	inline constexpr std::uint16_t TargetMotionBytes = 24;
@@ -51,7 +48,6 @@ namespace Net
 	struct TcpHeader
 	{
 		std::uint32_t size = TcpHeaderBytes;
-		std::uint16_t version = ProtocolVersion;
 		TcpType type = TcpType::ConnectResult;
 		std::uint32_t requestId = 0;
 	};
@@ -60,9 +56,7 @@ namespace Net
 	struct UdpHeader
 	{
 		std::uint16_t magic = UdpMagic;
-		std::uint16_t version = ProtocolVersion;
 		UdpType type = UdpType::RegisterRequest;
-		std::uint16_t size = UdpHeaderBytes;
 		SessionToken m_sessionToken{};
 
 		Sequence sequence = 0;
@@ -136,8 +130,8 @@ namespace Net
 		MembershipId membershipId = 0;
 		ShotId shotId = 0;
 		Sequence inputSequence = 0;
-		Mat4Data shooterTransform;
-		Vec3Data origin;
+		glm::mat4 shooterTransform{1.0f};
+		glm::vec3 origin{0.0f};
 	};
 
 	// 사용: 서버 Room::SendShootResult() → 클라 ShootingScene::RecvShootResult() [선언] / 묶음: 발사자 토큰·명중 결과·점수·탄
@@ -168,9 +162,9 @@ namespace Net
 	// 사용: 서버 NetworkServer::RegisterPlayerUDP() → 클라 NetworkClient::CompleteConnection() [선언]
 	struct UdpRegisterResult { ErrorCode result = ErrorCode::Ok; Sequence registrationSequence = 0; };
 
-	// 사용: 클라 ShootingScene::SendPlayerTransform() → 서버 Room::RecvPlayerInput(), Room::UpdatePlayerTransform() [선언] / 개별
+	// 사용: 클라 ShootingScene::SendPlayerTransform() → 서버 NetworkServer::ReceiveUdp(), Room::UpdatePlayerTransform() [선언] / 개별
 	//       플레이어의 최신 변환 행렬
-	struct PlayerTransform { Sequence inputSequence = 0; Mat4Data worldTransform; };
+	struct PlayerTransform { Sequence inputSequence = 0; PlayerPose pose; };
 
 	// 사용: 서버 Room::SendTransformData() → 클라 ShootingScene::RecvTransformData() [선언] / 묶음: 전체 플레이어·본인 보정
 	struct PlayerSnapshot

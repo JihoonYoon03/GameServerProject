@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <vector>
 #include <numeric>
+#include <GL/glm/glm.hpp>
 
 namespace Net
 {
@@ -64,7 +65,7 @@ namespace Net
 	{
 		Ok = 0,
 		InvalidRequest = 1,
-		VersionMismatch = 2,
+		// Error code 2 is reserved.
 		RoomNotFound = 3,
 		RoomFull = 4,
 		RoomPlaying = 5,
@@ -94,34 +95,25 @@ namespace Net
 		ServerStopped = 2
 	};
 
-	// 사용: Net::ToWire(glm::vec3), Net::FromWire(Vec3Data) [선언] / 패킷 전용, 연산은 glm::vec3
-	struct Vec3Data { float x = 0.0f; float y = 0.0f; float z = 0.0f; };
-
-	// 사용: Player::GetNetworkTransform(), Player::ApplyNetworkTransform(), Net::ToWire(glm::mat4),
-	//       Net::FromWire(Mat4Data) [선언] / 위치·회전 통합 행렬
-	struct Mat4Data
+	// Network player position and view angles in degrees.
+	struct PlayerPose
 	{
-
-		std::array<float, 16> elements{{
-			1.0f, 0.0f, 0.0f, 0.0f,
-			0.0f, 1.0f, 0.0f, 0.0f,
-			0.0f, 0.0f, 1.0f, 0.0f,
-			0.0f, 0.0f, 0.0f, 1.0f
-		}};
-
+		glm::vec3 position{0.0f};
+		float yaw = 0.0f;
+		float pitch = 0.0f;
 	};
 
 	// 사용: 서버 Room::AssignPlayerAreas(), Room::CheckPlayerCollision() [선언]
-	struct BoxData { Vec3Data min; Vec3Data max; };
+	struct BoxData { glm::vec3 min{0.0f}; glm::vec3 max{0.0f}; };
 
-	// 사용: 클라 NetworkClient::UpdateNetwork(), 서버 Room::RecvPlayerInput(), Room::RecvShoot() [선언]
+	// 사용: 클라 NetworkClient::UpdateNetwork(), 서버 Room::UpdatePlayerTransform(), Room::RecvShoot() [선언]
 	struct MatchContext { RoomId roomId = 0; MatchId matchId = 0; };
 
 	// 사용: 서버 Room::SendRoomState(), Room::SendShootResult() / 클라 ShootingScene::OnRoomStateChanged() [선언]
 	struct RoomVersion { MatchContext context; Revision revision = 0; };
 
 	// 사용: 서버 Room::AssignPlayerAreas(), Room::CheckPlayerCollision() / 클라 ShootingScene::OnRoomStateChanged() [선언]
-	struct AreaData { std::uint8_t areaId = UnassignedArea; BoxData movementBounds; Mat4Data spawnTransform; };
+	struct AreaData { std::uint8_t areaId = UnassignedArea; BoxData movementBounds; glm::mat4 spawnTransform{1.0f}; };
 
 	// 사용: 서버 StageController::StartGame(), Target::SpawnTargets() / 클라 ShootingScene::OnGameStarted() [선언]
 	struct MatchRules
@@ -139,7 +131,7 @@ namespace Net
 	//       ShootingScene::OnRoomStateChanged() [선언]
 	struct PlayerData { SessionToken m_sessionToken{};
 
-		Mat4Data worldTransform;
+		PlayerPose pose;
 		std::uint8_t areaId = UnassignedArea;
 		ReadyState ready = ReadyState::Connecting;
 		std::uint8_t mapLoaded = 0;
@@ -147,7 +139,7 @@ namespace Net
 	};
 
 	// 표적 이동은 월드 좌표와 초당 이동 벡터로 전송한다.
-	struct TargetMotionData { Vec3Data position; Vec3Data velocity; };
+	struct TargetMotionData { glm::vec3 position{0.0f}; glm::vec3 velocity{0.0f}; };
 
 	// 사용: 서버 RoomManager::SendRoomList() / 클라 MainScene::UpdateRoomList(), MainScene::ShowRoomList() [선언]
 	struct RoomInfo
@@ -180,7 +172,7 @@ namespace Net
 	// 사용: 서버 Room::SendTransformData() / 클라 ShootingScene::RecvTransformData() [선언] / 위치·회전 통합 행렬
 	struct PlayerTransformEntry { SessionToken m_sessionToken{};
 
-		Mat4Data worldTransform;
+		PlayerPose pose;
 		Sequence lastProcessedInput = 0;
 	};
 

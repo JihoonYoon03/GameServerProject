@@ -24,8 +24,8 @@ public:
 	void UpdateCamera(Camera& camera) const;
 	glm::mat4 GetModelMatrix() const override;
 
-	Net::Mat4Data GetNetworkTransform() const;
-	bool ApplyNetworkTransform(const Net::Mat4Data& value);
+	Net::PlayerPose GetNetworkPose() const;
+	bool ApplyNetworkPose(const Net::PlayerPose& pose);
 
 	float	m_fYaw = 0.0f;
 	float	m_fPitch = 0.0f;

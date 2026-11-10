@@ -1,4 +1,5 @@
 #include "PacketCodec.h"
+#include "NetworkConversions.h"
 #include <winsock2.h>
 #include <cstring>
 #include <limits>
@@ -14,7 +15,7 @@ namespace Net
         template<class T>
         void WriteNetworkValue(std::vector<std::uint8_t>& bytes, T value)
         {
-            const auto* data = reinterpret_cast<const std::uint8_t*>(&value);
+            const std::uint8_t* data = reinterpret_cast<const std::uint8_t*>(&value);
             bytes.insert(bytes.end(), data, data + sizeof(value));
         }
 
@@ -133,32 +134,30 @@ namespace Net
             }
             return true;
         }
-        void WriteMat4Data(std::vector<std::uint8_t>& bytes, const Mat4Data& value)
+        // GLM matrices use [column][row]. Write the components in that order.
+        void WriteMat4(std::vector<std::uint8_t>& bytes, const glm::mat4& value)
         {
-            for (std::size_t i = 0; i < value.elements.size(); ++i)
-            {
-                WriteF32(bytes, value.elements[i]);
-            }
+            for (int col = 0; col < 4; ++col)
+                for (int row = 0; row < 4; ++row)
+                    WriteF32(bytes, value[col][row]);
         }
 
-        bool ReadMat4Data(const std::uint8_t* data, std::size_t size, std::size_t& offset, Mat4Data& value)
+        bool ReadMat4(const std::uint8_t* data, std::size_t size, std::size_t& offset, glm::mat4& value)
         {
-            for (std::size_t i = 0; i < value.elements.size(); ++i)
-            {
-                if (!ReadF32(data, size, offset, value.elements[i]))
-                {
-                    return false;
-                }
-            }
+            for (int col = 0; col < 4; ++col)
+                for (int row = 0; row < 4; ++row)
+                    if (!ReadF32(data, size, offset, value[col][row]))
+                        return false;
             return true;
         }
-        void WriteVec3Data(std::vector<std::uint8_t>& bytes, const Vec3Data& value)
+
+        void WriteVec3(std::vector<std::uint8_t>& bytes, const glm::vec3& value)
         {
             WriteF32(bytes, value.x);
             WriteF32(bytes, value.y);
             WriteF32(bytes, value.z);
         }
-        bool ReadVec3Data(const std::uint8_t* data, std::size_t size, std::size_t& offset, Vec3Data& value)
+        bool ReadVec3(const std::uint8_t* data, std::size_t size, std::size_t& offset, glm::vec3& value)
         {
             if (!ReadF32(data, size, offset, value.x))
             {
@@ -174,18 +173,32 @@ namespace Net
             }
             return true;
         }
+        void WritePlayerPose(std::vector<std::uint8_t>& bytes, const PlayerPose& value)
+        {
+            WriteVec3(bytes, value.position);
+            WriteF32(bytes, value.yaw);
+            WriteF32(bytes, value.pitch);
+        }
+
+        bool ReadPlayerPose(const std::uint8_t* data, std::size_t size, std::size_t& offset, PlayerPose& value)
+        {
+            return ReadVec3(data, size, offset, value.position) &&
+                ReadF32(data, size, offset, value.yaw) &&
+                ReadF32(data, size, offset, value.pitch) && IsFinitePlayerPose(value);
+        }
+
         void WriteBoxData(std::vector<std::uint8_t>& bytes, const BoxData& value)
         {
-            WriteVec3Data(bytes, value.min);
-            WriteVec3Data(bytes, value.max);
+            WriteVec3(bytes, value.min);
+            WriteVec3(bytes, value.max);
         }
         bool ReadBoxData(const std::uint8_t* data, std::size_t size, std::size_t& offset, BoxData& value)
         {
-            if (!ReadVec3Data(data, size, offset, value.min))
+            if (!ReadVec3(data, size, offset, value.min))
             {
                 return false;
             }
-            if (!ReadVec3Data(data, size, offset, value.max))
+            if (!ReadVec3(data, size, offset, value.max))
             {
                 return false;
             }
@@ -229,7 +242,7 @@ namespace Net
         {
             WriteU8(bytes, value.areaId);
             WriteBoxData(bytes, value.movementBounds);
-            WriteMat4Data(bytes, value.spawnTransform);
+            WriteMat4(bytes, value.spawnTransform);
         }
         bool ReadAreaData(const std::uint8_t* data, std::size_t size, std::size_t& offset, AreaData& value)
         {
@@ -241,7 +254,7 @@ namespace Net
             {
                 return false;
             }
-            if (!ReadMat4Data(data, size, offset, value.spawnTransform))
+            if (!ReadMat4(data, size, offset, value.spawnTransform))
             {
                 return false;
             }
@@ -289,7 +302,7 @@ namespace Net
         void WritePlayerData(std::vector<std::uint8_t>& bytes, const PlayerData& value)
         {
             WriteSessionToken(bytes, value.m_sessionToken);
-            WriteMat4Data(bytes, value.worldTransform);
+            WritePlayerPose(bytes, value.pose);
             WriteU8(bytes, value.areaId);
             WriteU8(bytes, static_cast<std::uint8_t>(value.ready));
             WriteU8(bytes, value.mapLoaded);
@@ -301,7 +314,7 @@ namespace Net
             {
                 return false;
             }
-            if (!ReadMat4Data(data, size, offset, value.worldTransform))
+            if (!ReadPlayerPose(data, size, offset, value.pose))
             {
                 return false;
             }
@@ -444,7 +457,7 @@ namespace Net
         void WritePlayerTransformEntry(std::vector<std::uint8_t>& bytes, const PlayerTransformEntry& value)
         {
             WriteSessionToken(bytes, value.m_sessionToken);
-            WriteMat4Data(bytes, value.worldTransform);
+            WritePlayerPose(bytes, value.pose);
             WriteU32(bytes, value.lastProcessedInput);
         }
         bool ReadPlayerTransformEntry(const std::uint8_t* data, std::size_t size, std::size_t& offset, PlayerTransformEntry& value)
@@ -453,7 +466,7 @@ namespace Net
             {
                 return false;
             }
-            if (!ReadMat4Data(data, size, offset, value.worldTransform))
+            if (!ReadPlayerPose(data, size, offset, value.pose))
             {
                 return false;
             }
@@ -465,16 +478,16 @@ namespace Net
         }
         void WriteTargetMotionData(std::vector<std::uint8_t>& bytes, const TargetMotionData& value)
         {
-            WriteVec3Data(bytes, value.position);
-            WriteVec3Data(bytes, value.velocity);
+            WriteVec3(bytes, value.position);
+            WriteVec3(bytes, value.velocity);
         }
         bool ReadTargetMotionData(const std::uint8_t* data, std::size_t size, std::size_t& offset, TargetMotionData& value)
         {
-            if (!ReadVec3Data(data, size, offset, value.position))
+            if (!ReadVec3(data, size, offset, value.position))
             {
                 return false;
             }
-            if (!ReadVec3Data(data, size, offset, value.velocity))
+            if (!ReadVec3(data, size, offset, value.velocity))
             {
                 return false;
             }
@@ -483,17 +496,12 @@ namespace Net
         void WriteTcpHeader(std::vector<std::uint8_t>& bytes, const TcpHeader& value)
         {
             WriteU32(bytes, value.size);
-            WriteU16(bytes, value.version);
             WriteU16(bytes, static_cast<std::uint16_t>(value.type));
             WriteU32(bytes, value.requestId);
         }
         bool ReadTcpFields(const std::uint8_t* data, std::size_t size, std::size_t& offset, TcpHeader& value)
         {
             if (!ReadU32(data, size, offset, value.size))
-            {
-                return false;
-            }
-            if (!ReadU16(data, size, offset, value.version))
             {
                 return false;
             }
@@ -512,9 +520,7 @@ namespace Net
         void WriteUdpHeader(std::vector<std::uint8_t>& bytes, const UdpHeader& value)
         {
             WriteU16(bytes, value.magic);
-            WriteU16(bytes, value.version);
             WriteU16(bytes, static_cast<std::uint16_t>(value.type));
-            WriteU16(bytes, value.size);
             WriteSessionToken(bytes, value.m_sessionToken);
             WriteU32(bytes, value.sequence);
             WriteMatchContext(bytes, value.context);
@@ -527,20 +533,12 @@ namespace Net
             {
                 return false;
             }
-            if (!ReadU16(data, size, offset, value.version))
-            {
-                return false;
-            }
             std::uint16_t type = 0;
             if (!ReadU16(data, size, offset, type))
             {
                 return false;
             }
             value.type = static_cast<UdpType>(type);
-            if (!ReadU16(data, size, offset, value.size))
-            {
-                return false;
-            }
             if (!ReadSessionToken(data, size, offset, value.m_sessionToken))
             {
                 return false;
@@ -827,8 +825,8 @@ namespace Net
             WriteU32(bytes, value.membershipId);
             WriteU32(bytes, value.shotId);
             WriteU32(bytes, value.inputSequence);
-            WriteMat4Data(bytes, value.shooterTransform);
-            WriteVec3Data(bytes, value.origin);
+            WriteMat4(bytes, value.shooterTransform);
+            WriteVec3(bytes, value.origin);
         }
         bool ReadFireRequest(const std::uint8_t* data, std::size_t size, std::size_t& offset, FireRequest& value)
         {
@@ -848,11 +846,11 @@ namespace Net
             {
                 return false;
             }
-            if (!ReadMat4Data(data, size, offset, value.shooterTransform))
+            if (!ReadMat4(data, size, offset, value.shooterTransform))
             {
                 return false;
             }
-            if (!ReadVec3Data(data, size, offset, value.origin))
+            if (!ReadVec3(data, size, offset, value.origin))
             {
                 return false;
             }
@@ -985,7 +983,7 @@ namespace Net
         void WritePlayerTransform(std::vector<std::uint8_t>& bytes, const PlayerTransform& value)
         {
             WriteU32(bytes, value.inputSequence);
-            WriteMat4Data(bytes, value.worldTransform);
+            WritePlayerPose(bytes, value.pose);
         }
         bool ReadPlayerTransform(const std::uint8_t* data, std::size_t size, std::size_t& offset, PlayerTransform& value)
         {
@@ -993,7 +991,7 @@ namespace Net
             {
                 return false;
             }
-            if (!ReadMat4Data(data, size, offset, value.worldTransform))
+            if (!ReadPlayerPose(data, size, offset, value.pose))
             {
                 return false;
             }
@@ -1060,13 +1058,13 @@ namespace Net
             return true;
         }
         // 코덱은 전송 형식만 검사한다. 경기 규칙과 행렬 판정은 각 담당 로직에서 처리한다.
-        bool Valid(ErrorCode value) { return value >= ErrorCode::Ok && value <= ErrorCode::ServerFull; }
+        bool Valid(ErrorCode value) { return value <= ErrorCode::ServerFull && static_cast<std::uint16_t>(value) != 2; }
         bool Valid(GameState value) { return value >= GameState::Preparing && value <= GameState::Results; }
         bool Valid(ReadyState value) { return value >= ReadyState::Connecting && value <= ReadyState::Playing; }
         bool Valid(ShotOutcome value) { return value >= ShotOutcome::Miss && value <= ShotOutcome::BlockedByWorld; }
         bool Valid(MatchEndReason value) { return value >= MatchEndReason::TimeLimit && value <= MatchEndReason::ServerStopped; }
         bool Valid(const MatchRules& value) { return value.activeTargetCount <= MaxTargets; }
-        bool Valid(const PlayerData& value) { return Valid(value.ready) && value.mapLoaded <= 1; }
+        bool Valid(const PlayerData& value) { return Valid(value.ready) && value.mapLoaded <= 1 && IsFinitePlayerPose(value.pose); }
         bool Valid(const RoomInfo& value)
         {
             return value.capacity <= MaxPlayers && value.playerCount <= MaxPlayers && Valid(value.state);
@@ -1180,13 +1178,18 @@ namespace Net
     {
         return Valid(value.result);
     }
-    bool PacketCodec::ValidateBody(const PlayerTransform&)
+    bool PacketCodec::ValidateBody(const PlayerTransform& value)
     {
-        return true;
+        return IsFinitePlayerPose(value.pose);
     }
     bool PacketCodec::ValidateBody(const PlayerSnapshot& value)
     {
-        return value.playerCount <= MaxPlayers;
+        if (value.playerCount > MaxPlayers)
+            return false;
+        for (std::size_t i = 0; i < value.playerCount; ++i)
+            if (!IsFinitePlayerPose(value.players[i].pose))
+                return false;
+        return true;
     }
     bool PacketCodec::ValidateBody(const TargetSnapshot& value)
     {
@@ -1789,8 +1792,7 @@ namespace Net
     }
     bool PacketCodec::ValidateHeader(const TcpHeader& header)
     {
-        if (header.version != ProtocolVersion
-            || header.size < TcpHeaderBytes || header.size > MaxTcpPacketBytes)
+        if (header.size < TcpHeaderBytes || header.size > MaxTcpPacketBytes)
         {
             return false;
         }
@@ -1838,8 +1840,7 @@ namespace Net
     }
     bool PacketCodec::ValidateHeader(const UdpHeader& header)
     {
-        if (header.version != ProtocolVersion || header.magic != UdpMagic
-            || header.size < UdpHeaderBytes || header.size > MaxUdpPacketBytes)
+        if (header.magic != UdpMagic)
         {
             return false;
         }
@@ -1858,8 +1859,7 @@ namespace Net
     bool PacketCodec::EncodeUdpFrame(const UdpHeader& header,
         const std::vector<std::uint8_t>& bytes, PacketData& output)
     {
-        if (!ValidateHeader(header) || bytes.size() > MaxUdpPacketBytes - UdpHeaderBytes
-            || header.size != UdpHeaderBytes + bytes.size())
+        if (!ValidateHeader(header) || bytes.size() > MaxUdpPacketBytes - UdpHeaderBytes)
         {
             return false;
         }
@@ -1913,8 +1913,7 @@ namespace Net
         }
         UdpHeader header;
         std::size_t offset = 0;
-        if (!ReadUdpFields(data, size, offset, header) || !ValidateHeader(header)
-            || header.size != size)
+        if (!ReadUdpFields(data, size, offset, header) || !ValidateHeader(header))
         {
             return false;
         }

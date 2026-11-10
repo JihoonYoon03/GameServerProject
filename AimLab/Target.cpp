@@ -14,7 +14,7 @@ void Target::Update(float deltaTime)
 	if (pendingDestroy_ || deltaTime <= 0.0f) return;
 
 	constexpr float MoveSpeed = 1.0f;
-	const float moveTime = std::min(deltaTime, lifetime_ - elapsedTime_);
+	float moveTime = std::min(deltaTime, lifetime_ - elapsedTime_);
 	transform.position += moveDirection_ * (MoveSpeed * moveTime);
 	elapsedTime_ += deltaTime;
 

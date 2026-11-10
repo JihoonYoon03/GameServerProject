@@ -17,13 +17,13 @@ glm::mat4 Transform::GetMatrix() const
 
 Box Collision::GetWorldBox(const Box& local, const Transform& transform)
 {
-	const glm::mat4 matrix = transform.GetMatrix();
+	glm::mat4 matrix = transform.GetMatrix();
 	Box world{glm::vec3(std::numeric_limits<float>::max()), glm::vec3(std::numeric_limits<float>::lowest())};
 	
 	for (int corner = 0; corner < 8; ++corner)
 	{
-		const glm::vec3 point((corner & 1) ? local.max.x : local.min.x, (corner & 2) ? local.max.y : local.min.y, (corner & 4) ? local.max.z : local.min.z);
-		const glm::vec3 transformed = glm::vec3(matrix * glm::vec4(point, 1.0f));
+		glm::vec3 point((corner & 1) ? local.max.x : local.min.x, (corner & 2) ? local.max.y : local.min.y, (corner & 4) ? local.max.z : local.min.z);
+		glm::vec3 transformed = glm::vec3(matrix * glm::vec4(point, 1.0f));
 		world.min = glm::min(world.min, transformed);
 		world.max = glm::max(world.max, transformed);
 	}
@@ -33,9 +33,9 @@ Box Collision::GetWorldBox(const Box& local, const Transform& transform)
 
 Sphere Collision::GetWorldSphere(const Box& local, const Transform& transform)
 {
-	const glm::vec3 size = (local.max - local.min) * glm::abs(transform.scale);
-	const float radius = std::max({size.x, size.y, size.z}) * 0.5f;
-	const auto center = glm::vec3(transform.GetMatrix() * glm::vec4((local.min + local.max) * 0.5f, 1.0f));
+	glm::vec3 size = (local.max - local.min) * glm::abs(transform.scale);
+	float radius = std::max({size.x, size.y, size.z}) * 0.5f;
+	glm::vec3 center = glm::vec3(transform.GetMatrix() * glm::vec4((local.min + local.max) * 0.5f, 1.0f));
 
 	return {center, radius};
 }
@@ -53,7 +53,7 @@ bool Collision::OverlapsXZ(const Box& a, const Box& b)
 
 bool Collision::Raycast(const Ray& ray, const Sphere& sphere, float& distance)
 {
-	const float length = glm::length(ray.direction);
+	float length = glm::length(ray.direction);
 
 	//0벡터인 경우 or 구체 반지름이 없음
 	if (length < 0.000001f || sphere.radius <= 0.0f) return false;
@@ -85,7 +85,7 @@ bool Collision::Raycast(const Ray& ray, const Sphere& sphere, float& distance)
 
 bool Collision::Raycast(const Ray& ray, const Box& box, float& distance)
 {
-	const float length = glm::length(ray.direction);
+	float length = glm::length(ray.direction);
 
 	if (length < 0.000001f) return false;
 

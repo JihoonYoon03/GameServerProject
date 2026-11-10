@@ -8,7 +8,7 @@ int main(int argc, char** argv)
 	{
 		// Visual Studio와 탐색기 모두 실행 파일 폴더를 기준으로 리소스를 읽습니다.
 		std::array<wchar_t, 32768> executable{};
-		const DWORD length = GetModuleFileNameW(nullptr, executable.data(), static_cast<DWORD>(executable.size()));
+		DWORD length = GetModuleFileNameW(nullptr, executable.data(), static_cast<DWORD>(executable.size()));
 
 		if (length == 0 || length >= executable.size())
 		{

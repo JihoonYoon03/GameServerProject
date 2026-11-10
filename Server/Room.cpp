@@ -147,24 +147,22 @@ bool Room::UpdatePlayerTransform(const Net::SessionToken& token,
 
 void Room::SendTargetPositions(Net::ServerTimeMs nowMs)
 {
-	const auto& context = m_state.version.context;
+	const Net::MatchContext& context = m_state.version.context;
 	if (!sendPacket_ || targetRecipients_.empty() || context.roomId == 0 || context.matchId == 0)
 		return;
 
-	const auto activeTargets = targets_->GetActiveTargets(nowMs);
+	std::vector<Net::TargetMotionData> activeTargets = targets_->GetActiveTargets(nowMs);
 	Net::UdpPacket<Net::TargetSnapshot> snapshot;
 	snapshot.packetData.targetCount = static_cast<std::uint16_t>(activeTargets.size());
 	std::copy(activeTargets.begin(), activeTargets.end(), snapshot.packetData.targets.begin());
 
-	auto& header = snapshot.header;
+	Net::UdpHeader& header = snapshot.header;
 	header.type = Net::UdpType::TargetSnapshot;
 	header.context = context;
 	header.sequence = ++targetSnapshotSequence_;
 	header.serverTick = static_cast<std::uint32_t>(nowMs * Net::ServerTickRate / 1000);
-	header.size = static_cast<std::uint16_t>(Net::TargetSnapshotFixedBytes +
-		snapshot.packetData.targetCount * Net::TargetMotionBytes);
 
-	for (const auto& recipient : targetRecipients_)
+	for (const TargetRecipient& recipient : targetRecipients_)
 	{
 		header.m_sessionToken = recipient.sessionToken;
 		header.membershipId = recipient.membershipId;

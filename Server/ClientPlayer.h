@@ -11,7 +11,6 @@ public:
 
 	Net::Sequence		m_nLastProcessedInput = 0;
 	Net::ServerTimeMs	m_nLastMovementTimeMs = 0;
-	Net::Mat4Data		m_mtx4LastProcessedTransform;
 	bool				m_bHasProcessedInput = false;
 };
 

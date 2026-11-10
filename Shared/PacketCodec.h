@@ -246,7 +246,7 @@ namespace Net
 
             T value{};
             if (!DecodeBody(header.type, data + UdpHeaderBytes,
-                header.size - UdpHeaderBytes, value))
+                size - UdpHeaderBytes, value))
                 return false;
 
             output.header = header;

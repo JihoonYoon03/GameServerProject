@@ -1,7 +1,6 @@
 #include "pch.h"
 #include "Target.h"
 #include "../Shared/Collision.h"
-#include "../Shared/NetworkConversions.h"
 
 #include <algorithm>
 #include <cmath>
@@ -20,8 +19,8 @@ void Target::SpawnTargets(const Net::MatchRules& rules, Net::ServerTimeMs nowMs)
 	std::uniform_real_distribution<float> y(0.5f, 2.0f);
 	std::uniform_real_distribution<float> z(-5.0f, -0.5f);
 	std::uniform_int_distribution<int> horizontal(-1, 1);
-	const float directionX = static_cast<float>(horizontal(random_));
-	const float inverseLength = 1.0f / std::sqrt(directionX * directionX + 1.0f);
+	float directionX = static_cast<float>(horizontal(random_));
+	float inverseLength = 1.0f / std::sqrt(directionX * directionX + 1.0f);
 
 	Net::TargetMotionData motion;
 	motion.position = {x(random_), y(random_), z(random_)};
@@ -33,10 +32,10 @@ void Target::UpdateTargets(float deltaTime, Net::ServerTimeMs nowMs)
 {
 	if (deltaTime > 0.0f)
 	{
-		for (auto& target : targets_)
+		for (ActiveTarget& target : targets_)
 		{
-			const float moveTime = (std::min)(deltaTime, TargetLifetimeSeconds - target.elapsedSeconds);
-			auto& motion = target.motion;
+			float moveTime = (std::min)(deltaTime, TargetLifetimeSeconds - target.elapsedSeconds);
+			Net::TargetMotionData& motion = target.motion;
 			motion.position.x += motion.velocity.x * moveTime;
 			motion.position.y += motion.velocity.y * moveTime;
 			motion.position.z += motion.velocity.z * moveTime;
@@ -51,11 +50,11 @@ void Target::UpdateTargets(float deltaTime, Net::ServerTimeMs nowMs)
 	}), targets_.end());
 }
 
-Net::ShotOutcome Target::TargetHits(const Net::Vec3Data& shooterPosition, const Net::Vec3Data& aimDirection,
+Net::ShotOutcome Target::TargetHits(const glm::vec3& shooterPosition, const glm::vec3& aimDirection,
 	const std::vector<Net::BoxData>& worldBoxes, const Net::MatchRules& rules, Net::ServerTimeMs nowMs)
 {
-	const Ray ray{Net::FromWire(shooterPosition), Net::FromWire(aimDirection)};
-	const float directionLength = glm::length(ray.direction);
+	const Ray ray{shooterPosition, aimDirection};
+	float directionLength = glm::length(ray.direction);
 	if (!std::isfinite(ray.origin.x) || !std::isfinite(ray.origin.y) ||
 		!std::isfinite(ray.origin.z) || !std::isfinite(directionLength) ||
 		directionLength < 0.000001f)
@@ -65,9 +64,9 @@ Net::ShotOutcome Target::TargetHits(const Net::Vec3Data& shooterPosition, const 
 
 	float nearestDistance = std::numeric_limits<float>::infinity();
 	Net::ShotOutcome outcome = Net::ShotOutcome::Miss;
-	for (const auto& worldBox : worldBoxes)
+	for (const Net::BoxData& worldBox : worldBoxes)
 	{
-		const Box obstacle{Net::FromWire(worldBox.min), Net::FromWire(worldBox.max)};
+		const Box obstacle{worldBox.min, worldBox.max};
 		float distance = 0.0f;
 		if (Collision::Raycast(ray, obstacle, distance) && distance < nearestDistance)
 		{
@@ -81,7 +80,7 @@ Net::ShotOutcome Target::TargetHits(const Net::Vec3Data& shooterPosition, const 
 	{
 		if (!target->IsActiveAt(nowMs)) continue;
 
-		const Sphere sphere{Net::FromWire(target->motion.position), TargetRadius};
+		const Sphere sphere{target->motion.position, TargetRadius};
 		float distance = 0.0f;
 		if (Collision::Raycast(ray, sphere, distance) && distance < nearestDistance)
 		{
@@ -111,7 +110,7 @@ std::vector<Net::TargetMotionData> Target::GetActiveTargets(Net::ServerTimeMs no
 {
 	std::vector<Net::TargetMotionData> activeTargets;
 	activeTargets.reserve(targets_.size());
-	for (const auto& target : targets_)
+	for (const ActiveTarget& target : targets_)
 	{
 		if (target.IsActiveAt(nowMs))
 		{

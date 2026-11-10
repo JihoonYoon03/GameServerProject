@@ -8,7 +8,7 @@ namespace
 
 Object* ShootingScene::AddProp(const std::string& name, const std::shared_ptr<Mesh>& mesh, const std::shared_ptr<Material>& material, const glm::vec3& position, const glm::vec3& scale, bool solid)
 {
-	auto object = std::make_unique<Object>(mesh, material);
+	std::unique_ptr<Object> object = std::make_unique<Object>(mesh, material);
 	object->name = name;
 	object->transform.position = position;
 	object->transform.scale = scale;
@@ -20,18 +20,18 @@ Object* ShootingScene::AddProp(const std::string& name, const std::shared_ptr<Me
 
 void ShootingScene::Initialize()
 {
-	const auto shader = std::make_shared<Shader>("Shaders/Lit.vert", "Shaders/Lit.frag");
-	const auto cube = assets_.LoadMesh("Resources/Meshes/Cube.obj");
-	const auto sphere = assets_.LoadMesh("Resources/Meshes/Sphere.obj");
+	std::shared_ptr<Shader> shader = std::make_shared<Shader>("Shaders/Lit.vert", "Shaders/Lit.frag");
+	std::shared_ptr<Mesh> cube = assets_.LoadMesh("Resources/Meshes/Cube.obj");
+	std::shared_ptr<Mesh> sphere = assets_.LoadMesh("Resources/Meshes/Sphere.obj");
 
-	auto sky = std::make_shared<Material>(shader);
+	std::shared_ptr<Material> sky = std::make_shared<Material>(shader);
 	sky->texture = assets_.LoadTexture("Resources/Textures/SkydomeTex.png");
 	sky->unlit = true;
 	sky->doubleSided = true;
-	auto* dome = AddProp("Sky", sphere, sky, glm::vec3(0), glm::vec3(150));
+	Object* dome = AddProp("Sky", sphere, sky, glm::vec3(0), glm::vec3(150));
 	dome->transform.rotation.y = -90.0f;
 
-	auto ground = std::make_shared<Material>(shader);
+	std::shared_ptr<Material> ground = std::make_shared<Material>(shader);
 	ground->texture = assets_.LoadTexture("Resources/Textures/GroundTex.png");
 	ground->color = {0.55f, 0.37f, 0.17f};
 	// 원본 draw.h는 바닥 텍스처를 활성화하지 않고 기본색으로 그렸습니다.
@@ -41,7 +41,7 @@ void ShootingScene::Initialize()
 
 	std::vector<Vertex> floorVertices;
 
-	for (auto vertex : cube->GetVertices())
+	for (Vertex vertex : cube->GetVertices())
 	{
 		if (std::abs(vertex.normal.y) > 0.5f)
 		{
@@ -52,13 +52,13 @@ void ShootingScene::Initialize()
 
 	AddProp("Ground", std::make_shared<Mesh>(std::move(floorVertices)), ground, {0, 0, 0}, {12, 1, 12});
 
-	auto targetAreaMaterial = std::make_shared<Material>(shader);
+	std::shared_ptr<Material> targetAreaMaterial = std::make_shared<Material>(shader);
 	targetAreaMaterial->color = {0.12f, 0.55f, 0.45f};
 	constexpr float TargetPlateHalfThickness = 0.04f;
 	AddProp("Target spawn plate", cube, targetAreaMaterial, {0, TargetPlateHalfThickness, 0},
 		{TargetAreaHalfSize, TargetPlateHalfThickness, TargetAreaHalfSize});
 
-	auto areaMaterial = std::make_shared<Material>(shader);
+	std::shared_ptr<Material> areaMaterial = std::make_shared<Material>(shader);
 	areaMaterial->color = {0.68f, 0.78f, 0.88f};
 
 	constexpr float AreaInnerHalfSize = 2.0f;
@@ -85,15 +85,15 @@ void ShootingScene::Initialize()
 
 	std::vector<Vertex> areaVertices;
 	areaVertices.reserve(cube->GetVertices().size() * areaParts.size());
-	for (const auto& part : areaParts)
+	for (const AreaPart& part : areaParts)
 	{
-		for (auto vertex : cube->GetVertices())
+		for (Vertex vertex : cube->GetVertices())
 		{
 			vertex.position = part.offset + vertex.position * part.halfSize;
 			areaVertices.push_back(vertex);
 		}
 	}
-	const auto areaMesh = std::make_shared<Mesh>(std::move(areaVertices));
+	std::shared_ptr<Mesh> areaMesh = std::make_shared<Mesh>(std::move(areaVertices));
 
 	constexpr float AreaDistance = 9.0f;
 	const glm::vec3 southArea{0, 0, AreaDistance};
@@ -106,20 +106,20 @@ void ShootingScene::Initialize()
 	for (const auto& [name, center] : playerAreas)
 	{
 		AddProp(name, areaMesh, areaMaterial, center, glm::vec3(1.0f));
-		for (const auto& part : areaParts)
+		for (const AreaPart& part : areaParts)
 		{
 			if (part.solid)
 			{
-				auto* wall = AddProp(name, cube, areaMaterial, center + part.offset, part.halfSize, true);
+				Object* wall = AddProp(name, cube, areaMaterial, center + part.offset, part.halfSize, true);
 				wall->visible = false;
 			}
 		}
 	}
 
-	auto playerMaterial = std::make_shared<Material>(shader);
+	std::shared_ptr<Material> playerMaterial = std::make_shared<Material>(shader);
 	playerMaterial->color = {0.8f, 0.8f, 0.2f};
 
-	auto player = std::make_unique<Player>(cube, playerMaterial);
+	std::unique_ptr<Player> player = std::make_unique<Player>(cube, playerMaterial);
 	player_ = player.get();
 	player->name = "Local player";
 	player->transform.position = southArea + glm::vec3(0, 1, 0);
@@ -128,10 +128,10 @@ void ShootingScene::Initialize()
 	AddObject(std::move(player));
 	player_->UpdateCamera(camera_);
 
-	auto gunMaterial = std::make_shared<Material>(shader);
+	std::shared_ptr<Material> gunMaterial = std::make_shared<Material>(shader);
 	gunMaterial->color = glm::vec3(0.2f);
 
-	auto gun = std::make_unique<Gun>(assets_.LoadMesh("Resources/Meshes/Pistol.obj"), gunMaterial);
+	std::unique_ptr<Gun> gun = std::make_unique<Gun>(assets_.LoadMesh("Resources/Meshes/Pistol.obj"), gunMaterial);
 	gun_ = gun.get();
 	gun->name = "Pistol";
 	gun->transform.scale = glm::vec3(0.025f);
@@ -160,7 +160,7 @@ void ShootingScene::Update(float deltaTime, const Input& input)
 		debugColliders = !debugColliders;
 	}
 
-	const bool wasPlaying = stages_.GetState() == StageState::Playing;
+	bool wasPlaying = stages_.GetState() == StageState::Playing;
 	const StageEvents events = stages_.Update(deltaTime);
 
 	if (events.clearTargets)
@@ -218,7 +218,7 @@ void ShootingScene::SpawnTargets()
 	std::uniform_real_distribution<float> horizontal(-SpawnHalfSize, SpawnHalfSize);
 	std::uniform_real_distribution<float> height(0.5f, 2.0f);
 
-	auto target = std::make_unique<Target>(targetMesh_, targetMaterial_);
+	std::unique_ptr<Target> target = std::make_unique<Target>(targetMesh_, targetMaterial_);
 	target->transform.position = {horizontal(random_), height(random_), horizontal(random_)};
 	target->transform.scale = glm::vec3(TargetScale);
 	target->collider = ColliderType::Sphere;
@@ -236,7 +236,7 @@ void ShootingScene::RemoveDestroyedTargets()
 	{
 		if ((*it)->IsPendingDestroy())
 		{
-			const uint32_t id = (*it)->GetId();
+			uint32_t id = (*it)->GetId();
 			it = targets_.erase(it);
 			RemoveObject(id);
 		}
@@ -249,7 +249,7 @@ void ShootingScene::RemoveDestroyedTargets()
 
 void ShootingScene::ClearTargets()
 {
-	for (auto* target : targets_)
+	for (Target* target : targets_)
 	{
 		RemoveObject(target->GetId());
 	}
@@ -264,7 +264,7 @@ void ShootingScene::Shoot()
 
 	// 원본은 마지막 광선을 유지하고 매 업데이트마다 등록 순서의 첫 표적을 검사합니다.
 
-	for (auto* target : targets_)
+	for (Target* target : targets_)
 	{
 		float distance = 0.0f;
 

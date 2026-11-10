@@ -7,10 +7,11 @@ public:
 	bool ApplyMovement(const Net::PlayerTransform& input, const Net::AreaData& area,
 		const std::vector<Net::BoxData>& obstacles, Net::ServerTimeMs receivedAtMs);
 
-	Net::PlayerData state;
-	Net::Sequence lastProcessedInput = 0;
-	bool hasProcessedInput = false;
-	Net::Mat4Data lastProcessedTransform;
-	Net::ServerTimeMs lastMovementBudgetMs = 0;
+	Net::PlayerData		m_PlayerData;
+
+	Net::Sequence		m_nLastProcessedInput = 0;
+	Net::ServerTimeMs	m_nLastMovementTimeMs = 0;
+	Net::Mat4Data		m_mtx4LastProcessedTransform;
+	bool				m_bHasProcessedInput = false;
 };
 

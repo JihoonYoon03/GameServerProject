@@ -3,14 +3,14 @@
 
 Gun::Gun(std::shared_ptr<Mesh> mesh, std::shared_ptr<Material> material)
 	: Object(mesh, material),
-	m_fFireInterval			(0.0f),
-	m_fReloadTime			(0.0f),
-	m_nAmmo					(Net::MagazineCapacity),
-	m_fRecoilTimeElapsed	(0.0f),
-	m_fRecoilProgress		(0.0f),
-	m_bIsRecoiling			(false),
-	m_bIsReloading			(false),
-	m_mtx4CameraPivot		(glm::mat4x4{})
+	m_fFireCooldown(0.0f),
+	m_fReloadRemainingTime(0.0f),
+	m_nAmmo(Net::MagazineCapacity),
+	m_bIsReloading(false),
+	m_fRecoilElapsedTime(0.0f),
+	m_fRecoilProgress(0.0f),
+	m_bIsRecoiling(false),
+	m_mtx4CameraPivot(glm::mat4x4{})
 {
 }
 
@@ -21,22 +21,22 @@ Gun::~Gun()
 void Gun::Update(float deltaTime)
 {
 	//발사 속도
-	if (m_fFireInterval > 0.0f)
+	if (m_fFireCooldown > 0.0f)
 	{
-		m_fFireInterval -= deltaTime;
+		m_fFireCooldown -= deltaTime;
 
-		if (m_fFireInterval < 0.0f)
-			m_fFireInterval = 0.0f;
+		if (m_fFireCooldown < 0.0f)
+			m_fFireCooldown = 0.0f;
 	}
 
 	//재장전
-	if (m_fReloadTime > 0.0f)
+	if (m_fReloadRemainingTime > 0.0f)
 	{
-		m_fReloadTime -= deltaTime;
+		m_fReloadRemainingTime -= deltaTime;
 
-		if (m_fReloadTime < 0.0f)
+		if (m_fReloadRemainingTime < 0.0f)
 		{
-			m_fReloadTime = 0.0f;
+			m_fReloadRemainingTime = 0.0f;
 			m_nAmmo = Net::MagazineCapacity;
 		}
 	}
@@ -45,16 +45,43 @@ void Gun::Update(float deltaTime)
 	if (m_bIsRecoiling)
 	{
 		//반동 진행 시간에 따라 두 구간으로 나누고, 해당 구간의 몇%가 지나는지 recoilAmount에 저장
-		m_fRecoilProgress = m_fRecoilTimeElapsed < 0.05f ? m_fRecoilTimeElapsed / 0.05f : (1.0f - m_fRecoilTimeElapsed) / 0.95f;
+		m_fRecoilProgress = m_fRecoilElapsedTime < 0.05f ? m_fRecoilElapsedTime / 0.05f : (1.0f - m_fRecoilElapsedTime) / 0.95f;
 		//반동 진행 시간 갱신.
-		m_fRecoilTimeElapsed = std::min(1.0f, m_fRecoilTimeElapsed + deltaTime * Net::RecoilAnimSpeed);
+		m_fRecoilElapsedTime = std::min(1.0f, m_fRecoilElapsedTime + deltaTime * Net::RecoilAnimSpeed);
 
-		if (m_fRecoilTimeElapsed >= 1.0f)
+		if (m_fRecoilElapsedTime >= 1.0f)
 		{
 			m_bIsRecoiling = false;
-			m_fRecoilTimeElapsed = 0.0f;
+			m_fRecoilElapsedTime = 0.0f;
 		}
 	}
+}
+
+bool Gun::Fire()
+{
+	//현재는 Fire과 TryFire를 나눈 의미가 크게 없음. 추후에 기능 추가?
+	return TryFire();
+}
+
+bool Gun::TryFire()
+{
+	if (m_fFireCooldown > 0.0f) return false;
+	if (m_nAmmo == 0)
+	{
+		if (m_fReloadRemainingTime == 0.0f)
+			m_fReloadRemainingTime = Net::ReloadSeconds;
+
+		return false;
+	}
+
+	--m_nAmmo;
+	m_fFireCooldown = Net::FireIntervalSeconds;
+
+	m_bIsRecoiling = true;
+	m_fRecoilElapsedTime = 0.0f;
+	m_fRecoilProgress = 0.0f;
+
+	return true;
 }
 
 void Gun::FollowCamera(const Camera& camera)
@@ -79,31 +106,4 @@ glm::mat4 Gun::GetModelMatrix() const
 	animation = glm::translate(animation, localPosition);
 
 	return m_mtx4CameraPivot * transform.GetMatrix() * animation;
-}
-
-bool Gun::Fire()
-{
-	//현재는 Fire과 TryFire를 나눈 의미가 크게 없음. 추후에 기능 추가?
-	return TryFire();
-}
-
-bool Gun::TryFire()
-{
-	if (m_fFireInterval > 0.0f) return false;
-	if (m_nAmmo == 0)
-	{
-		if (m_fReloadTime == 0.0f)
-			m_fReloadTime = Net::ReloadSeconds;
-
-		return false;
-	}
-
-	--m_nAmmo;
-	m_fFireInterval = Net::FireIntervalSeconds;
-
-	m_bIsRecoiling = true;
-	m_fRecoilTimeElapsed = 0.0f;
-	m_fRecoilProgress = 0.0f;
-
-	return true;
 }

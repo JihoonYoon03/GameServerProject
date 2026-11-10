@@ -12,11 +12,6 @@
 #include "StageController.h"
 #include <atomic>
 #include <queue>
-#include <functional>
-#include <utility>
-
-// 경기 상태는 이 방의 스레드에서만 변경한다. 외부 요청은 AddCommand()로 전달한다.
-class RoomManager;
 
 class Room
 {
@@ -28,8 +23,6 @@ public:
 		Net::MembershipId membershipId = 0;
 	};
 	using PacketSender = Net::PacketSender;
-	using CommandHandler = std::function<void(const Net::RoomCommand&)>;
-	using TickHandler = std::function<void()>;
 
 	Room();
 	Room(Net::MatchContext context, Target& targets,
@@ -52,25 +45,11 @@ public:
 	bool AreAllPlayersReady() const;
 	void StartGameIfReady();
 
-	// 관리 스레드는 방 스레드를 시작하기 전에 콜백을 설정한다.
-	void SetHandlers(CommandHandler commandHandler, TickHandler tickHandler);
-
-	// 방 스레드는 큐에 쌓인 명령을 처리한 뒤 한 번의 갱신을 진행한다.
-	void Tick();
-
-	// 관리 스레드가 방 스레드를 시작한다.
-	void StartRoomThread();
-
+	// The thread owner must wait for RoomProc to finish before destroying the room.
+	static DWORD WINAPI RoomProc(LPVOID parameter);
+	void RequestStop();
 	void AddCommand(const Net::RoomCommand& command);
-	void ProcessCommands();
 
-	// 방 스레드는 종료만 요청한다. 관리 스레드는 종료를 기다린 뒤 정리한다.
-	void StopRoom();
-
-	//방에서 플레이어 이동 요청 받음
-	//UpdatePlayerTransform에 넘김?
-	void RecvPlayerInput(const Net::SessionToken& player,
-		const Net::PlayerTransform& input, Net::ServerTimeMs receivedAtMs);
 	bool UpdatePlayerTransform(const Net::SessionToken& player,
 		const Net::PlayerTransform& input, Net::ServerTimeMs receivedAtMs);
 	void SendTransformData();
@@ -82,21 +61,22 @@ public:
 	// 활성 표적 전체 목록을 동일 시점 기준으로 나눠 UDP 전송한다.
 	void SendTargetPositions(Net::ServerTimeMs nowMs);
 private:
+	void Tick();
+	void ProcessCommands();
+
 	// 경기 상태는 방 스레드만 바꾼다.
 	Net::RoomStateData m_state{};
 	std::vector<ClientPlayer> m_vPlayers;
 	Target targetController_;
 	StageController stageController_;
-	RoomManager* manager_ = nullptr;
 	std::vector<Net::BoxData> m_vWorldBoxes;
-	static DWORD WINAPI RoomProc(LPVOID parameter);
-	HANDLE roomThread_ = nullptr;
-	std::atomic<DWORD> roomThreadId_{0};
+
 	std::atomic<bool> stopRequested_{false};
+	//방마다 임계 영역이 필요한 이유: 서버 메인 쓰레드가 패킷을 받아 방의 큐에 넣어주고,
+	//방 쓰레드는 ProcessCommands에서 해당 큐를 사용하기 때문
 	CRITICAL_SECTION commandCS_{}; // 사용 전 초기화하고 스레드 종료 대기 후 해제한다.
 	std::queue<Net::RoomCommand> commandQueue_;
-	CommandHandler commandHandler_;
-	TickHandler tickHandler_;
+
 	Target* targets_ = &targetController_; // 주입된 표적 관리자는 방보다 오래 유지되어야 한다.
 	std::vector<TargetRecipient> targetRecipients_;
 	PacketSender sendPacket_;

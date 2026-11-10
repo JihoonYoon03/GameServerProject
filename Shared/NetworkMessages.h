@@ -1,4 +1,4 @@
-ï»¿#pragma once
+#pragma once
 #include "NetworkPackets.h"
 #include <variant>
 #include <functional>
@@ -7,7 +7,7 @@ namespace Net
 {
     enum class PacketTransport : std::uint8_t { Tcp, Udp };
 
-    // TCP ë˜ëŠ” UDP í—¤ë”ê¹Œì§€ í¬í•¨í•œ ì§ë ¬í™” ê²°ê³¼. ì†Œì¼“ ì†¡ì‹ ì— ì‚¬ìš©í•  ë°”ì´íŠ¸ ëª©ë¡ì´ë‹¤.
+    // TCP ¶Ç´Â UDP Çì´õ±îÁö Æ÷ÇÔÇÑ Á÷·ÄÈ­ °á°ú. ¼ÒÄÏ ¼Û½Å¿¡ »ç¿ëÇÒ ¹ÙÀÌÆ® ¸ñ·ÏÀÌ´Ù.
     struct PacketData
     {
         PacketTransport transport = PacketTransport::Tcp;
@@ -20,14 +20,14 @@ namespace Net
         PacketData packet;
     };
 
-    // ì™„ì„± íŒ¨í‚·ì„ ì†¡ì‹  íì— ì „ë‹¬í•œë‹¤. íì˜ ì ê¸ˆì€ ìˆ˜ì‹  ì¸¡ì´ ê´€ë¦¬í•œë‹¤.
+    // ¿Ï¼º ÆĞÅ¶À» ¼Û½Å Å¥¿¡ Àü´ŞÇÑ´Ù. Å¥ÀÇ Àá±İÀº ¼ö½Å ÃøÀÌ °ü¸®ÇÑ´Ù.
     using PacketSender = std::function<bool(const SendRequest&)>;
 
     struct RoomEnterCommand { bool UDPRegistered = false; };
     struct ClientDisconnected {};
 
-    // ì„œë²„ëŠ” TCP ì—°ê²° ë˜ëŠ” ë“±ë¡ëœ UDP ì£¼ì†Œë¡œ ë°œì‹ ìë¥¼ í™•ì¸í•œ ë’¤ í† í°ì„ ì±„ìš´ë‹¤.
-    // ìš”ì²­ ë³¸ë¬¸ì— ì íŒ í† í°ë§Œ ì‹ ë¢°í•˜ì§€ ì•Šìœ¼ë©°, ë°© ìŠ¤ë ˆë“œëŠ” ëª…ë ¹ íë¥¼ í†µí•´ ìš”ì²­ì„ ì²˜ë¦¬í•œë‹¤.
+    // ¼­¹ö´Â TCP ¿¬°á ¶Ç´Â µî·ÏµÈ UDP ÁÖ¼Ò·Î ¹ß½ÅÀÚ¸¦ È®ÀÎÇÑ µÚ ÅäÅ«À» Ã¤¿î´Ù.
+    // ¿äÃ» º»¹®¿¡ ÀûÈù ÅäÅ«¸¸ ½Å·ÚÇÏÁö ¾ÊÀ¸¸ç, ¹æ ½º·¹µå´Â ¸í·É Å¥¸¦ ÅëÇØ ¿äÃ»À» Ã³¸®ÇÑ´Ù.
     struct RoomCommand
     {
         SessionToken sessionToken{};
@@ -35,6 +35,7 @@ namespace Net
         MatchContext context;
         MembershipId membershipId = 0;
         ServerTimeMs receivedAtMs = 0;
+        //std::variant¸¦ ÅëÇØ unionÃ³·³ µ¿ÀÛÇÔ. ¹æ ³»ºÎ¿¡¼­ Å¬¶óÀÌ¾ğÆ®°¡ º¸³»´Â ¿äÃ» Å¸ÀÔ¿¡ µû¶ó ¹Ù²ñ
         std::variant<RoomEnterCommand, LeaveRoomRequest, MapLoaded,
             ReadyChangeRequest, PlayerTransform, FireRequest, ClientDisconnected> body;
     };

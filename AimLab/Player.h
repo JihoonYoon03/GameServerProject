@@ -19,21 +19,26 @@ class Player : public Object
 {
 public:
 	using Object::Object;
+
 	void ApplyCommand(const PlayerCommand& command, float deltaTime, const Scene& scene);
 	void UpdateCamera(Camera& camera) const;
 	glm::mat4 GetModelMatrix() const override;
-	float yaw = 0.0f;
-	float pitch = 0.0f;
-	float moveSpeed = Net::PlayerMoveSpeed;
-	float sensitivity = 0.2f;
 
-	// 화면 객체 ID와 네트워크 세션 토큰은 서로 다른 식별자이다.
-	Net::SessionToken sessionToken{};
 	Net::Mat4Data GetNetworkTransform() const;
 	bool ApplyNetworkTransform(const Net::Mat4Data& value);
 
+	float	m_fYaw = 0.0f;
+	float	m_fPitch = 0.0f;
+
+	float	m_fMoveSpeed = Net::PlayerMoveSpeed;
+	float	m_fSensitivity = 0.2f;
+
+	// 화면 객체 ID와 네트워크 세션 토큰은 서로 다른 식별자이다.
+	Net::SessionToken m_SessionToken{};
+
 private:
-	glm::vec3 eyePosition_{0.0f};
-	glm::vec3 lastDisplacement_{0.0f};
-	bool	  eyeInitialized_ = false;
+	glm::vec3	m_vec3EyePosition{0.0f};
+	bool		m_bEyeInitialized = false;
+
+	glm::vec3	m_vec3LastDisplacement{0.0f};
 };

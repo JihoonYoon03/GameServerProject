@@ -3,6 +3,8 @@
 #include "../Shared/PacketCodec.h"
 
 #include <algorithm>
+#include <utility>
+#include <variant>
 
 Room::Room()
 {
@@ -21,37 +23,12 @@ Room::Room(Net::MatchContext context, Target& targets,
 
 Room::~Room()
 {
-	StopRoom();
 	DeleteCriticalSection(&commandCS_);
-}
-
-void Room::SetHandlers(CommandHandler commandHandler, TickHandler tickHandler)
-{
-	if (roomThread_ != nullptr)
-		return;
-
-	commandHandler_ = std::move(commandHandler);
-	tickHandler_ = std::move(tickHandler);
-}
-
-void Room::StartRoomThread()
-{
-	if (roomThread_ != nullptr)
-		return;
-
-	stopRequested_ = false;
-	roomThread_ = CreateThread(nullptr, 0, RoomProc, this, 0, nullptr);
-	if (roomThread_ == nullptr)
-	{
-		stopRequested_ = true;
-		err_display(static_cast<int>(GetLastError()));
-	}
 }
 
 DWORD WINAPI Room::RoomProc(LPVOID parameter)
 {
 	Room* room = static_cast<Room*>(parameter);
-	room->roomThreadId_ = GetCurrentThreadId();
 	DWORD result = 0;
 	const DWORD intervalMs = 1000 / Net::ServerTickRate;
 	const DWORD remainderMs = 1000 % Net::ServerTickRate;
@@ -66,7 +43,7 @@ DWORD WINAPI Room::RoomProc(LPVOID parameter)
 		}
 		catch (...)
 		{
-			room->stopRequested_ = true;
+			room->RequestStop();
 			fputs("방 갱신 중 예외가 발생하여 방 스레드를 종료합니다.\n", stderr);
 			result = 1;
 			break;
@@ -87,8 +64,12 @@ DWORD WINAPI Room::RoomProc(LPVOID parameter)
 		else if (now > nextTick + intervalMs)
 			nextTick = now; // 늦어진 갱신을 한꺼번에 반복하지 않는다.
 	}
-	room->roomThreadId_ = 0;
 	return result;
+}
+
+void Room::RequestStop()
+{
+	stopRequested_ = true;
 }
 
 void Room::AddCommand(const Net::RoomCommand& command)
@@ -110,15 +91,26 @@ void Room::AddCommand(const Net::RoomCommand& command)
 void Room::ProcessCommands()
 {
 	// 콜백이 새 명령을 넣을 수 있도록 큐를 옮긴 뒤 잠금을 푼다.
+	//임계 영역에서 큐의 데이터만 뽑아온 뒤 원래대로 통신받을 수 있도록 하기 위함
 	std::queue<Net::RoomCommand> commands;
 	EnterCriticalSection(&commandCS_);
 	commands.swap(commandQueue_);
 	LeaveCriticalSection(&commandCS_);
 
+	//현재 while문 안에는 플레이어 이동 처리만 담당중임.
 	while (!commands.empty() && !stopRequested_)
 	{
-		if (commandHandler_)
-			commandHandler_(commands.front());
+		//큐에서 요청 하나 읽은 뒤
+		Net::RoomCommand& command = commands.front();
+		//명령이 PlayerTransform이 맞을 때 Get
+		Net::PlayerTransform* input = std::get_if<Net::PlayerTransform>(&command.body);
+		//방 ID와 매치 ID를 가져온 뒤
+		Net::MatchContext& context = m_state.version.context;
+		//명령 가져오기 성공 && 방과 매칭 ID 정보가 같을 때 플레이어의 이동 요청을 처리함
+		if (input && command.context.roomId == context.roomId && command.context.matchId == context.matchId)
+			UpdatePlayerTransform(command.sessionToken, *input, command.receivedAtMs);
+
+		//읽은 요청 pop
 		commands.pop();
 	}
 }
@@ -126,35 +118,6 @@ void Room::ProcessCommands()
 void Room::Tick()
 {
 	ProcessCommands();
-	if (!stopRequested_ && tickHandler_)
-		tickHandler_();
-}
-
-void Room::StopRoom()
-{
-	stopRequested_ = true;
-	// 방 스레드는 자기 종료를 기다리지 않는다. 핸들은 관리 스레드가 정리한다.
-	if (roomThreadId_ == GetCurrentThreadId())
-		return;
-
-	if (roomThread_ != nullptr)
-	{
-		WaitForSingleObject(roomThread_, INFINITE);
-		CloseHandle(roomThread_);
-		roomThread_ = nullptr;
-	}
-
-	// 방 스레드가 종료된 뒤 아직 처리하지 않은 명령을 비운다.
-	EnterCriticalSection(&commandCS_);
-	while (!commandQueue_.empty())
-		commandQueue_.pop();
-	LeaveCriticalSection(&commandCS_);
-}
-
-void Room::RecvPlayerInput(const Net::SessionToken& player,
-	const Net::PlayerTransform& input, Net::ServerTimeMs receivedAtMs)
-{
-	UpdatePlayerTransform(player, input, receivedAtMs);
 }
 
 bool Room::UpdatePlayerTransform(const Net::SessionToken& token,
@@ -167,7 +130,7 @@ bool Room::UpdatePlayerTransform(const Net::SessionToken& token,
 	//토큰과 일치하는 플레이어 찾기
 	const auto player = std::find_if(m_vPlayers.begin(), m_vPlayers.end(), [&](const ClientPlayer& entry)
 	{
-		return entry.state.m_sessionToken == token;
+		return entry.m_PlayerData.m_sessionToken == token;
 	});
 	if (player == m_vPlayers.end())
 		return false;
@@ -175,7 +138,7 @@ bool Room::UpdatePlayerTransform(const Net::SessionToken& token,
 	//찾은 플레이어가 배정받은 구역과 일치하는 구역 탐색(이동 구역 경계 제한을 위해)
 	const auto area = std::find_if(m_state.vAreas.begin(), m_state.vAreas.end(), [&](const Net::AreaData& entry)
 	{
-		return entry.areaId == player->state.areaId;
+		return entry.areaId == player->m_PlayerData.areaId;
 	});
 
 	//구역 탐색 성공한 경우 이동 계산 후 리턴

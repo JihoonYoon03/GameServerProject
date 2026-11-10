@@ -7,14 +7,17 @@
 class Target
 {
 public:
-	// ê²½ê¸° ì§„í–‰ ì¤‘ í‘œì  ìƒì„± ì£¼ê¸°ë§ˆë‹¤ í•œ ë²ˆ í˜¸ì¶œí•œë‹¤.
+	// °æ±â ÁøÇà Áß Ç¥Àû »ı¼º ÁÖ±â¸¶´Ù ÇÑ ¹ø È£ÃâÇÑ´Ù.
 	void SpawnTargets(const Net::MatchRules& rules, Net::ServerTimeMs nowMs);
 	void UpdateTargets(float deltaTime, Net::ServerTimeMs nowMs);
-	bool TargetHits(Net::TargetId targetId, Net::ServerTimeMs nowMs);
+	bool TargetHits(const Net::Vec3Data& shooterPosition, const Net::Vec3Data& aimDirection);
 	void ClearTargets();
 	std::vector<Net::TargetMotionData> GetActiveTargets(Net::ServerTimeMs nowMs) const;
 
 private:
+	void SpawnTargets(Net::ServerTimeMs nowMs);
+	void ClearTarget(Net::TargetId targetId);
+
 	struct ActiveTarget
 	{
 		Net::TargetId targetId;

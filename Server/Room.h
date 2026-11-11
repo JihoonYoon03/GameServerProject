@@ -52,6 +52,7 @@ public:
 
 	bool UpdatePlayerTransform(const Net::SessionToken& player,
 		const Net::PlayerTransform& input, Net::ServerTimeMs receivedAtMs);
+	// 방 스레드에서 전체 플레이어의 서버 확정 위치와 마지막 처리 입력 순번을 송신한다.
 	void SendTransformData();
 
 	void RecvShoot(const Net::SessionToken& player, const Net::FireRequest& request);
@@ -79,7 +80,8 @@ private:
 
 	Target* targets_ = &targetController_; // 주입된 표적 관리자는 방보다 오래 유지되어야 한다.
 	std::vector<TargetRecipient> targetRecipients_;
-	PacketSender sendPacket_;
-	Net::Sequence targetSnapshotSequence_ = 0;
+	PacketSender m_fSendPacket;
+	//플레이어·표적 스냅샷은 같은 UDP 순번을 사용한다.
+	Net::Sequence m_nSnapshotSequence = 0;
 };
 

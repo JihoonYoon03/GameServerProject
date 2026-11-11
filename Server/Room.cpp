@@ -29,7 +29,7 @@ Room::Room(Net::MatchContext context, Target& targets,
 	m_state.version.context = context;
 	targets_ = &targets;
 	targetRecipients_ = std::move(recipients);
-	sendPacket_ = std::move(sender);
+	m_fSendPacket = std::move(sender);
 }
 
 Room::~Room()
@@ -367,7 +367,7 @@ void Room::ProcessCommand(const Net::RoomCommand& command)
 void Room::Tick()
 {
 	ProcessCommands();
-	// 이성노 후속 연결: 경기 틱 갱신과 SendTargetPositions 호출을 연결한다.
+	SendTransformData();
 }
 
 bool Room::UpdatePlayerTransform(const Net::SessionToken& token,
@@ -395,10 +395,62 @@ bool Room::UpdatePlayerTransform(const Net::SessionToken& token,
 	return area != m_state.vAreas.end() && player->ApplyMovement(input, *area, m_vWorldBoxes, receivedAtMs);
 }
 
+void Room::SendTransformData()
+{
+	const Net::MatchContext& context = m_state.version.context;
+	if (stopRequested_ || m_state.state != Net::GameState::Playing ||
+		!m_fSendPacket || targetRecipients_.empty() || context.roomId == 0 || context.matchId == 0 ||
+		m_vPlayers.size() > Net::MaxPlayers)
+		return;
+
+	//스냅샷(순간적인 방의 상태)을 생성한 서버시각
+	Net::ServerTimeMs nowMs = GetTickCount64();
+	Net::UdpPacket<Net::PlayerSnapshot> snapshot;
+
+	//data는 패킷의 실제 데이터 부분을 레퍼런스로 갖는 변수임.
+	Net::PlayerSnapshot& data = snapshot.packetData;
+	data.serverTimeMs = nowMs;
+	//리비전 = 방 상태 갱신 순번
+	//클라 입장에서 패킷 데이터를 받아 변환한 뒤, 리비전을 먼저 체크해서
+	//클라가 기록한 마지막 방 상태 순번보다 이전 순번인 경우 => 이후 처리는 하지 않음
+	data.requiredRevision = m_state.version.revision;
+	data.playerCount = static_cast<std::uint8_t>(m_vPlayers.size());
+
+	//서버 이동·충돌 처리가 끝난 실제 플레이어 데이터를 기록
+	for (size_t index = 0; index < m_vPlayers.size(); ++index)
+	{
+		//토큰
+		data.players[index].m_sessionToken = m_vPlayers[index].m_PlayerData.m_sessionToken;
+		//현재 변환 상태
+		data.players[index].pose = m_vPlayers[index].m_PlayerData.pose;
+		//마지막으로 처리한 이동 요청 순번
+		data.players[index].lastProcessedInput = m_vPlayers[index].m_nLastProcessedInput;
+	}
+
+	//헤더 설정
+	snapshot.header.type = Net::UdpType::PlayerSnapshot;
+	snapshot.header.context = context;
+	snapshot.header.sequence = ++m_nSnapshotSequence;
+	snapshot.header.serverTick = static_cast<std::uint32_t>(nowMs * Net::ServerTickRate / 1000);
+
+	// 본문은 동일하고, 헤더의 수신자 토큰과 재입장 식별자만 각 접속자에 맞춘다.
+	for (const TargetRecipient& recipient : targetRecipients_)
+	{
+		snapshot.header.m_sessionToken = recipient.sessionToken;
+		snapshot.header.membershipId = recipient.membershipId;
+		Net::SendRequest request{recipient.sessionToken, {}};
+
+		//데이터 네트워크 바이트로 변환하여 저장
+		if (Net::PacketCodec::EncodeUdp(snapshot, request.packet))
+			//전송
+			m_fSendPacket(request);
+	}
+}
+
 void Room::SendTargetPositions(Net::ServerTimeMs nowMs)
 {
 	const Net::MatchContext& context = m_state.version.context;
-	if (!sendPacket_ || targetRecipients_.empty() || context.roomId == 0 || context.matchId == 0)
+	if (!m_fSendPacket || targetRecipients_.empty() || context.roomId == 0 || context.matchId == 0)
 		return;
 
 	std::vector<Net::TargetMotionData> activeTargets = targets_->GetActiveTargets(nowMs);
@@ -409,7 +461,7 @@ void Room::SendTargetPositions(Net::ServerTimeMs nowMs)
 	Net::UdpHeader& header = snapshot.header;
 	header.type = Net::UdpType::TargetSnapshot;
 	header.context = context;
-	header.sequence = ++targetSnapshotSequence_;
+	header.sequence = ++m_nSnapshotSequence;
 	header.serverTick = static_cast<std::uint32_t>(nowMs * Net::ServerTickRate / 1000);
 
 	for (const TargetRecipient& recipient : targetRecipients_)
@@ -418,6 +470,6 @@ void Room::SendTargetPositions(Net::ServerTimeMs nowMs)
 		header.membershipId = recipient.membershipId;
 		Net::SendRequest request{recipient.sessionToken, {}};
 		if (Net::PacketCodec::EncodeUdp(snapshot, request.packet))
-			sendPacket_(request);
+			m_fSendPacket(request);
 	}
 }

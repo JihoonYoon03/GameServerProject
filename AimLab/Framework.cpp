@@ -1,5 +1,8 @@
 #include "pch.h"
 #include "Framework.h"
+#include "NetworkClient.h"
+#include "ShootingScene.h"
+#include "../Shared/PacketCodec.h"
 
 Framework* Framework::current_ = nullptr;
 
@@ -72,7 +75,11 @@ int Framework::Run(int argc, char** argv, std::unique_ptr<Scene> scene)
 		glEnable(GL_CULL_FACE);
 		glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
 		scene_ = std::move(scene);
-		scene_->Initialize();
+		if (network_ == nullptr)
+		{
+			scene_->Initialize();
+			sceneInitialized_ = true;
+		}
 
 		glutDisplayFunc(DisplayCallback);
 		glutReshapeFunc(ReshapeCallback);
@@ -95,6 +102,7 @@ int Framework::Run(int argc, char** argv, std::unique_ptr<Scene> scene)
 
 	// OpenGL 컨텍스트가 살아 있을 때 GPU 자원을 먼저 해제합니다.
 	scene_.reset();
+	sceneInitialized_ = false;
 
 	if (window_ > 0)
 	{
@@ -114,6 +122,23 @@ void Framework::Tick()
 	float elapsed = std::chrono::duration<float>(now - previousTime_).count();
 	previousTime_ = now;
 
+	if (network_ != nullptr)
+	{
+		UpdateConnection();
+		if (network_->IsDisconnected())
+		{
+			std::cerr << "서버 연결이 종료되었습니다.\n";
+			exitCode_ = 1;
+			Close();
+			return;
+		}
+	}
+	if (!sceneInitialized_)
+	{
+		input_.EndFrame();
+		return;
+	}
+
 	scene_->Update(elapsed, input_);
 	input_.EndFrame();
 
@@ -123,6 +148,77 @@ void Framework::Tick()
 	}
 
 	glutPostRedisplay();
+}
+
+void Framework::UpdateConnection()
+{
+	network_->UpdateNetwork();
+	ShootingScene* shooting = dynamic_cast<ShootingScene*>(scene_.get());
+	if (shooting == nullptr)
+		throw std::runtime_error("1인 접속에 필요한 사격장 장면이 없습니다.");
+
+	for (const Net::PacketData& packet : network_->GetReceivedPackets())
+	{
+		if (packet.transport != Net::PacketTransport::Tcp)
+		{
+			// 윤지훈·이성노 연결 필요: 검증된 위치·표적 목록을 각 화면 반영 함수에 전달한다.
+			continue;
+		}
+		Net::TcpHeader header;
+		if (Net::PacketCodec::ReadTcpHeader(packet.bytes.data(), packet.bytes.size(), header)
+			!= Net::DecodeStatus::Complete)
+			continue;
+		const std::uint8_t* body = packet.bytes.data() + Net::TcpHeaderBytes;
+		std::size_t bodySize = packet.bytes.size() - Net::TcpHeaderBytes;
+		switch (header.type)
+		{
+		case Net::TcpType::RoomEnterResult:
+		{
+			Net::RoomEnterResult result;
+			if (!Net::PacketCodec::DecodeBody(header.type, body, bodySize, result))
+				throw std::runtime_error("방 입장 응답을 읽지 못했습니다.");
+			if (result.result != Net::ErrorCode::Ok)
+				throw std::runtime_error("방 입장 실패: " + std::to_string(static_cast<unsigned int>(result.result)));
+			if (sceneInitialized_)
+				break;
+			if (!shooting->SetNetworkSession(*network_, result))
+				throw std::runtime_error("방 입장 정보가 올바르지 않습니다.");
+
+			// 통신 스레드는 장면을 만지지 않는다. 메인에서 초기화가 끝난 뒤 로딩을 알린다.
+			scene_->Initialize();
+			sceneInitialized_ = true;
+			previousTime_ = std::chrono::steady_clock::now();
+			shooting->SendMapLoaded();
+			std::cout << "1인 방 입장 및 맵 로딩 완료: " << result.room.version.context.roomId << '\n';
+			break;
+		}
+		case Net::TcpType::RoomState:
+		{
+			Net::RoomState state;
+			if (sceneInitialized_ && Net::PacketCodec::DecodeBody(header.type, body, bodySize, state))
+				shooting->OnRoomStateChanged(state.room);
+			break;
+		}
+		case Net::TcpType::GameStarted:
+		{
+			Net::GameStarted event;
+			if (sceneInitialized_ && Net::PacketCodec::DecodeBody(header.type, body, bodySize, event))
+				shooting->OnGameStarted(event);
+			break;
+		}
+		case Net::TcpType::RequestRejected:
+		{
+			Net::RequestRejected result;
+			if (Net::PacketCodec::DecodeBody(header.type, body, bodySize, result)
+				&& result.reason == Net::ErrorCode::RoomNotFound)
+				throw std::runtime_error("참가한 방이 종료되어 요청을 처리할 수 없습니다.");
+			break;
+		}
+		default:
+			// 윤지훈·이성노 연결 필요: 사격 응답·표적·점수·시간·결과를 각 담당 함수에 반영한다.
+			break;
+		}
+	}
 }
 
 void Framework::UploadLights(const Shader& shader) const
@@ -328,9 +424,12 @@ void Framework::Render()
 
 	glViewport(0, 0, width_, height_);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-	DrawObjects();
-	DrawColliders();
-	DrawOverlay();
+	if (sceneInitialized_)
+	{
+		DrawObjects();
+		DrawColliders();
+		DrawOverlay();
+	}
 	glutSwapBuffers();
 }
 
@@ -417,5 +516,6 @@ void Framework::CloseCallback()
 {
 	// 창 X 버튼과 glutLeaveMainLoop 모두 컨텍스트 삭제 전에 이 콜백을 거칩니다.
 	current_->scene_.reset();
+	current_->sceneInitialized_ = false;
 	current_->window_ = 0;
 }

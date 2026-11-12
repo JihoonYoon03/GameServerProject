@@ -2,14 +2,18 @@
 #include "pch.h"
 #include "Scene.h"
 
+class NetworkClient;
+
 // 창, 입력 수집, 시간 루프, 렌더링을 담당합니다. 게임 규칙은 Scene로 전달합니다.
 class Framework
 {
 public:
+	explicit Framework(NetworkClient* network = nullptr) : network_(network) {}
 	int Run(int argc, char** argv, std::unique_ptr<Scene> scene);
 
 private:
 	void Tick();
+	void UpdateConnection();
 	void Render();
 	void DrawObjects();
 	void DrawOverlay();
@@ -29,6 +33,8 @@ private:
 	static void MotionCallback(int x, int y);
 	static void CloseCallback();
 
+	NetworkClient* network_ = nullptr;
+	bool sceneInitialized_ = false;
 	std::unique_ptr<Scene>				  scene_;
 	Input								  input_;
 	int									  window_ = 0;

@@ -7,6 +7,8 @@
 #include "StageController.h"
 #include "Shared/NetworkPackets.h"
 
+class NetworkClient;
+
 class ShootingScene : public Scene
 {
 public:
@@ -15,7 +17,8 @@ public:
 	Hud GetHud() const override;
 	void ApplyPlayerCommand(const PlayerCommand& command, float deltaTime);
 
-	// 멀티플레이 함수 선언. 실제 동작과 네트워크 연결은 이후 담당 일정에서 구현한다.
+	// 세션 제어를 연결하고, 이동·표적·화면 함수는 각 담당 일정에서 구현한다.
+	bool SetNetworkSession(NetworkClient& network, const Net::RoomEnterResult& result);
 	void SendMapLoaded();
 	PlayerCommand ReadPlayerInput(const Input& input) const;
 	void UpdatePlayer(const PlayerCommand& command, float deltaTime);
@@ -38,6 +41,17 @@ public:
 	void ShowGameResult();
 
 private:
+	// 통신 참조와 세션 상태는 장면이 살아 있는 동안 메인 스레드에서만 사용한다.
+	NetworkClient* network_ = nullptr;
+	Net::SessionToken sessionToken_{};
+	Net::MembershipId membershipId_ = 0;
+	Net::RoomStateData roomState_{};
+	bool mapLoadedSent_ = false;
+	Net::MatchId startedMatchId_ = 0;
+	Net::ServerTimeMs serverTimeMs_ = 0;
+	Net::ServerTimeMs startsAtMs_ = 0;
+	Net::ServerTimeMs endsAtMs_ = 0;
+
 	Object* AddProp(const std::string& name, const std::shared_ptr<Mesh>& mesh, const std::shared_ptr<Material>& material, const glm::vec3& position, const glm::vec3& scale, bool solid = false);
 	void SpawnTargets();
 	void RemoveDestroyedTargets();

@@ -1,5 +1,7 @@
 #include "pch.h"
 #include "ShootingScene.h"
+#include "NetworkClient.h"
+#include "../Shared/PacketCodec.h"
 
 namespace
 {
@@ -300,4 +302,83 @@ Hud ShootingScene::GetHud() const
 	}
 
 	return hud;
+}
+
+
+bool ShootingScene::SetNetworkSession(NetworkClient& network, const Net::RoomEnterResult& result)
+{
+	Net::SessionToken token = network.GetSessionToken();
+	if (!Net::IsValidSessionToken(token) || result.result != Net::ErrorCode::Ok
+		|| result.room.version.context.roomId == 0 || result.membershipId == 0)
+		return false;
+
+	bool hasLocalPlayer = false;
+	for (const Net::PlayerData& player : result.room.vPlayers)
+		if (player.m_sessionToken == token)
+			hasLocalPlayer = true;
+	if (!hasLocalPlayer)
+		return false;
+
+	network_ = &network;
+	sessionToken_ = token;
+	membershipId_ = result.membershipId;
+	roomState_ = result.room;
+	mapLoadedSent_ = false;
+	startedMatchId_ = 0;
+	serverTimeMs_ = startsAtMs_ = endsAtMs_ = 0;
+	return true;
+}
+
+void ShootingScene::SendMapLoaded()
+{
+	if (mapLoadedSent_)
+		return;
+	if (network_ == nullptr || !network_->IsConnected()
+		|| roomState_.version.context.roomId == 0 || membershipId_ == 0)
+		throw std::runtime_error("맵 로딩 완료를 보낼 접속 정보가 없습니다.");
+
+	// 장면 초기화가 끝난 메인 스레드에서 한 번만 보낸다.
+	Net::MapLoaded loaded;
+	loaded.roomId = roomState_.version.context.roomId;
+	Net::PacketData packet;
+	if (!Net::PacketCodec::EncodeTcp(loaded, network_->NextRequestId(), packet)
+		|| !network_->SendPacket(packet))
+		throw std::runtime_error("맵 로딩 완료를 보내지 못했습니다.");
+	mapLoadedSent_ = true;
+}
+
+void ShootingScene::OnRoomStateChanged(const Net::RoomStateData& state)
+{
+	if (network_ == nullptr || state.version.context.roomId != roomState_.version.context.roomId
+		|| state.version.context.matchId != roomState_.version.context.matchId
+		|| (state.version.revision != roomState_.version.revision
+			&& !Net::IsNewerSequence(state.version.revision, roomState_.version.revision)))
+		return;
+
+	roomState_ = state;
+	// 다인 참가자·구역 표시는 후속 방 확장 일정에서 연결한다.
+}
+
+void ShootingScene::OnGameStarted(const Net::GameStarted& event)
+{
+	Net::MatchContext current = roomState_.version.context;
+	Net::MatchId matchId = event.version.context.matchId;
+	if (network_ == nullptr || !mapLoadedSent_ || event.version.context.roomId != current.roomId
+		|| matchId == 0 || matchId == startedMatchId_
+		|| (current.matchId != 0 && matchId != current.matchId
+			&& !Net::IsNewerSequence(matchId, current.matchId))
+		|| (event.version.revision != roomState_.version.revision
+			&& !Net::IsNewerSequence(event.version.revision, roomState_.version.revision)))
+		return;
+
+	roomState_.version = event.version;
+	roomState_.state = Net::GameState::Playing;
+	roomState_.rules = event.rules;
+	roomState_.vPlayers = event.players;
+	startedMatchId_ = matchId;
+	serverTimeMs_ = event.serverTimeMs;
+	startsAtMs_ = event.startsAtMs;
+	endsAtMs_ = event.endsAtMs;
+	std::cout << "서버의 1인 경기 시작 응답을 반영했습니다.\n";
+	// 이성노 후속 연결: 서버 경기 상태와 시각을 HUD에 사용한다. 로컬 단계는 시작하지 않는다.
 }

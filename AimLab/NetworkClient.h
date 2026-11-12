@@ -1,43 +1,89 @@
 #pragma once
-#include "Shared/NetworkMessages.h"
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <winsock2.h>
+#include <Windows.h>
+#include "../Shared/NetworkMessages.h"
+#include <atomic>
+#include <queue>
 #include <string>
 
-// 클라이언트 통신 함수 선언. 실제 소켓·통신 스레드 처리는 이후 구현한다.
 class NetworkClient
 {
 public:
-    //여기서 TCP 접속
+    NetworkClient();
+    ~NetworkClient();
+    NetworkClient(const NetworkClient&) = delete;
+    NetworkClient& operator=(const NetworkClient&) = delete;
+
     bool ConnectServer(const std::string& address, std::uint16_t tcpPort);
-    //여기서 토큰으로 UDP 연결 시도
+    // 최초 접속 응답을 받은 통신 스레드가 한 번만 등록한다.
     void RegisterUDP();
     void CompleteConnection(const Net::UdpRegisterResult& result);
     bool StartNetwork();
     void NetworkLoop();
-    // 메인 스레드에서 송신 큐에 추가하고, 실제 송신은 통신 스레드에서 처리한다.
     bool SendPacket(const Net::PacketData& packet);
-    // 메인 스레드에서만 수신 큐를 꺼내 장면에 반영한다.
+    // 메인 스레드에서 검증된 수신 큐를 이번 프레임의 묶음으로 옮긴다.
     void UpdateNetwork();
-    // 종료 요청 후 통신 스레드가 끝났는지 확인하고 연결 자원을 정리한다.
+    // 메인이 통신 스레드의 종료를 기다린 뒤 소켓과 큐를 해제한다.
     void DisconnectServer();
 
+    bool IsConnected() const { return m_UDPRegistered && !m_bStopRequested; }
+    bool IsDisconnected() const { return m_bStopRequested; }
+    // 메인에서만 등록 완료 후 토큰과 이번 프레임의 수신 목록을 읽는다.
+    Net::SessionToken GetSessionToken() const;
+    const std::vector<Net::PacketData>& GetReceivedPackets() const { return m_ReceivedPackets; }
+    std::uint32_t NextRequestId();
+
 private:
-    SOCKET      m_TCPSocket;
-    SOCKET      m_UDPSocket;
+    static DWORD WINAPI NetworkProc(LPVOID parameter);
+    bool ReceiveTcp();
+    void ReceiveUdp();
+    bool ProcessTcpPacket(const Net::PacketData& packet);
+    bool FlushSendQueue();
+    void QueueReceived(const Net::PacketData& packet);
+    void SetReceiveContext(Net::MatchContext context, Net::MembershipId membershipId);
 
-    sockaddr_in         m_ServerAddr;
+    SOCKET m_TCPSocket = INVALID_SOCKET;
+    SOCKET m_UDPSocket = INVALID_SOCKET;
+    sockaddr_in m_ServerTcpAddr{};
+    sockaddr_in m_ServerUdpAddr{};
+    Net::SessionToken m_SessionToken{};
+    HANDLE m_hNetworkThread = nullptr;
+    const DWORD m_ControlThreadId;
+    std::atomic<DWORD> m_NetworkThreadId{0};
+    std::atomic<bool> m_bStopRequested{true};
+    std::atomic<bool> m_UDPRegistered{false};
+    bool m_WinsockStarted = false;
+    bool m_TcpConnecting = false;
+    bool m_HasConnectResult = false;
+    bool m_RegistrationSent = false;
+    Net::Sequence m_RegistrationSequence = 0;
 
-    Net::SessionToken   m_SessionToken;
-    //UDP 등록 여부
-    std::atomic<bool>   m_UDPRegistered{ false };
+    CRITICAL_SECTION m_CSSendQueue;
+    CRITICAL_SECTION m_CSReceiveQueue;
+    std::queue<Net::PacketData> m_qSendQueue;
+    std::queue<Net::PacketData> m_qReceiveQueue;
+    std::vector<Net::PacketData> m_ReceivedPackets;
+    // 방 자동 생성 여부와 다음 요청 번호는 메인 스레드만 바꾼다.
+    bool m_RoomRequested = false;
+    std::uint32_t m_NextRequestId = 1;
+    // 입장 응답을 대조할 요청 번호는 메인과 통신 스레드가 공유한다.
+    std::atomic<std::uint32_t> m_PendingRoomRequestId{0};
+    std::vector<std::uint8_t> m_TcpReceiveBuffer;
+    Net::PacketData m_CurrentSend;
+    bool m_HasCurrentSend = false;
+    std::size_t m_SendOffset = 0;
 
-    //CreateThread에 전달되는 네트워크 쓰레드 함수. static없으면 인자값으로 사용 못 함 주의
-    static DWORD WINAPI NetworkProc(LPVOID param);
-    HANDLE              m_hNetworkThread;
-    //쓰레드 종료 여부
-    std::atomic<bool>   m_bStopRequested{ false };
-
-    //서버에게 줄 데이터와 받은 데이터를 큐에 저장하고
-    //관련 처리 함수에서 일괄적으로 처리함.
-    std::queue<Net::PacketData>    m_qSendQueue;
-    std::queue<Net::PacketData>    m_qReceiveQueue;
+    // 이 상태는 통신 스레드가 TCP 방 응답과 UDP 수신을 비교할 때만 사용한다.
+    Net::MatchContext m_ReceiveContext{};
+    Net::MembershipId m_MembershipId = 0;
+    Net::Sequence m_LastPlayerSequence = 0;
+    Net::Sequence m_LastTargetSequence = 0;
+    bool m_HasPlayerSequence = false;
+    bool m_HasTargetSequence = false;
 };

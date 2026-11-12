@@ -258,14 +258,14 @@ bool NetworkClient::ProcessTcpPacket(const Net::PacketData& packet)
     if (Net::PacketCodec::ReadTcpHeader(packet.bytes.data(), packet.bytes.size(), header) != Net::DecodeStatus::Complete
         || header.size != packet.bytes.size() || (!m_HasConnectResult && header.type != Net::TcpType::ConnectResult))
         return false;
-    const std::uint8_t* body = packet.bytes.data() + Net::TcpHeaderBytes;
+    const std::uint8_t* messageBytes = packet.bytes.data() + Net::TcpHeaderBytes;
     std::size_t size = packet.bytes.size() - Net::TcpHeaderBytes;
     switch (header.type)
     {
     case Net::TcpType::ConnectResult:
     {
         Net::ConnectResult result;
-        if (m_HasConnectResult || !Net::PacketCodec::DecodeBody(header.type, body, size, result))
+        if (m_HasConnectResult || !Net::PacketCodec::ReadMessage(header.type, messageBytes, size, result))
             return false;
         if (result.result != Net::ErrorCode::Ok)
         {
@@ -283,14 +283,7 @@ bool NetworkClient::ProcessTcpPacket(const Net::PacketData& packet)
     case Net::TcpType::RequestRejected:
     {
         Net::RequestRejected result;
-        if (!Net::PacketCodec::DecodeBody(header.type, body, size, result))
-            return false;
-        break;
-    }
-    case Net::TcpType::RoomListResult:
-    {
-        Net::RoomListResult result;
-        if (!Net::PacketCodec::DecodeBody(header.type, body, size, result))
+        if (!Net::PacketCodec::ReadMessage(header.type, messageBytes, size, result))
             return false;
         break;
     }
@@ -299,7 +292,7 @@ bool NetworkClient::ProcessTcpPacket(const Net::PacketData& packet)
         Net::RoomEnterResult result;
         std::uint32_t pending = m_PendingRoomRequestId;
         if (pending == 0 || header.requestId != pending
-            || !Net::PacketCodec::DecodeBody(header.type, body, size, result))
+            || !Net::PacketCodec::ReadMessage(header.type, messageBytes, size, result))
             return false;
         m_PendingRoomRequestId = 0;
         if (result.result == Net::ErrorCode::Ok)
@@ -309,7 +302,7 @@ bool NetworkClient::ProcessTcpPacket(const Net::PacketData& packet)
     case Net::TcpType::LeaveRoomResult:
     {
         Net::LeaveRoomResult result;
-        if (!Net::PacketCodec::DecodeBody(header.type, body, size, result))
+        if (!Net::PacketCodec::ReadMessage(header.type, messageBytes, size, result))
             return false;
         if (result.result == Net::ErrorCode::Ok && result.roomId == m_ReceiveContext.roomId)
             SetReceiveContext({}, 0);
@@ -318,14 +311,14 @@ bool NetworkClient::ProcessTcpPacket(const Net::PacketData& packet)
     case Net::TcpType::RoomState:
     {
         Net::RoomState result;
-        if (!Net::PacketCodec::DecodeBody(header.type, body, size, result))
+        if (!Net::PacketCodec::ReadMessage(header.type, messageBytes, size, result))
             return false;
         break;
     }
     case Net::TcpType::GameStarted:
     {
         Net::GameStarted result;
-        if (!Net::PacketCodec::DecodeBody(header.type, body, size, result))
+        if (!Net::PacketCodec::ReadMessage(header.type, messageBytes, size, result))
             return false;
         Net::MatchContext context = result.version.context;
         // 입장한 방의 같은 경기 또는 새 경기만 수신 문맥으로 삼는다.
@@ -335,27 +328,6 @@ bool NetworkClient::ProcessTcpPacket(const Net::PacketData& packet)
                 && !Net::IsNewerSequence(context.matchId, m_ReceiveContext.matchId)))
             return true;
         SetReceiveContext(context, m_MembershipId);
-        break;
-    }
-    case Net::TcpType::ShotResolved:
-    {
-        Net::ShotResolved result;
-        if (!Net::PacketCodec::DecodeBody(header.type, body, size, result))
-            return false;
-        break;
-    }
-    case Net::TcpType::MatchTime:
-    {
-        Net::MatchTime result;
-        if (!Net::PacketCodec::DecodeBody(header.type, body, size, result))
-            return false;
-        break;
-    }
-    case Net::TcpType::GameResults:
-    {
-        Net::GameResults result;
-        if (!Net::PacketCodec::DecodeBody(header.type, body, size, result))
-            return false;
         break;
     }
     default:
@@ -410,7 +382,7 @@ void NetworkClient::ReceiveUdp()
     if (!Net::PacketCodec::ReadUdpHeader(bytes, static_cast<std::size_t>(received), header)
         || header.m_sessionToken != m_SessionToken)
         return;
-    const std::uint8_t* body = bytes + Net::UdpHeaderBytes;
+    const std::uint8_t* messageBytes = bytes + Net::UdpHeaderBytes;
     std::size_t size = static_cast<std::size_t>(received) - Net::UdpHeaderBytes;
     if (header.type == Net::UdpType::RegisterResult)
     {
@@ -418,7 +390,7 @@ void NetworkClient::ReceiveUdp()
         if (!m_RegistrationSent || m_UDPRegistered || header.sequence != m_RegistrationSequence
             || header.context.roomId != 0 || header.context.matchId != 0 || header.membershipId != 0
             || header.serverTick != 0
-            || !Net::PacketCodec::DecodeBody(header.type, body, size, result)
+            || !Net::PacketCodec::ReadMessage(header.type, messageBytes, size, result)
             || result.registrationSequence != m_RegistrationSequence)
             return;
         CompleteConnection(result);
@@ -433,7 +405,7 @@ void NetworkClient::ReceiveUdp()
     if (header.type == Net::UdpType::PlayerSnapshot)
     {
         Net::PlayerSnapshot snapshot;
-        if (!Net::PacketCodec::DecodeBody(header.type, body, size, snapshot)
+        if (!Net::PacketCodec::ReadMessage(header.type, messageBytes, size, snapshot)
             || (m_HasPlayerSequence && !Net::IsNewerSequence(header.sequence, m_LastPlayerSequence)))
             return;
         m_LastPlayerSequence = header.sequence;
@@ -442,7 +414,7 @@ void NetworkClient::ReceiveUdp()
     else if (header.type == Net::UdpType::TargetSnapshot)
     {
         Net::TargetSnapshot snapshot;
-        if (!Net::PacketCodec::DecodeBody(header.type, body, size, snapshot)
+        if (!Net::PacketCodec::ReadMessage(header.type, messageBytes, size, snapshot)
             || (m_HasTargetSequence && !Net::IsNewerSequence(header.sequence, m_LastTargetSequence)))
             return;
         m_LastTargetSequence = header.sequence;

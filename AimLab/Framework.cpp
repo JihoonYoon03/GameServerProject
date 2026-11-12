@@ -168,14 +168,14 @@ void Framework::UpdateConnection()
 		if (Net::PacketCodec::ReadTcpHeader(packet.bytes.data(), packet.bytes.size(), header)
 			!= Net::DecodeStatus::Complete)
 			continue;
-		const std::uint8_t* body = packet.bytes.data() + Net::TcpHeaderBytes;
-		std::size_t bodySize = packet.bytes.size() - Net::TcpHeaderBytes;
+		const std::uint8_t* messageBytes = packet.bytes.data() + Net::TcpHeaderBytes;
+		std::size_t messageSize = packet.bytes.size() - Net::TcpHeaderBytes;
 		switch (header.type)
 		{
 		case Net::TcpType::RoomEnterResult:
 		{
 			Net::RoomEnterResult result;
-			if (!Net::PacketCodec::DecodeBody(header.type, body, bodySize, result))
+			if (!Net::PacketCodec::ReadMessage(header.type, messageBytes, messageSize, result))
 				throw std::runtime_error("방 입장 응답을 읽지 못했습니다.");
 			if (result.result != Net::ErrorCode::Ok)
 				throw std::runtime_error("방 입장 실패: " + std::to_string(static_cast<unsigned int>(result.result)));
@@ -195,21 +195,21 @@ void Framework::UpdateConnection()
 		case Net::TcpType::RoomState:
 		{
 			Net::RoomState state;
-			if (sceneInitialized_ && Net::PacketCodec::DecodeBody(header.type, body, bodySize, state))
+			if (sceneInitialized_ && Net::PacketCodec::ReadMessage(header.type, messageBytes, messageSize, state))
 				shooting->OnRoomStateChanged(state.room);
 			break;
 		}
 		case Net::TcpType::GameStarted:
 		{
 			Net::GameStarted event;
-			if (sceneInitialized_ && Net::PacketCodec::DecodeBody(header.type, body, bodySize, event))
+			if (sceneInitialized_ && Net::PacketCodec::ReadMessage(header.type, messageBytes, messageSize, event))
 				shooting->OnGameStarted(event);
 			break;
 		}
 		case Net::TcpType::RequestRejected:
 		{
 			Net::RequestRejected result;
-			if (Net::PacketCodec::DecodeBody(header.type, body, bodySize, result)
+			if (Net::PacketCodec::ReadMessage(header.type, messageBytes, messageSize, result)
 				&& result.reason == Net::ErrorCode::RoomNotFound)
 				throw std::runtime_error("참가한 방이 종료되어 요청을 처리할 수 없습니다.");
 			break;

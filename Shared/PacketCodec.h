@@ -1,151 +1,22 @@
 ﻿#pragma once
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <winsock2.h>
 #include "NetworkMessages.h"
+#include "NetworkConversions.h"
+#include <cstring>
+#include <utility>
 
 namespace Net
 {
-    // 본문 자료형에 대응하는 패킷 종류와 전송 방식을 정한다.
-    template<class T> struct PacketTraits;
+    static_assert(sizeof(float) == 4, "Packet floats must be 4 bytes");
 
-    template<> struct PacketTraits<ConnectResult>
-    {
-        static constexpr PacketTransport transport = PacketTransport::Tcp;
-        static constexpr TcpType type = TcpType::ConnectResult;
-    };
-
-    template<> struct PacketTraits<RequestRejected>
-    {
-        static constexpr PacketTransport transport = PacketTransport::Tcp;
-        static constexpr TcpType type = TcpType::RequestRejected;
-    };
-
-    template<> struct PacketTraits<RoomListRequest>
-    {
-        static constexpr PacketTransport transport = PacketTransport::Tcp;
-        static constexpr TcpType type = TcpType::RoomListRequest;
-    };
-
-    template<> struct PacketTraits<RoomListResult>
-    {
-        static constexpr PacketTransport transport = PacketTransport::Tcp;
-        static constexpr TcpType type = TcpType::RoomListResult;
-    };
-
-    template<> struct PacketTraits<CreateRoomRequest>
-    {
-        static constexpr PacketTransport transport = PacketTransport::Tcp;
-        static constexpr TcpType type = TcpType::CreateRoomRequest;
-    };
-
-    template<> struct PacketTraits<JoinRoomRequest>
-    {
-        static constexpr PacketTransport transport = PacketTransport::Tcp;
-        static constexpr TcpType type = TcpType::JoinRoomRequest;
-    };
-
-    template<> struct PacketTraits<RoomEnterResult>
-    {
-        static constexpr PacketTransport transport = PacketTransport::Tcp;
-        static constexpr TcpType type = TcpType::RoomEnterResult;
-    };
-
-    template<> struct PacketTraits<LeaveRoomRequest>
-    {
-        static constexpr PacketTransport transport = PacketTransport::Tcp;
-        static constexpr TcpType type = TcpType::LeaveRoomRequest;
-    };
-
-    template<> struct PacketTraits<LeaveRoomResult>
-    {
-        static constexpr PacketTransport transport = PacketTransport::Tcp;
-        static constexpr TcpType type = TcpType::LeaveRoomResult;
-    };
-
-    template<> struct PacketTraits<MapLoaded>
-    {
-        static constexpr PacketTransport transport = PacketTransport::Tcp;
-        static constexpr TcpType type = TcpType::MapLoaded;
-    };
-
-    template<> struct PacketTraits<ReadyChangeRequest>
-    {
-        static constexpr PacketTransport transport = PacketTransport::Tcp;
-        static constexpr TcpType type = TcpType::ReadyChangeRequest;
-    };
-
-    template<> struct PacketTraits<RoomState>
-    {
-        static constexpr PacketTransport transport = PacketTransport::Tcp;
-        static constexpr TcpType type = TcpType::RoomState;
-    };
-
-    template<> struct PacketTraits<GameStarted>
-    {
-        static constexpr PacketTransport transport = PacketTransport::Tcp;
-        static constexpr TcpType type = TcpType::GameStarted;
-    };
-
-    template<> struct PacketTraits<FireRequest>
-    {
-        static constexpr PacketTransport transport = PacketTransport::Tcp;
-        static constexpr TcpType type = TcpType::FireRequest;
-    };
-
-    template<> struct PacketTraits<ShotResolved>
-    {
-        static constexpr PacketTransport transport = PacketTransport::Tcp;
-        static constexpr TcpType type = TcpType::ShotResolved;
-    };
-
-    template<> struct PacketTraits<MatchTime>
-    {
-        static constexpr PacketTransport transport = PacketTransport::Tcp;
-        static constexpr TcpType type = TcpType::MatchTime;
-    };
-
-    template<> struct PacketTraits<GameResults>
-    {
-        static constexpr PacketTransport transport = PacketTransport::Tcp;
-        static constexpr TcpType type = TcpType::GameResults;
-    };
-
-    template<> struct PacketTraits<UdpRegisterRequest>
-    {
-        static constexpr PacketTransport transport = PacketTransport::Udp;
-        static constexpr UdpType type = UdpType::RegisterRequest;
-    };
-
-    template<> struct PacketTraits<UdpRegisterResult>
-    {
-        static constexpr PacketTransport transport = PacketTransport::Udp;
-        static constexpr UdpType type = UdpType::RegisterResult;
-    };
-
-    template<> struct PacketTraits<PlayerTransform>
-    {
-        static constexpr PacketTransport transport = PacketTransport::Udp;
-        static constexpr UdpType type = UdpType::PlayerTransform;
-    };
-
-    template<> struct PacketTraits<PlayerSnapshot>
-    {
-        static constexpr PacketTransport transport = PacketTransport::Udp;
-        static constexpr UdpType type = UdpType::PlayerSnapshot;
-    };
-
-    template<> struct PacketTraits<TargetSnapshot>
-    {
-        static constexpr PacketTransport transport = PacketTransport::Udp;
-        static constexpr UdpType type = UdpType::TargetSnapshot;
-    };
-
-    // 논리적인 헤더와 본문이다. 실제 송신에는 직렬화한 PacketData를 사용한다.
-    template<class T> struct TcpPacket
-    {
-        TcpHeader header;
-        T packetData;
-    };
-
-    template<class T> struct UdpPacket
+    template<class T>
+    struct UdpPacket
     {
         UdpHeader header;
         T packetData;
@@ -153,47 +24,371 @@ namespace Net
 
     enum class DecodeStatus { Complete, NeedMore, Invalid };
 
-    // 정수와 단정밀도 실수의 비트는 네트워크 바이트 순서인 빅엔디언으로 기록한다.
-    // 읽기에 실패하면 읽기 위치와 출력값을 바꾸지 않는다.
-    void WriteU8(std::vector<std::uint8_t>& out, std::uint8_t value);
-    void WriteU16(std::vector<std::uint8_t>& out, std::uint16_t value);
-    void WriteU32(std::vector<std::uint8_t>& out, std::uint32_t value);
-    void WriteU64(std::vector<std::uint8_t>& out, std::uint64_t value);
-    void WriteF32(std::vector<std::uint8_t>& out, float value);
-    bool ReadU8(const std::uint8_t* data, std::size_t size, std::size_t& offset, std::uint8_t& value);
-    bool ReadU16(const std::uint8_t* data, std::size_t size, std::size_t& offset, std::uint16_t& value);
-    bool ReadU32(const std::uint8_t* data, std::size_t size, std::size_t& offset, std::uint32_t& value);
-    bool ReadU64(const std::uint8_t* data, std::size_t size, std::size_t& offset, std::uint64_t& value);
-    bool ReadF32(const std::uint8_t* data, std::size_t size, std::size_t& offset, float& value);
+    namespace PacketDetail
+    {
+        inline bool Valid(ErrorCode value)
+        {
+            return value <= ErrorCode::ServerFull && static_cast<std::uint16_t>(value) != 2;
+        }
+        inline bool Valid(GameState value) { return value <= GameState::Results; }
+        inline bool Valid(ReadyState value) { return value <= ReadyState::Playing; }
+
+        // Convert one scalar in place. Float values use their unchanged 32-bit representation.
+        inline bool ConvertByteOrder(void* value, std::size_t byteCount, bool reading)
+        {
+            switch (byteCount)
+            {
+            case 1:
+                return true;
+            case 2:
+            {
+                std::uint16_t number;
+                std::memcpy(&number, value, 2);
+                number = reading ? ntohs(number) : htons(number);
+                std::memcpy(value, &number, 2);
+                return true;
+            }
+            case 4:
+            {
+                std::uint32_t number;
+                std::memcpy(&number, value, 4);
+                number = reading ? ntohl(number) : htonl(number);
+                std::memcpy(value, &number, 4);
+                return true;
+            }
+            case 8:
+            {
+                std::uint64_t number;
+                std::memcpy(&number, value, 8);
+                number = reading ? ntohll(number) : htonll(number);
+                std::memcpy(value, &number, 8);
+                return true;
+            }
+            default:
+                return false;
+            }
+        }
+
+        struct PacketStream
+        {
+            bool reading;
+            std::vector<std::uint8_t>* output;
+            const std::uint8_t* input;
+            std::size_t size;
+            std::size_t offset = 0;
+
+            explicit PacketStream(std::vector<std::uint8_t>& bytes)
+                : reading(false), output(&bytes), input(nullptr), size(0) {}
+            PacketStream(const std::uint8_t* data, std::size_t length)
+                : reading(true), output(nullptr), input(data), size(length) {}
+
+            bool Value(void* value, std::size_t byteCount)
+            {
+                if (byteCount != 1 && byteCount != 2 && byteCount != 4 && byteCount != 8)
+                    return false;
+                std::uint8_t bytes[8];
+                if (reading)
+                {
+                    if (input == nullptr || offset > size || byteCount > size - offset)
+                        return false;
+                    std::memcpy(bytes, input + offset, byteCount);
+                }
+                else
+                    std::memcpy(bytes, value, byteCount);
+
+                if (!ConvertByteOrder(bytes, byteCount, reading))
+                    return false;
+                if (reading)
+                {
+                    std::memcpy(value, bytes, byteCount);
+                    offset += byteCount;
+                }
+                else
+                {
+                    std::size_t previousSize = output->size();
+                    output->resize(previousSize + byteCount);
+                    std::memcpy(output->data() + previousSize, bytes, byteCount);
+                }
+                return true;
+            }
+        };
+
+        inline bool Serialize(PacketStream& io, std::uint8_t& value)
+        {
+            return io.Value(&value, sizeof(value));
+        }
+        inline bool Serialize(PacketStream& io, std::uint16_t& value)
+        {
+            return io.Value(&value, sizeof(value));
+        }
+        inline bool Serialize(PacketStream& io, std::uint32_t& value)
+        {
+            return io.Value(&value, sizeof(value));
+        }
+        inline bool Serialize(PacketStream& io, std::uint64_t& value)
+        {
+            return io.Value(&value, sizeof(value));
+        }
+        inline bool Serialize(PacketStream& io, float& value)
+        {
+            return io.Value(&value, sizeof(value));
+        }
+
+        inline bool Serialize(PacketStream& io, TcpType& value)
+        {
+            std::uint16_t number = static_cast<std::uint16_t>(value);
+            if (!Serialize(io, number))
+                return false;
+            value = static_cast<TcpType>(number);
+            return true;
+        }
+        inline bool Serialize(PacketStream& io, UdpType& value)
+        {
+            std::uint16_t number = static_cast<std::uint16_t>(value);
+            if (!Serialize(io, number))
+                return false;
+            value = static_cast<UdpType>(number);
+            return true;
+        }
+        inline bool Serialize(PacketStream& io, ErrorCode& value)
+        {
+            std::uint16_t number = static_cast<std::uint16_t>(value);
+            if (!Serialize(io, number))
+                return false;
+            value = static_cast<ErrorCode>(number);
+            return true;
+        }
+        inline bool Serialize(PacketStream& io, GameState& value)
+        {
+            std::uint8_t number = static_cast<std::uint8_t>(value);
+            if (!Serialize(io, number))
+                return false;
+            value = static_cast<GameState>(number);
+            return true;
+        }
+        inline bool Serialize(PacketStream& io, ReadyState& value)
+        {
+            std::uint8_t number = static_cast<std::uint8_t>(value);
+            if (!Serialize(io, number))
+                return false;
+            value = static_cast<ReadyState>(number);
+            return true;
+        }
+
+        inline bool Serialize(PacketStream& io, SessionToken& value)
+        {
+            for (std::size_t i = 0; i < SessionTokenBytes; ++i)
+                if (!Serialize(io, value[i]))
+                    return false;
+            return true;
+        }
+        // 행렬 원소는 기존과 같이 열을 먼저, 행을 나중에 순회한다.
+        inline bool Serialize(PacketStream& io, glm::mat4& value)
+        {
+            for (int col = 0; col < 4; ++col)
+                for (int row = 0; row < 4; ++row)
+                    if (!Serialize(io, value[col][row]))
+                        return false;
+            return true;
+        }
+        inline bool Serialize(PacketStream& io, glm::vec3& value)
+        {
+            return Serialize(io, value.x) && Serialize(io, value.y) && Serialize(io, value.z);
+        }
+        inline bool Serialize(PacketStream& io, PlayerPose& value)
+        {
+            return Serialize(io, value.position) && Serialize(io, value.yaw) && Serialize(io, value.pitch)
+                && IsFinitePlayerPose(value);
+        }
+        inline bool Serialize(PacketStream& io, BoxData& value)
+        {
+            return Serialize(io, value.min)
+                && Serialize(io, value.max);
+        }
+        inline bool Serialize(PacketStream& io, MatchContext& value)
+        {
+            return Serialize(io, value.roomId)
+                && Serialize(io, value.matchId);
+        }
+        inline bool Serialize(PacketStream& io, RoomVersion& value)
+        {
+            return Serialize(io, value.context)
+                && Serialize(io, value.revision);
+        }
+        inline bool Serialize(PacketStream& io, AreaData& value)
+        {
+            return Serialize(io, value.areaId)
+                && Serialize(io, value.movementBounds)
+                && Serialize(io, value.spawnTransform);
+        }
+        inline bool Serialize(PacketStream& io, MatchRules& value)
+        {
+            return Serialize(io, value.durationMs)
+                && Serialize(io, value.activeTargetCount)
+                && Serialize(io, value.pointsPerHit) && value.activeTargetCount <= MaxTargets;
+        }
+        inline bool Serialize(PacketStream& io, PlayerStats& value)
+        {
+            return Serialize(io, value.score)
+                && Serialize(io, value.shotsFired);
+        }
+        inline bool Serialize(PacketStream& io, PlayerData& value)
+        {
+            return Serialize(io, value.m_sessionToken)
+                && Serialize(io, value.pose)
+                && Serialize(io, value.areaId)
+                && Serialize(io, value.ready)
+                && Serialize(io, value.mapLoaded)
+                && Serialize(io, value.stats) && Valid(value.ready) && value.mapLoaded <= 1;
+        }
+
+        // 목록은 개수를 먼저 검사하고 유효한 원소만 처리한다.
+        template<class T>
+        inline bool SerializeList(PacketStream& io, std::vector<T>& values, std::size_t limit)
+        {
+            if (!io.reading && values.size() > limit)
+                return false;
+            std::uint16_t count = io.reading ? 0 : static_cast<std::uint16_t>(values.size());
+            if (!Serialize(io, count) || count > limit)
+                return false;
+            if (io.reading)
+                values.resize(count);
+            for (std::size_t i = 0; i < count; ++i)
+                if (!Serialize(io, values[i]))
+                    return false;
+            return true;
+        }
+        inline bool Serialize(PacketStream& io, RoomStateData& value)
+        {
+            return Serialize(io, value.version) && Serialize(io, value.state)
+                && Serialize(io, value.capacity) && Serialize(io, value.rules)
+                && SerializeList(io, value.vAreas, MaxPlayers)
+                && SerializeList(io, value.vPlayers, MaxPlayers)
+                && value.capacity <= MaxPlayers && Valid(value.state);
+        }
+        inline bool Serialize(PacketStream& io, PlayerTransformEntry& value)
+        {
+            return Serialize(io, value.m_sessionToken)
+                && Serialize(io, value.pose)
+                && Serialize(io, value.lastProcessedInput);
+        }
+        inline bool Serialize(PacketStream& io, TargetMotionData& value)
+        {
+            return Serialize(io, value.position)
+                && Serialize(io, value.velocity);
+        }
+        inline bool Serialize(PacketStream& io, TcpHeader& value)
+        {
+            return Serialize(io, value.size)
+                && Serialize(io, value.type)
+                && Serialize(io, value.requestId);
+        }
+        inline bool Serialize(PacketStream& io, UdpHeader& value)
+        {
+            return Serialize(io, value.magic)
+                && Serialize(io, value.type)
+                && Serialize(io, value.m_sessionToken)
+                && Serialize(io, value.sequence)
+                && Serialize(io, value.context)
+                && Serialize(io, value.membershipId)
+                && Serialize(io, value.serverTick);
+        }
+        inline bool Serialize(PacketStream& io, ConnectResult& value)
+        {
+            return Serialize(io, value.result)
+                && Serialize(io, value.sessionToken)
+                && Serialize(io, value.udpPort)
+                && Serialize(io, value.serverTimeMs)
+                && Serialize(io, value.tickRate) && Valid(value.result);
+        }
+        inline bool Serialize(PacketStream& io, RequestRejected& value)
+        {
+            return Serialize(io, value.reason)
+                && Serialize(io, value.context) && Valid(value.reason);
+        }
+        inline bool Serialize(PacketStream&, CreateRoomRequest&)
+        {
+            return true;
+        }
+        inline bool Serialize(PacketStream& io, RoomEnterResult& value)
+        {
+            if (!Serialize(io, value.result) || !Valid(value.result))
+                return false;
+            return value.result != ErrorCode::Ok
+                || (Serialize(io, value.membershipId) && Serialize(io, value.room));
+        }
+        inline bool Serialize(PacketStream& io, LeaveRoomRequest& value)
+        {
+            return Serialize(io, value.roomId);
+        }
+        inline bool Serialize(PacketStream& io, LeaveRoomResult& value)
+        {
+            return Serialize(io, value.result)
+                && Serialize(io, value.roomId) && Valid(value.result);
+        }
+        inline bool Serialize(PacketStream& io, MapLoaded& value)
+        {
+            return Serialize(io, value.roomId);
+        }
+        inline bool Serialize(PacketStream& io, RoomState& value)
+        {
+            return Serialize(io, value.room);
+        }
+        inline bool Serialize(PacketStream& io, GameStarted& value)
+        {
+            return Serialize(io, value.version) && Serialize(io, value.serverTimeMs)
+                && Serialize(io, value.startsAtMs) && Serialize(io, value.endsAtMs)
+                && Serialize(io, value.rules) && SerializeList(io, value.players, MaxPlayers);
+        }
+        inline bool Serialize(PacketStream&, UdpRegisterRequest&)
+        {
+            return true;
+        }
+        inline bool Serialize(PacketStream& io, UdpRegisterResult& value)
+        {
+            return Serialize(io, value.result)
+                && Serialize(io, value.registrationSequence) && Valid(value.result);
+        }
+        inline bool Serialize(PacketStream& io, PlayerTransform& value)
+        {
+            return Serialize(io, value.inputSequence)
+                && Serialize(io, value.pose);
+        }
+        template<class T, std::size_t Count>
+        inline bool SerializeArray(PacketStream& io, std::array<T, Count>& values, std::size_t count)
+        {
+            if (count > values.size())
+                return false;
+            for (std::size_t i = 0; i < count; ++i)
+                if (!Serialize(io, values[i]))
+                    return false;
+            return true;
+        }
+        inline bool Serialize(PacketStream& io, PlayerSnapshot& value)
+        {
+            return Serialize(io, value.serverTimeMs) && Serialize(io, value.requiredRevision)
+                && Serialize(io, value.playerCount) && SerializeArray(io, value.players, value.playerCount);
+        }
+        inline bool Serialize(PacketStream& io, TargetSnapshot& value)
+        {
+            return Serialize(io, value.targetCount) && SerializeArray(io, value.targets, value.targetCount);
+        }
+
+    }
 
     class PacketCodec
     {
     public:
-        // 송신자는 헤더의 종류와 전체 길이를 본문과 맞춰서 채운다.
-        // 종류나 길이가 맞지 않으면 거절하고 출력값을 바꾸지 않는다.
+
         template<class T>
-        static bool EncodeTcp(const TcpPacket<T>& packet, PacketData& output)
-        {
-            if (packet.header.type != PacketTraits<T>::type)
-                return false;
-
-            std::vector<std::uint8_t> bytes;
-            if (!EncodeBody(packet.packetData, bytes))
-                return false;
-
-            return EncodeTcpFrame(packet.header, bytes, output);
-        }
-
-        // 서버에서 새로 만드는 TCP 패킷은 본문에서 종류와 길이를 결정한다.
-        template<class T>
-        static bool EncodeTcp(const T& body, std::uint32_t requestId, PacketData& output)
+        static bool EncodeTcp(const T& message, std::uint32_t requestId, PacketData& output)
         {
             std::vector<std::uint8_t> bytes;
-            if (!EncodeBody(body, bytes) || bytes.size() > MaxTcpPacketBytes - TcpHeaderBytes)
+            if (!WriteMessage(message, bytes) || bytes.size() > MaxTcpPacketBytes - TcpHeaderBytes)
                 return false;
 
             TcpHeader header;
-            header.type = PacketTraits<T>::type;
+            header.type = T::type;
             header.requestId = requestId;
             header.size = static_cast<std::uint32_t>(TcpHeaderBytes + bytes.size());
             return EncodeTcpFrame(header, bytes, output);
@@ -202,142 +397,67 @@ namespace Net
         template<class T>
         static bool EncodeUdp(const UdpPacket<T>& packet, PacketData& output)
         {
-            if (packet.header.type != PacketTraits<T>::type)
+            if (packet.header.type != T::type)
                 return false;
 
             std::vector<std::uint8_t> bytes;
-            if (!EncodeBody(packet.packetData, bytes))
+            if (!WriteMessage(packet.packetData, bytes))
                 return false;
-
             return EncodeUdpFrame(packet.header, bytes, output);
         }
 
-        // 누적 수신 버퍼에서 지정한 본문 자료형의 패킷 하나를 읽는다.
-        // 수신 중이면 버퍼를 유지하고, 오류면 거절한다.
         template<class T>
-        static DecodeStatus DecodeTcp(const std::uint8_t* data, std::size_t size,
-            TcpPacket<T>& output, std::size_t& consumed)
-        {
-            consumed = 0;
-            TcpHeader header;
-            const DecodeStatus status = ReadTcpHeader(data, size, header, &PacketTraits<T>::type);
-            if (status != DecodeStatus::Complete)
-                return status;
-
-            T value{};
-            if (!DecodeBody(header.type, data + TcpHeaderBytes,
-                header.size - TcpHeaderBytes, value))
-                return DecodeStatus::Invalid;
-
-            output.header = header;
-            output.packetData = value;
-            consumed = header.size;
-            return DecodeStatus::Complete;
-        }
-
-        // UDP는 데이터그램 하나 전체를 읽고 길이와 본문 자료형을 검사한다.
-        template<class T>
-        static bool DecodeUdp(const std::uint8_t* data, std::size_t size,
-            UdpPacket<T>& output)
+        static bool DecodeUdp(const std::uint8_t* data, std::size_t size, UdpPacket<T>& output)
         {
             UdpHeader header;
-            if (!ReadUdpHeader(data, size, header) || header.type != PacketTraits<T>::type)
+            if (!ReadUdpHeader(data, size, header) || header.type != T::type)
                 return false;
 
-            T value{};
-            if (!DecodeBody(header.type, data + UdpHeaderBytes,
-                size - UdpHeaderBytes, value))
+            T message{};
+            if (!ReadMessage(header.type, data + UdpHeaderBytes, size - UdpHeaderBytes, message))
                 return false;
 
             output.header = header;
-            output.packetData = value;
+            output.packetData = std::move(message);
             return true;
         }
 
-        // 완성된 TCP 프레임 또는 UDP 데이터그램의 헤더를 읽는다.
-        // 실패하거나 더 받아야 할 때는 출력값을 바꾸지 않는다.
+        // Apply fields only after the kind, values and exact message length are valid.
+        template<class Type, class T>
+        static bool ReadMessage(Type type, const std::uint8_t* data, std::size_t size, T& output)
+        {
+            std::size_t limit = MessageLimit(type);
+            if (type != T::type || size > limit || (data == nullptr && size != 0))
+                return false;
+
+            T message{};
+            PacketDetail::PacketStream stream(data, size);
+            if (!PacketDetail::Serialize(stream, message) || stream.offset != size)
+                return false;
+            output = std::move(message);
+            return true;
+        }
+
         static DecodeStatus ReadTcpHeader(const std::uint8_t* data, std::size_t size, TcpHeader& output);
         static bool ReadUdpHeader(const std::uint8_t* data, std::size_t size, UdpHeader& output);
-
         static bool ValidateHeader(const TcpHeader& header);
         static bool ValidateHeader(const UdpHeader& header);
 
-        // 본문 자료형마다 별도 함수로 읽고 검사한다.
-        static bool DecodeBody(TcpType type, const std::uint8_t* data, std::size_t size, ConnectResult& output);
-        static bool DecodeBody(TcpType type, const std::uint8_t* data, std::size_t size, RequestRejected& output);
-        static bool DecodeBody(TcpType type, const std::uint8_t* data, std::size_t size, RoomListRequest& output);
-        static bool DecodeBody(TcpType type, const std::uint8_t* data, std::size_t size, RoomListResult& output);
-        static bool DecodeBody(TcpType type, const std::uint8_t* data, std::size_t size, CreateRoomRequest& output);
-        static bool DecodeBody(TcpType type, const std::uint8_t* data, std::size_t size, JoinRoomRequest& output);
-        static bool DecodeBody(TcpType type, const std::uint8_t* data, std::size_t size, RoomEnterResult& output);
-        static bool DecodeBody(TcpType type, const std::uint8_t* data, std::size_t size, LeaveRoomRequest& output);
-        static bool DecodeBody(TcpType type, const std::uint8_t* data, std::size_t size, LeaveRoomResult& output);
-        static bool DecodeBody(TcpType type, const std::uint8_t* data, std::size_t size, MapLoaded& output);
-        static bool DecodeBody(TcpType type, const std::uint8_t* data, std::size_t size, ReadyChangeRequest& output);
-        static bool DecodeBody(TcpType type, const std::uint8_t* data, std::size_t size, RoomState& output);
-        static bool DecodeBody(TcpType type, const std::uint8_t* data, std::size_t size, GameStarted& output);
-        static bool DecodeBody(TcpType type, const std::uint8_t* data, std::size_t size, FireRequest& output);
-        static bool DecodeBody(TcpType type, const std::uint8_t* data, std::size_t size, ShotResolved& output);
-        static bool DecodeBody(TcpType type, const std::uint8_t* data, std::size_t size, MatchTime& output);
-        static bool DecodeBody(TcpType type, const std::uint8_t* data, std::size_t size, GameResults& output);
-        static bool DecodeBody(UdpType type, const std::uint8_t* data, std::size_t size, UdpRegisterRequest& output);
-        static bool DecodeBody(UdpType type, const std::uint8_t* data, std::size_t size, UdpRegisterResult& output);
-        static bool DecodeBody(UdpType type, const std::uint8_t* data, std::size_t size, PlayerTransform& output);
-        static bool DecodeBody(UdpType type, const std::uint8_t* data, std::size_t size, PlayerSnapshot& output);
-        static bool DecodeBody(UdpType type, const std::uint8_t* data, std::size_t size, TargetSnapshot& output);
-
-        static bool ValidateBody(const ConnectResult& body);
-        static bool ValidateBody(const RequestRejected& body);
-        static bool ValidateBody(const RoomListRequest& body);
-        static bool ValidateBody(const RoomListResult& body);
-        static bool ValidateBody(const CreateRoomRequest& body);
-        static bool ValidateBody(const JoinRoomRequest& body);
-        static bool ValidateBody(const RoomEnterResult& body);
-        static bool ValidateBody(const LeaveRoomRequest& body);
-        static bool ValidateBody(const LeaveRoomResult& body);
-        static bool ValidateBody(const MapLoaded& body);
-        static bool ValidateBody(const ReadyChangeRequest& body);
-        static bool ValidateBody(const RoomState& body);
-        static bool ValidateBody(const GameStarted& body);
-        static bool ValidateBody(const FireRequest& body);
-        static bool ValidateBody(const ShotResolved& body);
-        static bool ValidateBody(const MatchTime& body);
-        static bool ValidateBody(const GameResults& body);
-        static bool ValidateBody(const UdpRegisterRequest& body);
-        static bool ValidateBody(const UdpRegisterResult& body);
-        static bool ValidateBody(const PlayerTransform& body);
-        static bool ValidateBody(const PlayerSnapshot& body);
-        static bool ValidateBody(const TargetSnapshot& body);
-
     private:
-        static bool EncodeBody(const ConnectResult& body, std::vector<std::uint8_t>& bytes);
-        static bool EncodeBody(const RequestRejected& body, std::vector<std::uint8_t>& bytes);
-        static bool EncodeBody(const RoomListRequest& body, std::vector<std::uint8_t>& bytes);
-        static bool EncodeBody(const RoomListResult& body, std::vector<std::uint8_t>& bytes);
-        static bool EncodeBody(const CreateRoomRequest& body, std::vector<std::uint8_t>& bytes);
-        static bool EncodeBody(const JoinRoomRequest& body, std::vector<std::uint8_t>& bytes);
-        static bool EncodeBody(const RoomEnterResult& body, std::vector<std::uint8_t>& bytes);
-        static bool EncodeBody(const LeaveRoomRequest& body, std::vector<std::uint8_t>& bytes);
-        static bool EncodeBody(const LeaveRoomResult& body, std::vector<std::uint8_t>& bytes);
-        static bool EncodeBody(const MapLoaded& body, std::vector<std::uint8_t>& bytes);
-        static bool EncodeBody(const ReadyChangeRequest& body, std::vector<std::uint8_t>& bytes);
-        static bool EncodeBody(const RoomState& body, std::vector<std::uint8_t>& bytes);
-        static bool EncodeBody(const GameStarted& body, std::vector<std::uint8_t>& bytes);
-        static bool EncodeBody(const FireRequest& body, std::vector<std::uint8_t>& bytes);
-        static bool EncodeBody(const ShotResolved& body, std::vector<std::uint8_t>& bytes);
-        static bool EncodeBody(const MatchTime& body, std::vector<std::uint8_t>& bytes);
-        static bool EncodeBody(const GameResults& body, std::vector<std::uint8_t>& bytes);
-        static bool EncodeBody(const UdpRegisterRequest& body, std::vector<std::uint8_t>& bytes);
-        static bool EncodeBody(const UdpRegisterResult& body, std::vector<std::uint8_t>& bytes);
-        static bool EncodeBody(const PlayerTransform& body, std::vector<std::uint8_t>& bytes);
-        static bool EncodeBody(const PlayerSnapshot& body, std::vector<std::uint8_t>& bytes);
-        static bool EncodeBody(const TargetSnapshot& body, std::vector<std::uint8_t>& bytes);
+        static std::size_t MessageLimit(TcpType) { return MaxTcpPacketBytes - TcpHeaderBytes; }
+        static std::size_t MessageLimit(UdpType) { return MaxUdpPacketBytes - UdpHeaderBytes; }
+
+        template<class T>
+        static bool WriteMessage(const T& message, std::vector<std::uint8_t>& bytes)
+        {
+            T fields = message;
+            PacketDetail::PacketStream stream(bytes);
+            return PacketDetail::Serialize(stream, fields);
+        }
 
         static bool EncodeTcpFrame(const TcpHeader& header,
             const std::vector<std::uint8_t>& bytes, PacketData& output);
         static bool EncodeUdpFrame(const UdpHeader& header,
             const std::vector<std::uint8_t>& bytes, PacketData& output);
-        static DecodeStatus ReadTcpHeader(const std::uint8_t* data, std::size_t size,
-            TcpHeader& output, const TcpType* expected);
     };
 }

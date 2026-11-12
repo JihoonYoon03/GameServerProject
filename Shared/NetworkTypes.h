@@ -88,12 +88,6 @@ namespace Net
 		BlockedByWorld = 2
 	};
 
-	enum class MatchEndReason : std::uint8_t
-	{
-		TimeLimit = 0,
-		TooFewPlayers = 1,
-		ServerStopped = 2
-	};
 
 	// Network player position and view angles in degrees.
 	struct PlayerPose
@@ -150,13 +144,6 @@ namespace Net
 		GameState state = GameState::Preparing;
 	};
 
-	// 사용: 서버 StageController::JudgeWhoWins(), StageController::SendGameResults() / 클라 ShootingScene::RecvGameResults(),
-	//       ShootingScene::ShowGameResult() [선언]
-	struct PlayerResult { SessionToken m_sessionToken{};
-
-		PlayerStats stats;
-		std::uint8_t rank = 0;
-	};
 
 	// 사용: 서버 Room::SendRoomState() / 클라 ShootingScene::OnRoomStateChanged(), ShootingScene::OnGameEnded() [선언]
 	struct RoomStateData

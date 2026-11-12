@@ -85,7 +85,7 @@ bool NetworkServer::ValidateSender(SOCKET tcpSocket, Net::SessionToken& verified
 bool NetworkServer::ValidateSender(const Net::UdpHeader& header, const sockaddr_in& sourceAddress,
 	Net::SessionToken& verifiedSender)
 {
-	// Check the registered sender after the movement body has been decoded.
+	// Check the registered sender after the movement messageBytes has been decoded.
 	if (!Net::PacketCodec::ValidateHeader(header) || header.type != Net::UdpType::PlayerTransform ||
 		header.serverTick != 0)
 		return false;
@@ -154,15 +154,15 @@ bool NetworkServer::ApplyRoomResponse(Client& client, const Net::PacketData& pac
 	if (Net::PacketCodec::ReadTcpHeader(packet.bytes.data(), packet.bytes.size(), header)
 		!= Net::DecodeStatus::Complete || header.size != packet.bytes.size())
 		return false;
-	const std::uint8_t* body = packet.bytes.data() + Net::TcpHeaderBytes;
-	std::size_t bodySize = packet.bytes.size() - Net::TcpHeaderBytes;
+	const std::uint8_t* messageBytes = packet.bytes.data() + Net::TcpHeaderBytes;
+	std::size_t messageSize = packet.bytes.size() - Net::TcpHeaderBytes;
 	// 소켓 송신과 분리하되, 접속의 경기 정보는 계속 서버 메인에서만 바꾼다.
 	switch (header.type)
 	{
 	case Net::TcpType::RoomEnterResult:
 	{
 		Net::RoomEnterResult result;
-		if (!Net::PacketCodec::DecodeBody(header.type, body, bodySize, result))
+		if (!Net::PacketCodec::ReadMessage(header.type, messageBytes, messageSize, result))
 			return false;
 		if (result.result == Net::ErrorCode::Ok)
 		{
@@ -176,7 +176,7 @@ bool NetworkServer::ApplyRoomResponse(Client& client, const Net::PacketData& pac
 	case Net::TcpType::GameStarted:
 	{
 		Net::GameStarted event;
-		if (!Net::PacketCodec::DecodeBody(header.type, body, bodySize, event)
+		if (!Net::PacketCodec::ReadMessage(header.type, messageBytes, messageSize, event)
 			|| event.version.context.roomId != client.GetRoomId() || client.GetMembershipId() == 0
 			|| event.version.context.matchId == 0
 			|| (client.GetMatchId() != 0 && event.version.context.matchId != client.GetMatchId()
@@ -188,7 +188,7 @@ bool NetworkServer::ApplyRoomResponse(Client& client, const Net::PacketData& pac
 	case Net::TcpType::LeaveRoomResult:
 	{
 		Net::LeaveRoomResult result;
-		if (!Net::PacketCodec::DecodeBody(header.type, body, bodySize, result))
+		if (!Net::PacketCodec::ReadMessage(header.type, messageBytes, messageSize, result))
 			return false;
 		if (result.result == Net::ErrorCode::Ok && result.roomId == client.GetRoomId())
 			client.SetMatchContext({}, 0);
@@ -395,14 +395,14 @@ void NetworkServer::ReceiveUdp()
 	if (header.type == Net::UdpType::RegisterRequest)
 	{
 		Net::UdpRegisterRequest request;
-		if (Net::PacketCodec::DecodeBody(header.type, bytes + Net::UdpHeaderBytes,
+		if (Net::PacketCodec::ReadMessage(header.type, bytes + Net::UdpHeaderBytes,
 			static_cast<std::size_t>(received) - Net::UdpHeaderBytes, request))
 			RegisterPlayerUDP(header, sourceAddress);
 		return;
 	}
 
 	Net::PlayerTransform transform;
-	if (!Net::PacketCodec::DecodeBody(header.type, bytes + Net::UdpHeaderBytes,
+	if (!Net::PacketCodec::ReadMessage(header.type, bytes + Net::UdpHeaderBytes,
 		static_cast<std::size_t>(received) - Net::UdpHeaderBytes, transform))
 		return;
 
@@ -476,13 +476,13 @@ void NetworkServer::DispatchPacket(const Net::SessionToken& verifiedSender, cons
 			header.size != size)
 			return;
 
-		const std::uint8_t* body = bytes + Net::TcpHeaderBytes;
-		std::size_t bodySize = size - Net::TcpHeaderBytes;
+		const std::uint8_t* messageBytes = bytes + Net::TcpHeaderBytes;
+		std::size_t messageSize = size - Net::TcpHeaderBytes;
 		command.requestId = header.requestId;
 		if (header.type == Net::TcpType::CreateRoomRequest)
 		{
 			Net::CreateRoomRequest request;
-			if (!Net::PacketCodec::DecodeBody(header.type, body, bodySize, request))
+			if (!Net::PacketCodec::ReadMessage(header.type, messageBytes, messageSize, request))
 				return;
 
 			CreateSinglePlayerRoom(*sender, header.requestId);
@@ -496,7 +496,7 @@ void NetworkServer::DispatchPacket(const Net::SessionToken& verifiedSender, cons
 		case Net::TcpType::LeaveRoomRequest:
 		{
 			Net::LeaveRoomRequest request;
-			if (!Net::PacketCodec::DecodeBody(header.type, body, bodySize, request) ||
+			if (!Net::PacketCodec::ReadMessage(header.type, messageBytes, messageSize, request) ||
 				request.roomId != command.context.roomId)
 				return;
 			command.body = request;
@@ -505,27 +505,8 @@ void NetworkServer::DispatchPacket(const Net::SessionToken& verifiedSender, cons
 		case Net::TcpType::MapLoaded:
 		{
 			Net::MapLoaded request;
-			if (!Net::PacketCodec::DecodeBody(header.type, body, bodySize, request) ||
+			if (!Net::PacketCodec::ReadMessage(header.type, messageBytes, messageSize, request) ||
 				request.roomId != command.context.roomId)
-				return;
-			command.body = request;
-			break;
-		}
-		case Net::TcpType::ReadyChangeRequest:
-		{
-			Net::ReadyChangeRequest request;
-			if (!Net::PacketCodec::DecodeBody(header.type, body, bodySize, request) ||
-				request.roomId != command.context.roomId)
-				return;
-			command.body = request;
-			break;
-		}
-		case Net::TcpType::FireRequest:
-		{
-			Net::FireRequest request;
-			if (!Net::PacketCodec::DecodeBody(header.type, body, bodySize, request) ||
-				request.context.roomId != command.context.roomId || command.context.matchId == 0 ||
-				request.context.matchId != command.context.matchId || request.membershipId != command.membershipId)
 				return;
 			command.body = request;
 			break;
@@ -547,7 +528,7 @@ void NetworkServer::DispatchPacket(const Net::SessionToken& verifiedSender, cons
 			return;
 
 		Net::PlayerTransform transform;
-		if (!Net::PacketCodec::DecodeBody(header.type, bytes + Net::UdpHeaderBytes,
+		if (!Net::PacketCodec::ReadMessage(header.type, bytes + Net::UdpHeaderBytes,
 			size - Net::UdpHeaderBytes, transform))
 			return;
 		command.body = transform;

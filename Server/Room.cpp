@@ -11,15 +11,12 @@ Room::Room()
 	InitializeCriticalSection(&commandCS_);
 }
 
-Room::Room(Net::RoomId roomId, PacketSender sender,
-	std::queue<Net::RoomManagementEvent>& managementQueue, CRITICAL_SECTION& managementCS)
+Room::Room(Net::RoomId roomId, PacketSender sender)
 	: Room()
 {
 	m_state.version.context.roomId = roomId;
 	m_state.capacity = 1;
-	sendPacket_ = std::move(sender);
-	managementQueue_ = &managementQueue;
-	managementCS_ = &managementCS;
+	m_SendPacket = std::move(sender);
 }
 
 Room::Room(Net::MatchContext context, Target& targets,
@@ -29,7 +26,7 @@ Room::Room(Net::MatchContext context, Target& targets,
 	m_state.version.context = context;
 	targets_ = &targets;
 	targetRecipients_ = std::move(recipients);
-	m_fSendPacket = std::move(sender);
+	m_SendPacket = std::move(sender);
 }
 
 Room::~Room()
@@ -78,40 +75,38 @@ void Room::EnterPlayer(const Net::RoomCommand& command, const Net::RoomEnterComm
 		m_state.vPlayers = {m_vPlayers[0].m_PlayerData};
 		result.membershipId = command.membershipId;
 		result.room = m_state;
-		PublishManagementEvent(Net::RoomManagementEventType::SummaryChanged);
+		PublishStateEvent(Net::RoomManagementEventType::SummaryChanged);
 	}
 	Net::SendRequest response;
 	response.recipientToken = command.sessionToken;
-	if (sendPacket_ && Net::PacketCodec::EncodeTcp(result, command.requestId, response.packet))
-		sendPacket_(response);
+	if (m_SendPacket && Net::PacketCodec::EncodeTcp(result, command.requestId, response.packet))
+		m_SendPacket(response);
 	if (m_vPlayers.empty())
 	{
-		PublishManagementEvent(Net::RoomManagementEventType::RoomEmpty);
+		PublishStateEvent(Net::RoomManagementEventType::RoomEmpty);
 		RequestStop();
 	}
 }
 
-void Room::PublishManagementEvent(Net::RoomManagementEventType type)
+void Room::PublishStateEvent(Net::RoomManagementEventType type)
 {
-	if (managementQueue_ == nullptr || managementCS_ == nullptr)
-		return;
 	Net::RoomManagementEvent event;
 	event.type = type;
 	event.summary.roomId = m_state.version.context.roomId;
 	event.summary.playerCount = static_cast<std::uint8_t>(m_vPlayers.size());
 	event.summary.capacity = m_state.capacity;
 	event.summary.state = m_state.state;
-	EnterCriticalSection(managementCS_);
+	EnterCriticalSection(&commandCS_);
 	try
 	{
-		managementQueue_->push(event);
+		m_qStateEvents.push(event);
 	}
 	catch (...)
 	{
-		LeaveCriticalSection(managementCS_);
+		LeaveCriticalSection(&commandCS_);
 		throw;
 	}
-	LeaveCriticalSection(managementCS_);
+	LeaveCriticalSection(&commandCS_);
 }
 
 void Room::RemovePlayerFromRoom(const Net::SessionToken& token)
@@ -133,7 +128,7 @@ void Room::RemovePlayerFromRoom(const Net::SessionToken& token)
 		if (m_vPlayers.empty())
 		{
 			m_state.vPlayers.clear();
-			PublishManagementEvent(Net::RoomManagementEventType::RoomEmpty);
+			PublishStateEvent(Net::RoomManagementEventType::RoomEmpty);
 			RequestStop();
 		}
 		else
@@ -190,9 +185,9 @@ void Room::StartGameIfReady()
 	event.players = m_state.vPlayers;
 	Net::SendRequest response;
 	response.recipientToken = m_vPlayers[0].m_PlayerData.m_sessionToken;
-	if (sendPacket_ && Net::PacketCodec::EncodeTcp(event, 0, response.packet))
-		sendPacket_(response);
-	PublishManagementEvent(Net::RoomManagementEventType::SummaryChanged);
+	if (m_SendPacket && Net::PacketCodec::EncodeTcp(event, 0, response.packet))
+		m_SendPacket(response);
+	PublishStateEvent(Net::RoomManagementEventType::SummaryChanged);
 }
 
 void Room::SendRoomState()
@@ -201,9 +196,9 @@ void Room::SendRoomState()
 	m_state.vPlayers.clear();
 	for (const ClientPlayer& player : m_vPlayers)
 		m_state.vPlayers.push_back(player.m_PlayerData);
-	PublishManagementEvent(Net::RoomManagementEventType::SummaryChanged);
+	PublishStateEvent(Net::RoomManagementEventType::SummaryChanged);
 
-	if (!sendPacket_)
+	if (!m_SendPacket)
 		return;
 
 	Net::RoomState state;
@@ -217,7 +212,7 @@ void Room::SendRoomState()
 		Net::SendRequest request;
 		request.recipientToken = player.m_PlayerData.m_sessionToken;
 		request.packet = packet;
-		sendPacket_(request);
+		m_SendPacket(request);
 	}
 }
 
@@ -288,6 +283,15 @@ bool Room::AddCommand(const Net::RoomCommand& command)
 	return true;
 }
 
+std::queue<Net::RoomManagementEvent> Room::TakeStateEvents()
+{
+	std::queue<Net::RoomManagementEvent> events;
+	EnterCriticalSection(&commandCS_);
+	events.swap(m_qStateEvents);
+	LeaveCriticalSection(&commandCS_);
+	return events;
+}
+
 void Room::ProcessCommands()
 {
 	// 명령만 옮긴 뒤 잠금을 풀어 서버 메인이 다음 명령을 넣을 수 있게 한다.
@@ -344,8 +348,8 @@ void Room::ProcessCommand(const Net::RoomCommand& command)
 		result.roomId = context.roomId;
 		Net::SendRequest response;
 		response.recipientToken = command.sessionToken;
-		if (sendPacket_ && Net::PacketCodec::EncodeTcp(result, command.requestId, response.packet))
-			sendPacket_(response);
+		if (m_SendPacket && Net::PacketCodec::EncodeTcp(result, command.requestId, response.packet))
+			m_SendPacket(response);
 		RemovePlayerFromRoom(command.sessionToken);
 		return;
 	}
@@ -358,7 +362,6 @@ void Room::ProcessCommand(const Net::RoomCommand& command)
 			SetPlayerLoaded(command.sessionToken);
 		return;
 	}
-	// 윤지훈 후속 연결: 이동 결과 송신과 FireRequest 사격 처리를 연결한다.
 	const Net::PlayerTransform* input = std::get_if<Net::PlayerTransform>(&command.body);
 	if (input)
 		UpdatePlayerTransform(command.sessionToken, *input, command.receivedAtMs);
@@ -399,7 +402,7 @@ void Room::SendTransformData()
 {
 	const Net::MatchContext& context = m_state.version.context;
 	if (stopRequested_ || m_state.state != Net::GameState::Playing ||
-		!m_fSendPacket || targetRecipients_.empty() || context.roomId == 0 || context.matchId == 0 ||
+		!m_SendPacket || targetRecipients_.empty() || context.roomId == 0 || context.matchId == 0 ||
 		m_vPlayers.size() > Net::MaxPlayers)
 		return;
 
@@ -443,14 +446,14 @@ void Room::SendTransformData()
 		//데이터 네트워크 바이트로 변환하여 저장
 		if (Net::PacketCodec::EncodeUdp(snapshot, request.packet))
 			//전송
-			m_fSendPacket(request);
+			m_SendPacket(request);
 	}
 }
 
 void Room::SendTargetPositions(Net::ServerTimeMs nowMs)
 {
 	const Net::MatchContext& context = m_state.version.context;
-	if (!m_fSendPacket || targetRecipients_.empty() || context.roomId == 0 || context.matchId == 0)
+	if (!m_SendPacket || targetRecipients_.empty() || context.roomId == 0 || context.matchId == 0)
 		return;
 
 	std::vector<Net::TargetMotionData> activeTargets = targets_->GetActiveTargets(nowMs);
@@ -470,6 +473,6 @@ void Room::SendTargetPositions(Net::ServerTimeMs nowMs)
 		header.membershipId = recipient.membershipId;
 		Net::SendRequest request{recipient.sessionToken, {}};
 		if (Net::PacketCodec::EncodeUdp(snapshot, request.packet))
-			m_fSendPacket(request);
+			m_SendPacket(request);
 	}
 }

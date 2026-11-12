@@ -25,20 +25,12 @@ public:
 	void UpdateCamera();
 	void SendPlayerTransform();
 	void RecvTransformData(const Net::PlayerSnapshot& snapshot);
-	void RequestReadyChange(bool ready);
 	void OnRoomStateChanged(const Net::RoomStateData& state);
 	void OnGameStarted(const Net::GameStarted& event);
-	void ShowReadyUI();
 	void DrawHUD();
-	void SendShoot();
-	void RecvShootResult(const Net::ShotResolved& result);
 	void ApplyTargetPositions(const Net::UdpHeader& header,
 	    const Net::TargetSnapshot& snapshot);
 	void ApplyTargetSnapshot(const Net::TargetSnapshot& snapshot);
-	void UpdateMatchTime(const Net::MatchTime& time);
-	void RecvGameResults(const Net::GameResults& results);
-	void OnGameEnded();
-	void ShowGameResult();
 
 private:
 	// 통신 참조와 세션 상태는 장면이 살아 있는 동안 메인 스레드에서만 사용한다.

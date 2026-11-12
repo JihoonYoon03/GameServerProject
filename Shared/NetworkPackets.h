@@ -1,7 +1,7 @@
 #pragma once
 #include "NetworkTypes.h"
 
-// TCP uses its frame length. UDP uses the received datagram length and body counts.
+// TCP uses its frame length. UDP uses the received datagram length and message counts.
 // PacketCodec writes fields in network byte order without copying object padding.
 namespace Net
 {
@@ -18,21 +18,13 @@ namespace Net
 	{
 		ConnectResult = 0x0001,
 		RequestRejected = 0x0002,
-		RoomListRequest = 0x0101,
-		RoomListResult = 0x0102,
 		CreateRoomRequest = 0x0110,
-		JoinRoomRequest = 0x0111,
 		RoomEnterResult = 0x0112,
 		LeaveRoomRequest = 0x0113,
 		LeaveRoomResult = 0x0114,
 		MapLoaded = 0x0201,
-		ReadyChangeRequest = 0x0202,
 		RoomState = 0x0203,
 		GameStarted = 0x0301,
-		FireRequest = 0x0302,
-		ShotResolved = 0x0303,
-		MatchTime = 0x0305,
-		GameResults = 0x0306,
 	};
 
 	enum class UdpType : std::uint16_t
@@ -66,8 +58,11 @@ namespace Net
 	};
 
 	// 사용: 서버 NetworkServer::AcceptPlayer() → 클라 NetworkClient::ConnectServer() [선언]
-	struct ConnectResult { ErrorCode result = ErrorCode::Ok; SessionToken sessionToken{};
-
+	struct ConnectResult
+	{
+		static constexpr TcpType type = TcpType::ConnectResult;
+		ErrorCode result = ErrorCode::Ok;
+		SessionToken sessionToken{};
 		std::uint16_t udpPort = 0;
 		ServerTimeMs serverTimeMs = 0;
 		std::uint16_t tickRate = static_cast<std::uint16_t>(ServerTickRate);
@@ -75,46 +70,65 @@ namespace Net
 
 	// 사용: 서버 NetworkServer::DispatchPacket(), RoomManager::JoinGameRoom(), Room::RecvShoot() → 클라
 	//       NetworkClient::UpdateNetwork() [선언]
-	struct RequestRejected { ErrorCode reason = ErrorCode::InvalidRequest; MatchContext context; };
+	struct RequestRejected
+	{
+		static constexpr TcpType type = TcpType::RequestRejected;
+		ErrorCode reason = ErrorCode::InvalidRequest;
+		MatchContext context;
+	};
 
-	// 사용: 클라 MainScene::SearchRoomList() → 서버 RoomManager::SendRoomList() [선언]
-	struct RoomListRequest {};
 
-	// 사용: 서버 RoomManager::SendRoomList() → 클라 MainScene::UpdateRoomList() [선언]
-	struct RoomListResult { std::vector<RoomInfo> rooms; };
 
 	// 사용: 클라 MainScene::RequestGameRoom() → 서버 RoomManager::CreateGameRoom() [선언]
-	struct CreateRoomRequest {};
+	struct CreateRoomRequest
+	{
+		static constexpr TcpType type = TcpType::CreateRoomRequest;
+	};
 
-	// 사용: 클라 MainScene::JoinRoom() → 서버 RoomManager::JoinGameRoom() [선언]
-	struct JoinRoomRequest { RoomId roomId = 0; };
 
 	// 사용: 서버 RoomManager::CreateGameRoom(), RoomManager::JoinGameRoom() → 클라 MainScene::JoinRoom() [선언]
 	struct RoomEnterResult
 	{
+		static constexpr TcpType type = TcpType::RoomEnterResult;
 		ErrorCode result = ErrorCode::Ok;
 		MembershipId membershipId = 0;
 		RoomStateData room;
 	};
 
 	// 사용: 클라 MainScene::ExitRoom() → 서버 Room::RemovePlayerFromRoom() [선언]
-	struct LeaveRoomRequest { RoomId roomId = 0; };
+	struct LeaveRoomRequest
+	{
+		static constexpr TcpType type = TcpType::LeaveRoomRequest;
+		RoomId roomId = 0;
+	};
 
 	// 사용: 서버 Room::RemovePlayerFromRoom() → 클라 MainScene::OnRoomExited() [선언]
-	struct LeaveRoomResult { ErrorCode result = ErrorCode::Ok; RoomId roomId = 0; };
+	struct LeaveRoomResult
+	{
+		static constexpr TcpType type = TcpType::LeaveRoomResult;
+		ErrorCode result = ErrorCode::Ok;
+		RoomId roomId = 0;
+	};
 
 	// 사용: 클라 ShootingScene::SendMapLoaded() → 서버 Room::SetPlayerLoaded() [선언]
-	struct MapLoaded { RoomId roomId = 0; };
+	struct MapLoaded
+	{
+		static constexpr TcpType type = TcpType::MapLoaded;
+		RoomId roomId = 0;
+	};
 
-	// 사용: 클라 ShootingScene::RequestReadyChange() → 서버 Room::SetPlayerReady() [선언]
-	struct ReadyChangeRequest { RoomId roomId = 0; std::uint8_t ready = 0; };
 
 	// 사용: 서버 Room::SendRoomState() → 클라 ShootingScene::OnRoomStateChanged() [선언] / 묶음: 참가자·준비·구역
-	struct RoomState { RoomStateData room; };
+	struct RoomState
+	{
+		static constexpr TcpType type = TcpType::RoomState;
+		RoomStateData room;
+	};
 
 	// 사용: 서버 Room::StartGameIfReady() → 클라 ShootingScene::OnGameStarted() [선언] / 묶음: 시간·규칙·플레이어, 표적 목록은 UDP로만 전달
 	struct GameStarted
 	{
+		static constexpr TcpType type = TcpType::GameStarted;
 		RoomVersion version;
 		ServerTimeMs serverTimeMs = 0;
 		ServerTimeMs startsAtMs = 0;
@@ -123,62 +137,47 @@ namespace Net
 		std::vector<PlayerData> players;
 	};
 
-	// 사용: 클라 ShootingScene::SendShoot() → 서버 Room::RecvShoot(), Room::JudgeShoot() [선언] / 개별 발사 요청
-	struct FireRequest
-	{
-		MatchContext context;
-		MembershipId membershipId = 0;
-		ShotId shotId = 0;
-		Sequence inputSequence = 0;
-		glm::mat4 shooterTransform{1.0f};
-		glm::vec3 origin{0.0f};
-	};
 
-	// 사용: 서버 Room::SendShootResult() → 클라 ShootingScene::RecvShootResult() [선언] / 묶음: 발사자 토큰·명중 결과·점수·탄
-	//       수, 표적 생성·삭제와 반동 적용 없음
-	struct ShotResolved { RoomVersion version; SessionToken shooterToken{};
 
-		ShotId shotId = 0;
-		ShotOutcome outcome = ShotOutcome::Miss;
-		PlayerStats shooterStats;
-	};
 
-	// 사용: 서버 StageController::SendMatchTime() → 클라 ShootingScene::UpdateMatchTime() [선언]
-	struct MatchTime { MatchContext context; ServerTimeMs serverTimeMs = 0; ServerTimeMs endsAtMs = 0; };
-
-	// 사용: 서버 StageController::SendGameResults() → 클라 ShootingScene::RecvGameResults(), ShootingScene::OnGameEnded() [선언]
-	//       / 묶음: 순위·방 상태·준비 초기화
-	struct GameResults
-	{
-		RoomStateData room;
-		ServerTimeMs endedAtMs = 0;
-		MatchEndReason reason = MatchEndReason::TimeLimit;
-		std::vector<PlayerResult> players;
-	};
 
 	// 사용: 클라 NetworkClient::RegisterUDP() → 서버 NetworkServer::RegisterPlayerUDP() [선언]
-	struct UdpRegisterRequest {};
+	struct UdpRegisterRequest
+	{
+		static constexpr UdpType type = UdpType::RegisterRequest;
+	};
 
 	// 사용: 서버 NetworkServer::RegisterPlayerUDP() → 클라 NetworkClient::CompleteConnection() [선언]
-	struct UdpRegisterResult { ErrorCode result = ErrorCode::Ok; Sequence registrationSequence = 0; };
+	struct UdpRegisterResult
+	{
+		static constexpr UdpType type = UdpType::RegisterResult;
+		ErrorCode result = ErrorCode::Ok;
+		Sequence registrationSequence = 0;
+	};
 
 	// 사용: 클라 ShootingScene::SendPlayerTransform() → 서버 NetworkServer::ReceiveUdp(), Room::UpdatePlayerTransform() [선언] / 개별
 	//       플레이어의 최신 변환 행렬
-	struct PlayerTransform { Sequence inputSequence = 0; PlayerPose pose; };
+	struct PlayerTransform
+	{
+		static constexpr UdpType type = UdpType::PlayerTransform;
+		Sequence inputSequence = 0;
+		PlayerPose pose;
+	};
 
 	// 사용: 서버 Room::SendTransformData() → 클라 ShootingScene::RecvTransformData() [선언] / 묶음: 전체 플레이어·본인 보정
 	struct PlayerSnapshot
 	{
+		static constexpr UdpType type = UdpType::PlayerSnapshot;
 		ServerTimeMs serverTimeMs = 0;
 		Revision requiredRevision = 0;
 		std::uint8_t playerCount = 0;
 		std::array<PlayerTransformEntry, MaxPlayers> players{};
-
 	};
 
 	// 한 UDP 데이터그램에 생존 표적 전체를 담는다.
 	struct TargetSnapshot
 	{
+		static constexpr UdpType type = UdpType::TargetSnapshot;
 		std::uint16_t targetCount = 0;
 		std::array<TargetMotionData, MaxTargets> targets{};
 	};

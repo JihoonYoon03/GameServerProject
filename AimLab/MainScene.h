@@ -7,12 +7,7 @@ class MainScene : public Scene
 public:
     void Initialize() override;
     void Update(float deltaTime, const Input& input) override;
-    void ShowRoomList();
-    void SearchRoomList();
-    void UpdateRoomList(const Net::RoomListResult& result);
     void RequestGameRoom();
-    // 방 ID를 받으면 입장 요청, 입장 결과를 받으면 승인·실패를 처리한다.
-    void JoinRoom(Net::RoomId roomId);
     void JoinRoom(const Net::RoomEnterResult& result);
     void ExitRoom();
     void OnRoomExited(const Net::LeaveRoomResult& result);

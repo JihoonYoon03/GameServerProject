@@ -5,13 +5,11 @@
 
 RoomManager::RoomManager(Net::PacketSender sender) : sendPacket_(std::move(sender))
 {
-	InitializeCriticalSection(&managementCS_);
 }
 
 RoomManager::~RoomManager()
 {
 	StopRooms();
-	DeleteCriticalSection(&managementCS_);
 }
 
 Net::RoomId RoomManager::CreateGameRoom(const Net::SessionToken& creator,
@@ -24,7 +22,7 @@ Net::RoomId RoomManager::CreateGameRoom(const Net::SessionToken& creator,
 	Net::RoomId roomId = nextRoomId_++;
 	try
 	{
-		std::unique_ptr<Room> room = std::make_unique<Room>(roomId, sendPacket_, managementQueue_, managementCS_);
+		std::unique_ptr<Room> room = std::make_unique<Room>(roomId, sendPacket_);
 		Net::RoomCommand command;
 		command.sessionToken = creator;
 		command.requestId = requestId;
@@ -105,30 +103,27 @@ void RoomManager::StopRooms()
 		entry.second->RequestStop();
 	while (!rooms_.empty())
 		DeleteRoom(rooms_.begin()->first);
-	EnterCriticalSection(&managementCS_);
-	while (!managementQueue_.empty())
-		managementQueue_.pop();
-	LeaveCriticalSection(&managementCS_);
 }
 
 void RoomManager::UpdateRooms()
 {
-	std::queue<Net::RoomManagementEvent> events;
-	EnterCriticalSection(&managementCS_);
-	events.swap(managementQueue_);
-	LeaveCriticalSection(&managementCS_);
-	while (!events.empty())
+	for (auto room = rooms_.begin(); room != rooms_.end();)
 	{
-		Net::RoomManagementEvent& event = events.front();
-		auto summary = roomSummaries_.find(event.summary.roomId);
-		if (summary != roomSummaries_.end())
+		std::queue<Net::RoomManagementEvent> events = room->second->TakeStateEvents();
+		++room;
+		while (!events.empty())
 		{
-			if (event.type == Net::RoomManagementEventType::RoomEmpty)
-				DeleteRoom(event.summary.roomId);
-			else
-				summary->second = event.summary;
+			Net::RoomManagementEvent& event = events.front();
+			auto summary = roomSummaries_.find(event.summary.roomId);
+			if (summary != roomSummaries_.end())
+			{
+				if (event.type == Net::RoomManagementEventType::RoomEmpty)
+					DeleteRoom(event.summary.roomId);
+				else
+					summary->second = event.summary;
+			}
+			events.pop();
 		}
-		events.pop();
 	}
 	// 예외 등으로 먼저 끝난 방도 핸들을 합류시킨 뒤 정리한다.
 	for (auto thread = roomThreads_.begin(); thread != roomThreads_.end();)

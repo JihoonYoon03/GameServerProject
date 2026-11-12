@@ -25,8 +25,7 @@ public:
 	using PacketSender = Net::PacketSender;
 
 	Room();
-	Room(Net::RoomId roomId, PacketSender sender,
-		std::queue<Net::RoomManagementEvent>& managementQueue, CRITICAL_SECTION& managementCS);
+	Room(Net::RoomId roomId, PacketSender sender);
 	Room(Net::MatchContext context, Target& targets,
 		std::vector<TargetRecipient> recipients, PacketSender sender);
 	~Room();
@@ -40,27 +39,20 @@ public:
 	void SetPlayerLoaded(const Net::SessionToken& player);
 	void RemovePlayerFromRoom(const Net::SessionToken& player);
 
-	void SetPlayerReady(const Net::SessionToken& player, bool ready);
-
 	void SendRoomState();
-
-	bool AreAllPlayersReady() const;
 	void StartGameIfReady();
 
 	// 스레드 소유자는 RoomProc 종료를 기다린 뒤 방을 삭제한다.
 	static DWORD WINAPI RoomProc(LPVOID parameter);
 	void RequestStop();
 	bool AddCommand(const Net::RoomCommand& command);
+	std::queue<Net::RoomManagementEvent> TakeStateEvents();
 
 	bool UpdatePlayerTransform(const Net::SessionToken& player,
 		const Net::PlayerTransform& input, Net::ServerTimeMs receivedAtMs);
 	// 방 스레드에서 전체 플레이어의 서버 확정 위치와 마지막 처리 입력 순번을 송신한다.
 	void SendTransformData();
 
-	void RecvShoot(const Net::SessionToken& player, const Net::FireRequest& request);
-	Net::ShotResolved JudgeShoot(const Net::SessionToken& player,
-		const Net::FireRequest& request);
-	void SendShootResult(const Net::ShotResolved& result);
 	// 활성 표적 전체 목록을 동일 시점 기준으로 나눠 UDP 전송한다.
 	void SendTargetPositions(Net::ServerTimeMs nowMs);
 private:
@@ -68,7 +60,7 @@ private:
 	void ProcessCommands();
 	void ProcessCommand(const Net::RoomCommand& command);
 	void EnterPlayer(const Net::RoomCommand& command, const Net::RoomEnterCommand& enter);
-	void PublishManagementEvent(Net::RoomManagementEventType type);
+	void PublishStateEvent(Net::RoomManagementEventType type);
 
 	// 경기 상태는 방 스레드만 바꾼다.
 	Net::RoomStateData m_state{};
@@ -82,10 +74,11 @@ private:
 	//방 쓰레드는 ProcessCommands에서 해당 큐를 사용하기 때문
 	CRITICAL_SECTION commandCS_{}; // 사용 전 초기화하고 스레드 종료 대기 후 해제한다.
 	std::queue<Net::RoomCommand> commandQueue_;
+	std::queue<Net::RoomManagementEvent> m_qStateEvents;
 
 	Target* targets_ = &targetController_; // 주입된 표적 관리자는 방보다 오래 유지되어야 한다.
 	std::vector<TargetRecipient> targetRecipients_;
-	PacketSender m_fSendPacket;
+	PacketSender m_SendPacket;
 	//플레이어·표적 스냅샷은 같은 UDP 순번을 사용한다.
 	Net::Sequence m_nSnapshotSequence = 0;
 };

@@ -25,6 +25,8 @@ public:
 	using PacketSender = Net::PacketSender;
 
 	Room();
+	Room(Net::RoomId roomId, PacketSender sender,
+		std::queue<Net::RoomManagementEvent>& managementQueue, CRITICAL_SECTION& managementCS);
 	Room(Net::MatchContext context, Target& targets,
 		std::vector<TargetRecipient> recipients, PacketSender sender);
 	~Room();
@@ -45,10 +47,10 @@ public:
 	bool AreAllPlayersReady() const;
 	void StartGameIfReady();
 
-	// The thread owner must wait for RoomProc to finish before destroying the room.
+	// 스레드 소유자는 RoomProc 종료를 기다린 뒤 방을 삭제한다.
 	static DWORD WINAPI RoomProc(LPVOID parameter);
 	void RequestStop();
-	void AddCommand(const Net::RoomCommand& command);
+	bool AddCommand(const Net::RoomCommand& command);
 
 	bool UpdatePlayerTransform(const Net::SessionToken& player,
 		const Net::PlayerTransform& input, Net::ServerTimeMs receivedAtMs);
@@ -63,6 +65,9 @@ public:
 private:
 	void Tick();
 	void ProcessCommands();
+	void ProcessCommand(const Net::RoomCommand& command);
+	void EnterPlayer(const Net::RoomCommand& command, const Net::RoomEnterCommand& enter);
+	void PublishManagementEvent(Net::RoomManagementEventType type);
 
 	// 경기 상태는 방 스레드만 바꾼다.
 	Net::RoomStateData m_state{};
@@ -81,5 +86,7 @@ private:
 	std::vector<TargetRecipient> targetRecipients_;
 	PacketSender sendPacket_;
 	Net::Sequence targetSnapshotSequence_ = 0;
+	std::queue<Net::RoomManagementEvent>* managementQueue_ = nullptr;
+	CRITICAL_SECTION* managementCS_ = nullptr;
 };
 

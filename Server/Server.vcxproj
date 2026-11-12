@@ -196,6 +196,7 @@
     <ClCompile Include="Framework.cpp" />
     <ClCompile Include="NetworkServer.cpp" />
     <ClCompile Include="Room.cpp" />
+    <ClCompile Include="RoomManager.cpp" />
     <ClCompile Include="..\Shared\Collision.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>

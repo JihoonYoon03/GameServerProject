@@ -148,6 +148,58 @@ bool NetworkServer::SendPacket(const Net::SendRequest& request)
 	return true;
 }
 
+bool NetworkServer::ApplyRoomResponse(Client& client, const Net::PacketData& packet)
+{
+	Net::TcpHeader header;
+	if (Net::PacketCodec::ReadTcpHeader(packet.bytes.data(), packet.bytes.size(), header)
+		!= Net::DecodeStatus::Complete || header.size != packet.bytes.size())
+		return false;
+	const std::uint8_t* body = packet.bytes.data() + Net::TcpHeaderBytes;
+	std::size_t bodySize = packet.bytes.size() - Net::TcpHeaderBytes;
+	// 소켓 송신과 분리하되, 접속의 경기 정보는 계속 서버 메인에서만 바꾼다.
+	switch (header.type)
+	{
+	case Net::TcpType::RoomEnterResult:
+	{
+		Net::RoomEnterResult result;
+		if (!Net::PacketCodec::DecodeBody(header.type, body, bodySize, result))
+			return false;
+		if (result.result == Net::ErrorCode::Ok)
+		{
+			if (result.room.version.context.roomId != client.GetRoomId()
+				|| result.membershipId != client.GetMembershipId() || client.GetMatchId() != 0)
+				return false;
+			client.SetMatchContext(result.room.version.context, result.membershipId);
+		}
+		break;
+	}
+	case Net::TcpType::GameStarted:
+	{
+		Net::GameStarted event;
+		if (!Net::PacketCodec::DecodeBody(header.type, body, bodySize, event)
+			|| event.version.context.roomId != client.GetRoomId() || client.GetMembershipId() == 0
+			|| event.version.context.matchId == 0
+			|| (client.GetMatchId() != 0 && event.version.context.matchId != client.GetMatchId()
+				&& !Net::IsNewerSequence(event.version.context.matchId, client.GetMatchId())))
+			return false;
+		client.SetMatchContext(event.version.context, client.GetMembershipId());
+		break;
+	}
+	case Net::TcpType::LeaveRoomResult:
+	{
+		Net::LeaveRoomResult result;
+		if (!Net::PacketCodec::DecodeBody(header.type, body, bodySize, result))
+			return false;
+		if (result.result == Net::ErrorCode::Ok && result.roomId == client.GetRoomId())
+			client.SetMatchContext({}, 0);
+		break;
+	}
+	default:
+		break;
+	}
+	return true;
+}
+
 void NetworkServer::FlushSendQueue()
 {
 	// 잠금 안에서는 요청만 옮기고 소켓 송신은 통신 스레드에서 처리한다.
@@ -168,7 +220,8 @@ void NetworkServer::FlushSendQueue()
 			switch (request.packet.transport)
 			{
 			case Net::PacketTransport::Tcp:
-				client.QueueSend(request.packet);
+				if (ApplyRoomResponse(client, request.packet))
+					client.QueueSend(request.packet);
 				break;
 			case Net::PacketTransport::Udp:
 				// UDP 등록을 마친 수신자에게만 완성된 데이터그램을 보낸다.
@@ -255,7 +308,7 @@ bool NetworkServer::StartNetwork(std::uint16_t tcpPort, std::uint16_t udpPort)
 	return true;
 }
 
-bool NetworkServer::SetCommandSink(const std::function<void(const Net::RoomCommand&)>& sink)
+bool NetworkServer::SetCommandSink(const std::function<bool(const Net::RoomCommand&)>& sink)
 {
 	if (GetCurrentThreadId() != m_ControlThreadId || m_bCleanupInProgress || m_bWinsockStarted)
 		return false;
@@ -263,22 +316,24 @@ bool NetworkServer::SetCommandSink(const std::function<void(const Net::RoomComma
 	return true;
 }
 
-void NetworkServer::NotifyCommand(const Net::RoomCommand& command)
+bool NetworkServer::NotifyCommand(const Net::RoomCommand& command)
 {
 	if (!m_commandSink)
-		return;
+		return false;
+	bool accepted = false;
 
 	// 방 명령 처리 중에는 같은 서버의 분배와 연결 정리를 다시 호출하지 않는다.
 	m_bInvokingCommandSink = true;
 	try
 	{
-		m_commandSink(command);
+		accepted = m_commandSink(command);
 	}
 	catch (...)
 	{
 		fprintf(stderr, "방 명령 콜백 처리 중 오류가 발생했습니다.\n");
 	}
 	m_bInvokingCommandSink = false;
+	return accepted;
 }
 
 bool NetworkServer::ReceiveTcp(Client& client)
@@ -361,13 +416,41 @@ void NetworkServer::ReceiveUdp()
 	DispatchPacket(sender, packet);
 }
 
+void NetworkServer::CreateSinglePlayerRoom(Client& client, std::uint32_t requestId)
+{
+	Net::RoomEnterResult result;
+	if (client.GetRoomId() != 0)
+		result.result = Net::ErrorCode::AlreadyInRoom;
+	else if (!client.IsUDPRegistered())
+		result.result = Net::ErrorCode::UdpNotRegistered;
+	else if (m_pRoomManager == nullptr || client.m_nNextMembershipId == 0)
+		result.result = Net::ErrorCode::ServerFull;
+	else
+	{
+		Net::MembershipId membership = client.m_nNextMembershipId;
+		Net::RoomId roomId = m_pRoomManager->CreateGameRoom(client.GetSessionToken(), membership, true, requestId);
+		if (roomId != 0)
+		{
+			// 응답을 소비하기 전에 서버 메인에서 입장 정보를 예약한다.
+			client.SetMatchContext({roomId, 0}, membership);
+			++client.m_nNextMembershipId;
+			return;
+		}
+		result.result = Net::ErrorCode::ServerFull;
+	}
+	Net::SendRequest response;
+	response.recipientToken = client.GetSessionToken();
+	if (Net::PacketCodec::EncodeTcp(result, requestId, response.packet))
+		SendPacket(response);
+}
+
 void NetworkServer::DispatchPacket(const Net::SessionToken& verifiedSender, const Net::PacketData& packet)
 {
 	if (GetCurrentThreadId() != m_ControlThreadId || !m_bLoopRunning || m_bInvokingCommandSink || m_bStopRequested)
 		return;
 
-	const Client* sender = nullptr;
-	for (const Client& client : m_vClients)
+	Client* sender = nullptr;
+	for (Client& client : m_vClients)
 	{
 		if (client.GetTCPSocket() != INVALID_SOCKET && client.GetSessionToken() == verifiedSender)
 		{
@@ -396,6 +479,15 @@ void NetworkServer::DispatchPacket(const Net::SessionToken& verifiedSender, cons
 		const std::uint8_t* body = bytes + Net::TcpHeaderBytes;
 		std::size_t bodySize = size - Net::TcpHeaderBytes;
 		command.requestId = header.requestId;
+		if (header.type == Net::TcpType::CreateRoomRequest)
+		{
+			Net::CreateRoomRequest request;
+			if (!Net::PacketCodec::DecodeBody(header.type, body, bodySize, request))
+				return;
+
+			CreateSinglePlayerRoom(*sender, header.requestId);
+			return;
+		}
 		if (!m_commandSink || command.context.roomId == 0 || command.membershipId == 0)
 			return;
 
@@ -463,7 +555,17 @@ void NetworkServer::DispatchPacket(const Net::SessionToken& verifiedSender, cons
 	else
 		return;
 
-	NotifyCommand(command);
+	if (!NotifyCommand(command) && packet.transport == Net::PacketTransport::Tcp)
+	{
+		// 사라지거나 종료 중인 방이 명령을 받지 못한 경우 요청을 무응답으로 두지 않는다.
+		Net::RequestRejected rejected;
+		rejected.reason = Net::ErrorCode::RoomNotFound;
+		rejected.context = command.context;
+		Net::SendRequest response;
+		response.recipientToken = verifiedSender;
+		if (Net::PacketCodec::EncodeTcp(rejected, command.requestId, response.packet))
+			SendPacket(response);
+	}
 }
 
 void NetworkServer::OnClientDisconnected(const Net::SessionToken& sessionToken)
@@ -512,6 +614,8 @@ void NetworkServer::NetworkLoop(const std::function<bool()>& shouldStop)
 			StopNetwork();
 			break;
 		}
+		if (m_pRoomManager != nullptr)
+			m_pRoomManager->UpdateRooms();
 		FlushSendQueue();
 		fd_set readSet;
 		FD_ZERO(&readSet);
@@ -539,6 +643,14 @@ void NetworkServer::NetworkLoop(const std::function<bool()>& shouldStop)
 		for (std::size_t i = 0; i < m_vClients.size() && !m_bStopRequested;)
 		{
 			Client& client = m_vClients[i];
+			// 정상 퇴장 응답을 먼저 소비한 뒤 비정상 종료로 사라진 방의 접속을 정리한다.
+			if (m_pRoomManager != nullptr && client.GetRoomId() != 0
+				&& !m_pRoomManager->HasRoom(client.GetRoomId()))
+			{
+				const Net::SessionToken token = client.GetSessionToken();
+				OnClientDisconnected(token);
+				continue;
+			}
 			if (!ReceiveTcp(client))
 			{
 				const Net::SessionToken token = client.GetSessionToken();
@@ -559,7 +671,7 @@ void NetworkServer::StopNetwork()
 	m_bStopRequested = true;
 	LeaveCriticalSection(&m_CSSendQueue);
 
-	// Wait until the owner has returned from the loop before releasing its sockets.
+	// 소유자가 루프에서 돌아온 뒤에만 소켓을 해제한다.
 	if (GetCurrentThreadId() != m_ControlThreadId || m_bLoopRunning || m_bCleanupInProgress)
 		return;
 	m_bCleanupInProgress = true;

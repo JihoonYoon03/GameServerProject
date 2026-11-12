@@ -14,10 +14,16 @@ bool Framework::StartServer(std::uint16_t tcpPort, std::uint16_t udpPort)
 {
     if (network_ != nullptr)
         return false;
-    roomManager_ = std::make_unique<RoomManager>();
     network_ = std::make_unique<NetworkServer>();
+    roomManager_ = std::make_unique<RoomManager>([this](const Net::SendRequest& request)
+    {
+        return network_->SendPacket(request);
+    });
     network_->SetRoomManager(roomManager_.get());
-    if (!network_->StartNetwork(tcpPort, udpPort))
+    if (!network_->SetCommandSink([this](const Net::RoomCommand& command)
+        {
+            return roomManager_->AddCommand(command);
+        }) || !network_->StartNetwork(tcpPort, udpPort))
     {
         network_.reset();
         roomManager_.reset();
@@ -59,7 +65,10 @@ void Framework::StopServer()
     }
 
     stopInProgress_ = true;
-    // 방 종료를 먼저 요청하되 실패해도 통신 스레드와 소켓을 정리한다.
+    // 방 스레드를 먼저 합류시켜 송신 큐를 더 이상 사용하지 않도록 한다.
+    if (roomManager_ != nullptr)
+        roomManager_->StopRooms();
+    // 방 종료 콜백이 실패해도 소켓은 정리한다.
     try
     {
         if (roomStopCallback_)

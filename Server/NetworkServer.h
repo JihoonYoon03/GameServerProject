@@ -21,8 +21,8 @@ public:
 	bool StartNetwork(std::uint16_t tcpPort, std::uint16_t udpPort);
 	void NetworkLoop(const std::function<bool()>& shouldStop = {});
 	// 제어 스레드에서 시작 전에 지정한다. 종료가 끝날 때까지 콜백이 참조하는 객체를 유지한다.
-	// 콜백은 통신 스레드와 정리 중인 제어 스레드에서 호출된다. 명령 참조는 호출 중에만 유효하다.
-	bool SetCommandSink(const std::function<void(const Net::RoomCommand&)>& sink);
+	// 콜백은 같은 제어 스레드에서 호출되고, 명령을 큐에 수락하면 true를 반환한다. 참조는 호출 중에만 유효하다.
+	bool SetCommandSink(const std::function<bool(const Net::RoomCommand&)>& sink);
 	void AcceptPlayer();
 
 	//Player의 UDP 접속 요청 처리 함수
@@ -41,14 +41,16 @@ public:
 	// 방 스레드의 송신 요청을 큐에 넣고 실제 소켓 송신은 통신 스레드가 담당한다.
 	bool SendPacket(const Net::SendRequest& request);
 
-	// Other threads and command callbacks may request a stop. The owner cleans up after the loop.
+	// 다른 스레드와 명령 콜백은 종료를 요청하고, 소유자가 루프 종료 후 정리한다.
 	void StopNetwork();
 
 private:
+	bool ApplyRoomResponse(Client& client, const Net::PacketData& packet);
+	void CreateSinglePlayerRoom(Client& client, std::uint32_t requestId);
 	bool ReceiveTcp(Client& client);
 	void ReceiveUdp();
-	void NotifyCommand(const Net::RoomCommand& command);
-	std::function<void(const Net::RoomCommand&)> m_commandSink;
+	bool NotifyCommand(const Net::RoomCommand& command);
+	std::function<bool(const Net::RoomCommand&)> m_commandSink;
 	const DWORD m_ControlThreadId;
 	bool m_bLoopRunning = false;
 	bool m_bInvokingCommandSink = false;

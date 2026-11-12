@@ -11,6 +11,17 @@ Room::Room()
 	InitializeCriticalSection(&commandCS_);
 }
 
+Room::Room(Net::RoomId roomId, PacketSender sender,
+	std::queue<Net::RoomManagementEvent>& managementQueue, CRITICAL_SECTION& managementCS)
+	: Room()
+{
+	m_state.version.context.roomId = roomId;
+	m_state.capacity = 1;
+	sendPacket_ = std::move(sender);
+	managementQueue_ = &managementQueue;
+	managementCS_ = &managementCS;
+}
+
 Room::Room(Net::MatchContext context, Target& targets,
 	std::vector<TargetRecipient> recipients, PacketSender sender)
 	: Room()
@@ -24,6 +35,190 @@ Room::Room(Net::MatchContext context, Target& targets,
 Room::~Room()
 {
 	DeleteCriticalSection(&commandCS_);
+}
+
+void Room::AssignPlayerAreas()
+{
+	if (m_state.vAreas.empty())
+	{
+		// 기존 사격장의 남쪽 구역과 시작 위치를 그대로 사용한다.
+		Net::AreaData area;
+		area.areaId = 0;
+		area.movementBounds.min.x = -2.0f;
+		area.movementBounds.min.z = 7.0f;
+		area.movementBounds.max.x = 2.0f;
+		area.movementBounds.max.z = 11.0f;
+		area.spawnTransform[3] = glm::vec4(0.0f, 1.0f, 9.0f, 1.0f);
+		m_state.vAreas.push_back(area);
+	}
+	for (ClientPlayer& player : m_vPlayers)
+	{
+		player.m_PlayerData.areaId = m_state.vAreas[0].areaId;
+		player.m_PlayerData.pose.position = glm::vec3(m_state.vAreas[0].spawnTransform[3]);
+	}
+}
+
+void Room::EnterPlayer(const Net::RoomCommand& command, const Net::RoomEnterCommand& enter)
+{
+	Net::RoomEnterResult result;
+	if (!enter.UDPRegistered)
+		result.result = Net::ErrorCode::UdpNotRegistered;
+	else if (!Net::IsValidSessionToken(command.sessionToken) || command.membershipId == 0)
+		result.result = Net::ErrorCode::InvalidSession;
+	else if (!m_vPlayers.empty())
+		result.result = Net::ErrorCode::RoomFull;
+	else
+	{
+		ClientPlayer player;
+		player.m_PlayerData.m_sessionToken = command.sessionToken;
+		m_vPlayers.push_back(player);
+		targetRecipients_.push_back({command.sessionToken, command.membershipId});
+		AssignPlayerAreas();
+		++m_state.version.revision;
+		m_state.vPlayers = {m_vPlayers[0].m_PlayerData};
+		result.membershipId = command.membershipId;
+		result.room = m_state;
+		PublishManagementEvent(Net::RoomManagementEventType::SummaryChanged);
+	}
+	Net::SendRequest response;
+	response.recipientToken = command.sessionToken;
+	if (sendPacket_ && Net::PacketCodec::EncodeTcp(result, command.requestId, response.packet))
+		sendPacket_(response);
+	if (m_vPlayers.empty())
+	{
+		PublishManagementEvent(Net::RoomManagementEventType::RoomEmpty);
+		RequestStop();
+	}
+}
+
+void Room::PublishManagementEvent(Net::RoomManagementEventType type)
+{
+	if (managementQueue_ == nullptr || managementCS_ == nullptr)
+		return;
+	Net::RoomManagementEvent event;
+	event.type = type;
+	event.summary.roomId = m_state.version.context.roomId;
+	event.summary.playerCount = static_cast<std::uint8_t>(m_vPlayers.size());
+	event.summary.capacity = m_state.capacity;
+	event.summary.state = m_state.state;
+	EnterCriticalSection(managementCS_);
+	try
+	{
+		managementQueue_->push(event);
+	}
+	catch (...)
+	{
+		LeaveCriticalSection(managementCS_);
+		throw;
+	}
+	LeaveCriticalSection(managementCS_);
+}
+
+void Room::RemovePlayerFromRoom(const Net::SessionToken& token)
+{
+	for (auto player = m_vPlayers.begin(); player != m_vPlayers.end(); ++player)
+	{
+		if (player->m_PlayerData.m_sessionToken != token)
+			continue;
+		m_vPlayers.erase(player);
+		for (auto recipient = targetRecipients_.begin(); recipient != targetRecipients_.end(); ++recipient)
+		{
+			if (recipient->sessionToken == token)
+			{
+				targetRecipients_.erase(recipient);
+				break;
+			}
+		}
+		++m_state.version.revision;
+		if (m_vPlayers.empty())
+		{
+			m_state.vPlayers.clear();
+			PublishManagementEvent(Net::RoomManagementEventType::RoomEmpty);
+			RequestStop();
+		}
+		else
+			SendRoomState();
+		return;
+	}
+}
+
+void Room::SetPlayerLoaded(const Net::SessionToken& token)
+{
+	if (m_state.state != Net::GameState::Preparing)
+		return;
+
+	for (ClientPlayer& player : m_vPlayers)
+	{
+		Net::PlayerData& data = player.m_PlayerData;
+		if (data.m_sessionToken != token)
+			continue;
+		if (data.mapLoaded != 0)
+			return;
+
+		data.mapLoaded = 1;
+		data.ready = Net::ReadyState::Waiting;
+		++m_state.version.revision;
+		SendRoomState();
+		StartGameIfReady();
+		return;
+	}
+}
+
+void Room::StartGameIfReady()
+{
+	// 1인 전용 방은 로딩이 끝나면 별도 준비 버튼 없이 시작한다.
+	if (m_state.capacity != 1 || m_state.state != Net::GameState::Preparing
+		|| m_vPlayers.size() != 1 || m_vPlayers[0].m_PlayerData.mapLoaded == 0)
+		return;
+
+	Net::ServerTimeMs nowMs = GetTickCount64();
+	// 이성노 후속 연결: 경기 관리자의 시작 시각을 공지와 공유할 수 있는 인터페이스가 필요하다.
+	stageController_.StartGame(m_state.rules, *targets_);
+	++m_state.version.context.matchId;
+	++m_state.version.revision;
+	m_state.state = Net::GameState::Playing;
+	m_vPlayers[0].m_PlayerData.ready = Net::ReadyState::Playing;
+	m_vPlayers[0].m_PlayerData.stats = {};
+	m_state.vPlayers = {m_vPlayers[0].m_PlayerData};
+
+	Net::GameStarted event;
+	event.version = m_state.version;
+	event.serverTimeMs = nowMs;
+	event.startsAtMs = nowMs;
+	event.endsAtMs = nowMs + m_state.rules.durationMs;
+	event.rules = m_state.rules;
+	event.players = m_state.vPlayers;
+	Net::SendRequest response;
+	response.recipientToken = m_vPlayers[0].m_PlayerData.m_sessionToken;
+	if (sendPacket_ && Net::PacketCodec::EncodeTcp(event, 0, response.packet))
+		sendPacket_(response);
+	PublishManagementEvent(Net::RoomManagementEventType::SummaryChanged);
+}
+
+void Room::SendRoomState()
+{
+	// 참가자 정보는 방이 소유한 현재 상태에서 복사한다.
+	m_state.vPlayers.clear();
+	for (const ClientPlayer& player : m_vPlayers)
+		m_state.vPlayers.push_back(player.m_PlayerData);
+	PublishManagementEvent(Net::RoomManagementEventType::SummaryChanged);
+
+	if (!sendPacket_)
+		return;
+
+	Net::RoomState state;
+	state.room = m_state;
+	Net::PacketData packet;
+	if (!Net::PacketCodec::EncodeTcp(state, 0, packet))
+		return;
+
+	for (const ClientPlayer& player : m_vPlayers)
+	{
+		Net::SendRequest request;
+		request.recipientToken = player.m_PlayerData.m_sessionToken;
+		request.packet = packet;
+		sendPacket_(request);
+	}
 }
 
 DWORD WINAPI Room::RoomProc(LPVOID parameter)
@@ -72,13 +267,17 @@ void Room::RequestStop()
 	stopRequested_ = true;
 }
 
-void Room::AddCommand(const Net::RoomCommand& command)
+bool Room::AddCommand(const Net::RoomCommand& command)
 {
 	EnterCriticalSection(&commandCS_);
+	if (stopRequested_)
+	{
+		LeaveCriticalSection(&commandCS_);
+		return false;
+	}
 	try
 	{
-		if (!stopRequested_)
-			commandQueue_.push(command);
+		commandQueue_.push(command);
 	}
 	catch (...)
 	{
@@ -86,38 +285,89 @@ void Room::AddCommand(const Net::RoomCommand& command)
 		throw;
 	}
 	LeaveCriticalSection(&commandCS_);
+	return true;
 }
 
 void Room::ProcessCommands()
 {
-	// 콜백이 새 명령을 넣을 수 있도록 큐를 옮긴 뒤 잠금을 푼다.
-	//임계 영역에서 큐의 데이터만 뽑아온 뒤 원래대로 통신받을 수 있도록 하기 위함
+	// 명령만 옮긴 뒤 잠금을 풀어 서버 메인이 다음 명령을 넣을 수 있게 한다.
 	std::queue<Net::RoomCommand> commands;
 	EnterCriticalSection(&commandCS_);
 	commands.swap(commandQueue_);
 	LeaveCriticalSection(&commandCS_);
 
-	//현재 while문 안에는 플레이어 이동 처리만 담당중임.
 	while (!commands.empty() && !stopRequested_)
 	{
-		//큐에서 요청 하나 읽은 뒤
-		Net::RoomCommand& command = commands.front();
-		//명령이 PlayerTransform이 맞을 때 Get
-		Net::PlayerTransform* input = std::get_if<Net::PlayerTransform>(&command.body);
-		//방 ID와 매치 ID를 가져온 뒤
-		Net::MatchContext& context = m_state.version.context;
-		//명령 가져오기 성공 && 방과 매칭 ID 정보가 같을 때 플레이어의 이동 요청을 처리함
-		if (input && command.context.roomId == context.roomId && command.context.matchId == context.matchId)
-			UpdatePlayerTransform(command.sessionToken, *input, command.receivedAtMs);
-
-		//읽은 요청 pop
+		Net::RoomCommand command = commands.front();
 		commands.pop();
+		ProcessCommand(command);
 	}
+}
+
+void Room::ProcessCommand(const Net::RoomCommand& command)
+{
+	const Net::MatchContext& context = m_state.version.context;
+	if (command.context.roomId != context.roomId)
+		return;
+	const Net::RoomEnterCommand* enter = std::get_if<Net::RoomEnterCommand>(&command.body);
+	if (enter)
+	{
+		if (command.context.matchId == context.matchId)
+			EnterPlayer(command, *enter);
+		return;
+	}
+
+	bool member = false;
+	for (const TargetRecipient& recipient : targetRecipients_)
+	{
+		if (recipient.sessionToken == command.sessionToken && recipient.membershipId == command.membershipId)
+		{
+			member = true;
+			break;
+		}
+	}
+	if (!member)
+		return;
+
+	// 종료는 경기 시작 공지가 송신되기 전의 경기 번호로도 도착할 수 있다.
+	if (std::get_if<Net::ClientDisconnected>(&command.body))
+	{
+		RemovePlayerFromRoom(command.sessionToken);
+		return;
+	}
+	const Net::LeaveRoomRequest* leave = std::get_if<Net::LeaveRoomRequest>(&command.body);
+	if (leave)
+	{
+		if (leave->roomId != context.roomId)
+			return;
+		Net::LeaveRoomResult result;
+		result.roomId = context.roomId;
+		Net::SendRequest response;
+		response.recipientToken = command.sessionToken;
+		if (sendPacket_ && Net::PacketCodec::EncodeTcp(result, command.requestId, response.packet))
+			sendPacket_(response);
+		RemovePlayerFromRoom(command.sessionToken);
+		return;
+	}
+	if (command.context.matchId != context.matchId)
+		return;
+	const Net::MapLoaded* loaded = std::get_if<Net::MapLoaded>(&command.body);
+	if (loaded)
+	{
+		if (loaded->roomId == context.roomId)
+			SetPlayerLoaded(command.sessionToken);
+		return;
+	}
+	// 윤지훈 후속 연결: 이동 결과 송신과 FireRequest 사격 처리를 연결한다.
+	const Net::PlayerTransform* input = std::get_if<Net::PlayerTransform>(&command.body);
+	if (input)
+		UpdatePlayerTransform(command.sessionToken, *input, command.receivedAtMs);
 }
 
 void Room::Tick()
 {
 	ProcessCommands();
+	// 이성노 후속 연결: 경기 틱 갱신과 SendTargetPositions 호출을 연결한다.
 }
 
 bool Room::UpdatePlayerTransform(const Net::SessionToken& token,

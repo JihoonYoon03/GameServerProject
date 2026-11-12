@@ -267,25 +267,25 @@
     <Image Include="Resources\Textures\SkydomeTex.png" />
   </ItemGroup>
   <ItemGroup>
-    <Object Include="Resources\Meshes\Cube.obj">
+    <Object Include="..\Resources\Meshes\Cube.obj">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
     </Object>
-    <Object Include="Resources\Meshes\K1.obj">
+    <Object Include="..\Resources\Meshes\K1.obj">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
     </Object>
-    <Object Include="Resources\Meshes\Pistol.obj">
+    <Object Include="..\Resources\Meshes\Pistol.obj">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
     </Object>
-    <Object Include="Resources\Meshes\Sphere.obj">
+    <Object Include="..\Resources\Meshes\Sphere.obj">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
@@ -306,6 +306,7 @@
     <ItemGroup>
       <_GameShader Include="$(MSBuildThisFileDirectory)Shaders\**\*" />
       <_GameResource Include="$(MSBuildThisFileDirectory)Resources\**\*" />
+      <_GameResource Include="$(MSBuildThisFileDirectory)..\Resources\**\*" />
     </ItemGroup>
     <Copy SourceFiles="@(_GameShader)" DestinationFiles="@(_GameShader->'$(TargetDir)Shaders\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
     <Copy SourceFiles="@(_GameResource)" DestinationFiles="@(_GameResource->'$(TargetDir)Resources\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />

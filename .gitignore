@@ -402,3 +402,6 @@ FodyWeavers.xsd
 
 # 로컬 에이전트 작업 지침
 /AGENTS.md
+
+# 원본 OBJ 모델은 컴파일 중간 파일과 구분하여 포함한다.
+!/Resources/Meshes/*.obj

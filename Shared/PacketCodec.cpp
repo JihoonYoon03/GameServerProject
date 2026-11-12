@@ -113,951 +113,377 @@ namespace Net
 
     namespace
     {
-        // 본문 타입마다 필드를 선언된 순서대로 읽고 쓴다.
-
-        void WriteSessionToken(std::vector<std::uint8_t>& bytes, const SessionToken& value)
+        // 읽기와 쓰기가 같은 필드 순서를 사용하도록 작업 위치를 모은다.
+        struct PacketIO
         {
-            for (std::size_t i = 0; i < SessionTokenBytes; ++i)
-            {
-                WriteU8(bytes, value[i]);
-            }
-        }
+            bool reading;
+            std::vector<std::uint8_t>* output;
+            const std::uint8_t* input;
+            std::size_t size;
+            std::size_t offset = 0;
 
-        bool ReadSessionToken(const std::uint8_t* data, std::size_t size, std::size_t& offset, SessionToken& value)
+            explicit PacketIO(std::vector<std::uint8_t>& bytes)
+                : reading(false), output(&bytes), input(nullptr), size(0) {}
+            PacketIO(const std::uint8_t* data, std::size_t length)
+                : reading(true), output(nullptr), input(data), size(length) {}
+        };
+
+        bool Transfer(PacketIO& io, std::uint8_t& value)
         {
-            for (std::size_t i = 0; i < SessionTokenBytes; ++i)
-            {
-                if (!ReadU8(data, size, offset, value[i]))
-                {
-                    return false;
-                }
-            }
+            if (io.reading)
+                return ReadU8(io.input, io.size, io.offset, value);
+            WriteU8(*io.output, value);
             return true;
         }
-        // GLM matrices use [column][row]. Write the components in that order.
-        void WriteMat4(std::vector<std::uint8_t>& bytes, const glm::mat4& value)
+        bool Transfer(PacketIO& io, std::uint16_t& value)
         {
-            for (int col = 0; col < 4; ++col)
-                for (int row = 0; row < 4; ++row)
-                    WriteF32(bytes, value[col][row]);
+            if (io.reading)
+                return ReadU16(io.input, io.size, io.offset, value);
+            WriteU16(*io.output, value);
+            return true;
+        }
+        bool Transfer(PacketIO& io, std::uint32_t& value)
+        {
+            if (io.reading)
+                return ReadU32(io.input, io.size, io.offset, value);
+            WriteU32(*io.output, value);
+            return true;
+        }
+        bool Transfer(PacketIO& io, std::uint64_t& value)
+        {
+            if (io.reading)
+                return ReadU64(io.input, io.size, io.offset, value);
+            WriteU64(*io.output, value);
+            return true;
+        }
+        bool Transfer(PacketIO& io, float& value)
+        {
+            if (io.reading)
+                return ReadF32(io.input, io.size, io.offset, value);
+            WriteF32(*io.output, value);
+            return true;
         }
 
-        bool ReadMat4(const std::uint8_t* data, std::size_t size, std::size_t& offset, glm::mat4& value)
+        // 열거형마다 명세에 정해진 정수 폭을 사용한다.
+        template<class T, class Integer>
+        bool TransferEnum(PacketIO& io, T& value, Integer raw)
+        {
+            if (!Transfer(io, raw))
+                return false;
+            value = static_cast<T>(raw);
+            return true;
+        }
+        bool Transfer(PacketIO& io, ErrorCode& value)
+        {
+            return TransferEnum(io, value, static_cast<std::uint16_t>(value));
+        }
+        bool Transfer(PacketIO& io, GameState& value)
+        {
+            return TransferEnum(io, value, static_cast<std::uint8_t>(value));
+        }
+        bool Transfer(PacketIO& io, ReadyState& value)
+        {
+            return TransferEnum(io, value, static_cast<std::uint8_t>(value));
+        }
+        bool Transfer(PacketIO& io, ShotOutcome& value)
+        {
+            return TransferEnum(io, value, static_cast<std::uint8_t>(value));
+        }
+        bool Transfer(PacketIO& io, MatchEndReason& value)
+        {
+            return TransferEnum(io, value, static_cast<std::uint8_t>(value));
+        }
+        bool Transfer(PacketIO& io, TcpType& value)
+        {
+            return TransferEnum(io, value, static_cast<std::uint16_t>(value));
+        }
+        bool Transfer(PacketIO& io, UdpType& value)
+        {
+            return TransferEnum(io, value, static_cast<std::uint16_t>(value));
+        }
+
+        bool Transfer(PacketIO& io, SessionToken& value)
+        {
+            for (std::size_t i = 0; i < SessionTokenBytes; ++i)
+                if (!Transfer(io, value[i]))
+                    return false;
+            return true;
+        }
+        // 행렬 원소는 기존과 같이 열을 먼저, 행을 나중에 순회한다.
+        bool Transfer(PacketIO& io, glm::mat4& value)
         {
             for (int col = 0; col < 4; ++col)
                 for (int row = 0; row < 4; ++row)
-                    if (!ReadF32(data, size, offset, value[col][row]))
+                    if (!Transfer(io, value[col][row]))
                         return false;
             return true;
         }
+        bool Transfer(PacketIO& io, glm::vec3& value)
+        {
+            return Transfer(io, value.x) && Transfer(io, value.y) && Transfer(io, value.z);
+        }
+        bool Transfer(PacketIO& io, PlayerPose& value)
+        {
+            return Transfer(io, value.position) && Transfer(io, value.yaw) && Transfer(io, value.pitch)
+                && (!io.reading || IsFinitePlayerPose(value));
+        }
+        bool Transfer(PacketIO& io, BoxData& value)
+        {
+            return Transfer(io, value.min)
+                && Transfer(io, value.max);
+        }
+        bool Transfer(PacketIO& io, MatchContext& value)
+        {
+            return Transfer(io, value.roomId)
+                && Transfer(io, value.matchId);
+        }
+        bool Transfer(PacketIO& io, RoomVersion& value)
+        {
+            return Transfer(io, value.context)
+                && Transfer(io, value.revision);
+        }
+        bool Transfer(PacketIO& io, AreaData& value)
+        {
+            return Transfer(io, value.areaId)
+                && Transfer(io, value.movementBounds)
+                && Transfer(io, value.spawnTransform);
+        }
+        bool Transfer(PacketIO& io, MatchRules& value)
+        {
+            return Transfer(io, value.durationMs)
+                && Transfer(io, value.activeTargetCount)
+                && Transfer(io, value.pointsPerHit);
+        }
+        bool Transfer(PacketIO& io, PlayerStats& value)
+        {
+            return Transfer(io, value.score)
+                && Transfer(io, value.shotsFired);
+        }
+        bool Transfer(PacketIO& io, PlayerData& value)
+        {
+            return Transfer(io, value.m_sessionToken)
+                && Transfer(io, value.pose)
+                && Transfer(io, value.areaId)
+                && Transfer(io, value.ready)
+                && Transfer(io, value.mapLoaded)
+                && Transfer(io, value.stats);
+        }
+        bool Transfer(PacketIO& io, RoomInfo& value)
+        {
+            return Transfer(io, value.roomId)
+                && Transfer(io, value.playerCount)
+                && Transfer(io, value.capacity)
+                && Transfer(io, value.state);
+        }
+        bool Transfer(PacketIO& io, PlayerResult& value)
+        {
+            return Transfer(io, value.m_sessionToken)
+                && Transfer(io, value.stats)
+                && Transfer(io, value.rank);
+        }
 
-        void WriteVec3(std::vector<std::uint8_t>& bytes, const glm::vec3& value)
+        // 목록은 개수를 먼저 검사하고 유효한 원소만 처리한다.
+        template<class T>
+        bool TransferList(PacketIO& io, std::vector<T>& values, std::size_t limit)
         {
-            WriteF32(bytes, value.x);
-            WriteF32(bytes, value.y);
-            WriteF32(bytes, value.z);
-        }
-        bool ReadVec3(const std::uint8_t* data, std::size_t size, std::size_t& offset, glm::vec3& value)
-        {
-            if (!ReadF32(data, size, offset, value.x))
-            {
+            if (!io.reading && values.size() > limit)
                 return false;
-            }
-            if (!ReadF32(data, size, offset, value.y))
-            {
+            std::uint16_t count = io.reading ? 0 : static_cast<std::uint16_t>(values.size());
+            if (!Transfer(io, count) || count > limit)
                 return false;
-            }
-            if (!ReadF32(data, size, offset, value.z))
-            {
-                return false;
-            }
+            if (io.reading)
+                values.resize(count);
+            for (std::size_t i = 0; i < count; ++i)
+                if (!Transfer(io, values[i]))
+                    return false;
             return true;
         }
-        void WritePlayerPose(std::vector<std::uint8_t>& bytes, const PlayerPose& value)
+        bool Transfer(PacketIO& io, RoomStateData& value)
         {
-            WriteVec3(bytes, value.position);
-            WriteF32(bytes, value.yaw);
-            WriteF32(bytes, value.pitch);
+            return Transfer(io, value.version) && Transfer(io, value.state)
+                && Transfer(io, value.capacity) && Transfer(io, value.rules)
+                && TransferList(io, value.vAreas, MaxPlayers)
+                && TransferList(io, value.vPlayers, MaxPlayers);
+        }
+        bool Transfer(PacketIO& io, PlayerTransformEntry& value)
+        {
+            return Transfer(io, value.m_sessionToken)
+                && Transfer(io, value.pose)
+                && Transfer(io, value.lastProcessedInput);
+        }
+        bool Transfer(PacketIO& io, TargetMotionData& value)
+        {
+            return Transfer(io, value.position)
+                && Transfer(io, value.velocity);
+        }
+        bool Transfer(PacketIO& io, TcpHeader& value)
+        {
+            return Transfer(io, value.size)
+                && Transfer(io, value.type)
+                && Transfer(io, value.requestId);
+        }
+        bool Transfer(PacketIO& io, UdpHeader& value)
+        {
+            return Transfer(io, value.magic)
+                && Transfer(io, value.type)
+                && Transfer(io, value.m_sessionToken)
+                && Transfer(io, value.sequence)
+                && Transfer(io, value.context)
+                && Transfer(io, value.membershipId)
+                && Transfer(io, value.serverTick);
+        }
+        bool Transfer(PacketIO& io, ConnectResult& value)
+        {
+            return Transfer(io, value.result)
+                && Transfer(io, value.sessionToken)
+                && Transfer(io, value.udpPort)
+                && Transfer(io, value.serverTimeMs)
+                && Transfer(io, value.tickRate);
+        }
+        bool Transfer(PacketIO& io, RequestRejected& value)
+        {
+            return Transfer(io, value.reason)
+                && Transfer(io, value.context);
+        }
+        bool Transfer(PacketIO&, RoomListRequest&)
+        {
+            return true;
+        }
+        bool Transfer(PacketIO& io, RoomListResult& value)
+        {
+            return TransferList(io, value.rooms, MaxRooms);
+        }
+        bool Transfer(PacketIO&, CreateRoomRequest&)
+        {
+            return true;
+        }
+        bool Transfer(PacketIO& io, JoinRoomRequest& value)
+        {
+            return Transfer(io, value.roomId);
+        }
+        bool Transfer(PacketIO& io, RoomEnterResult& value)
+        {
+            if (!Transfer(io, value.result))
+                return false;
+            return value.result != ErrorCode::Ok
+                || (Transfer(io, value.membershipId) && Transfer(io, value.room));
+        }
+        bool Transfer(PacketIO& io, LeaveRoomRequest& value)
+        {
+            return Transfer(io, value.roomId);
+        }
+        bool Transfer(PacketIO& io, LeaveRoomResult& value)
+        {
+            return Transfer(io, value.result)
+                && Transfer(io, value.roomId);
+        }
+        bool Transfer(PacketIO& io, MapLoaded& value)
+        {
+            return Transfer(io, value.roomId);
+        }
+        bool Transfer(PacketIO& io, ReadyChangeRequest& value)
+        {
+            return Transfer(io, value.roomId)
+                && Transfer(io, value.ready);
+        }
+        bool Transfer(PacketIO& io, RoomState& value)
+        {
+            return Transfer(io, value.room);
+        }
+        bool Transfer(PacketIO& io, GameStarted& value)
+        {
+            return Transfer(io, value.version) && Transfer(io, value.serverTimeMs)
+                && Transfer(io, value.startsAtMs) && Transfer(io, value.endsAtMs)
+                && Transfer(io, value.rules) && TransferList(io, value.players, MaxPlayers);
+        }
+        bool Transfer(PacketIO& io, FireRequest& value)
+        {
+            return Transfer(io, value.context)
+                && Transfer(io, value.membershipId)
+                && Transfer(io, value.shotId)
+                && Transfer(io, value.inputSequence)
+                && Transfer(io, value.shooterTransform)
+                && Transfer(io, value.origin);
+        }
+        bool Transfer(PacketIO& io, ShotResolved& value)
+        {
+            return Transfer(io, value.version)
+                && Transfer(io, value.shooterToken)
+                && Transfer(io, value.shotId)
+                && Transfer(io, value.outcome)
+                && Transfer(io, value.shooterStats);
+        }
+        bool Transfer(PacketIO& io, MatchTime& value)
+        {
+            return Transfer(io, value.context)
+                && Transfer(io, value.serverTimeMs)
+                && Transfer(io, value.endsAtMs);
+        }
+        bool Transfer(PacketIO& io, GameResults& value)
+        {
+            return Transfer(io, value.room) && Transfer(io, value.endedAtMs)
+                && Transfer(io, value.reason) && TransferList(io, value.players, MaxPlayers);
+        }
+        bool Transfer(PacketIO&, UdpRegisterRequest&)
+        {
+            return true;
+        }
+        bool Transfer(PacketIO& io, UdpRegisterResult& value)
+        {
+            return Transfer(io, value.result)
+                && Transfer(io, value.registrationSequence);
+        }
+        bool Transfer(PacketIO& io, PlayerTransform& value)
+        {
+            return Transfer(io, value.inputSequence)
+                && Transfer(io, value.pose);
+        }
+        template<class T, std::size_t Count>
+        bool TransferArray(PacketIO& io, std::array<T, Count>& values, std::size_t count)
+        {
+            if (count > values.size())
+                return false;
+            for (std::size_t i = 0; i < count; ++i)
+                if (!Transfer(io, values[i]))
+                    return false;
+            return true;
+        }
+        bool Transfer(PacketIO& io, PlayerSnapshot& value)
+        {
+            return Transfer(io, value.serverTimeMs) && Transfer(io, value.requiredRevision)
+                && Transfer(io, value.playerCount) && TransferArray(io, value.players, value.playerCount);
+        }
+        bool Transfer(PacketIO& io, TargetSnapshot& value)
+        {
+            return Transfer(io, value.targetCount) && TransferArray(io, value.targets, value.targetCount);
         }
 
-        bool ReadPlayerPose(const std::uint8_t* data, std::size_t size, std::size_t& offset, PlayerPose& value)
+        // 출력 본문은 임시값으로 처리하고 검증이 끝난 뒤에만 반영한다.
+        template<class T>
+        bool EncodeBodyFields(const T& value, std::vector<std::uint8_t>& bytes)
         {
-            return ReadVec3(data, size, offset, value.position) &&
-                ReadF32(data, size, offset, value.yaw) &&
-                ReadF32(data, size, offset, value.pitch) && IsFinitePlayerPose(value);
+            if (!PacketCodec::ValidateBody(value))
+                return false;
+            T candidate = value;
+            PacketIO io(bytes);
+            return Transfer(io, candidate);
+        }
+        template<class Type, class T>
+        bool DecodeBodyFields(Type type, const std::uint8_t* data, std::size_t size, T& output)
+        {
+            const std::size_t limit = PacketTraits<T>::transport == PacketTransport::Tcp
+                ? MaxTcpPacketBytes - TcpHeaderBytes : MaxUdpPacketBytes - UdpHeaderBytes;
+            if (type != PacketTraits<T>::type || !CanReadBody(data, size, limit))
+                return false;
+            T candidate{};
+            PacketIO io(data, size);
+            if (!Transfer(io, candidate) || io.offset != size || !PacketCodec::ValidateBody(candidate))
+                return false;
+            output = candidate;
+            return true;
         }
 
-        void WriteBoxData(std::vector<std::uint8_t>& bytes, const BoxData& value)
-        {
-            WriteVec3(bytes, value.min);
-            WriteVec3(bytes, value.max);
-        }
-        bool ReadBoxData(const std::uint8_t* data, std::size_t size, std::size_t& offset, BoxData& value)
-        {
-            if (!ReadVec3(data, size, offset, value.min))
-            {
-                return false;
-            }
-            if (!ReadVec3(data, size, offset, value.max))
-            {
-                return false;
-            }
-            return true;
-        }
-        void WriteMatchContext(std::vector<std::uint8_t>& bytes, const MatchContext& value)
-        {
-            WriteU32(bytes, value.roomId);
-            WriteU32(bytes, value.matchId);
-        }
-        bool ReadMatchContext(const std::uint8_t* data, std::size_t size, std::size_t& offset, MatchContext& value)
-        {
-            if (!ReadU32(data, size, offset, value.roomId))
-            {
-                return false;
-            }
-            if (!ReadU32(data, size, offset, value.matchId))
-            {
-                return false;
-            }
-            return true;
-        }
-        void WriteRoomVersion(std::vector<std::uint8_t>& bytes, const RoomVersion& value)
-        {
-            WriteMatchContext(bytes, value.context);
-            WriteU32(bytes, value.revision);
-        }
-        bool ReadRoomVersion(const std::uint8_t* data, std::size_t size, std::size_t& offset, RoomVersion& value)
-        {
-            if (!ReadMatchContext(data, size, offset, value.context))
-            {
-                return false;
-            }
-            if (!ReadU32(data, size, offset, value.revision))
-            {
-                return false;
-            }
-            return true;
-        }
-        void WriteAreaData(std::vector<std::uint8_t>& bytes, const AreaData& value)
-        {
-            WriteU8(bytes, value.areaId);
-            WriteBoxData(bytes, value.movementBounds);
-            WriteMat4(bytes, value.spawnTransform);
-        }
-        bool ReadAreaData(const std::uint8_t* data, std::size_t size, std::size_t& offset, AreaData& value)
-        {
-            if (!ReadU8(data, size, offset, value.areaId))
-            {
-                return false;
-            }
-            if (!ReadBoxData(data, size, offset, value.movementBounds))
-            {
-                return false;
-            }
-            if (!ReadMat4(data, size, offset, value.spawnTransform))
-            {
-                return false;
-            }
-            return true;
-        }
-        void WriteMatchRules(std::vector<std::uint8_t>& bytes, const MatchRules& value)
-        {
-            WriteU32(bytes, value.durationMs);
-            WriteU16(bytes, value.activeTargetCount);
-            WriteU16(bytes, value.pointsPerHit);
-        }
-        bool ReadMatchRules(const std::uint8_t* data, std::size_t size, std::size_t& offset, MatchRules& value)
-        {
-            if (!ReadU32(data, size, offset, value.durationMs))
-            {
-                return false;
-            }
-            if (!ReadU16(data, size, offset, value.activeTargetCount))
-            {
-                return false;
-            }
-            if (!ReadU16(data, size, offset, value.pointsPerHit))
-            {
-                return false;
-            }
-            return true;
-        }
-        void WritePlayerStats(std::vector<std::uint8_t>& bytes, const PlayerStats& value)
-        {
-            WriteU32(bytes, value.score);
-            WriteU32(bytes, value.shotsFired);
-        }
-        bool ReadPlayerStats(const std::uint8_t* data, std::size_t size, std::size_t& offset, PlayerStats& value)
-        {
-            if (!ReadU32(data, size, offset, value.score))
-            {
-                return false;
-            }
-            if (!ReadU32(data, size, offset, value.shotsFired))
-            {
-                return false;
-            }
-            return true;
-        }
-        void WritePlayerData(std::vector<std::uint8_t>& bytes, const PlayerData& value)
-        {
-            WriteSessionToken(bytes, value.m_sessionToken);
-            WritePlayerPose(bytes, value.pose);
-            WriteU8(bytes, value.areaId);
-            WriteU8(bytes, static_cast<std::uint8_t>(value.ready));
-            WriteU8(bytes, value.mapLoaded);
-            WritePlayerStats(bytes, value.stats);
-        }
-        bool ReadPlayerData(const std::uint8_t* data, std::size_t size, std::size_t& offset, PlayerData& value)
-        {
-            if (!ReadSessionToken(data, size, offset, value.m_sessionToken))
-            {
-                return false;
-            }
-            if (!ReadPlayerPose(data, size, offset, value.pose))
-            {
-                return false;
-            }
-            if (!ReadU8(data, size, offset, value.areaId))
-            {
-                return false;
-            }
-            std::uint8_t ready = 0;
-            if (!ReadU8(data, size, offset, ready))
-            {
-                return false;
-            }
-            value.ready = static_cast<ReadyState>(ready);
-            if (!ReadU8(data, size, offset, value.mapLoaded))
-            {
-                return false;
-            }
-            if (!ReadPlayerStats(data, size, offset, value.stats))
-            {
-                return false;
-            }
-            return true;
-        }
-        void WriteRoomInfo(std::vector<std::uint8_t>& bytes, const RoomInfo& value)
-        {
-            WriteU32(bytes, value.roomId);
-            WriteU8(bytes, value.playerCount);
-            WriteU8(bytes, value.capacity);
-            WriteU8(bytes, static_cast<std::uint8_t>(value.state));
-        }
-        bool ReadRoomInfo(const std::uint8_t* data, std::size_t size, std::size_t& offset, RoomInfo& value)
-        {
-            if (!ReadU32(data, size, offset, value.roomId))
-            {
-                return false;
-            }
-            if (!ReadU8(data, size, offset, value.playerCount))
-            {
-                return false;
-            }
-            if (!ReadU8(data, size, offset, value.capacity))
-            {
-                return false;
-            }
-            std::uint8_t state = 0;
-            if (!ReadU8(data, size, offset, state))
-            {
-                return false;
-            }
-            value.state = static_cast<GameState>(state);
-            return true;
-        }
-        void WritePlayerResult(std::vector<std::uint8_t>& bytes, const PlayerResult& value)
-        {
-            WriteSessionToken(bytes, value.m_sessionToken);
-            WritePlayerStats(bytes, value.stats);
-            WriteU8(bytes, value.rank);
-        }
-        bool ReadPlayerResult(const std::uint8_t* data, std::size_t size, std::size_t& offset, PlayerResult& value)
-        {
-            if (!ReadSessionToken(data, size, offset, value.m_sessionToken))
-            {
-                return false;
-            }
-            if (!ReadPlayerStats(data, size, offset, value.stats))
-            {
-                return false;
-            }
-            if (!ReadU8(data, size, offset, value.rank))
-            {
-                return false;
-            }
-            return true;
-        }
-        void WriteRoomStateData(std::vector<std::uint8_t>& bytes, const RoomStateData& value)
-        {
-            WriteRoomVersion(bytes, value.version);
-            WriteU8(bytes, static_cast<std::uint8_t>(value.state));
-            WriteU8(bytes, value.capacity);
-            WriteMatchRules(bytes, value.rules);
-            WriteU16(bytes, static_cast<std::uint16_t>(value.vAreas.size()));
-            for (std::size_t i = 0; i < value.vAreas.size(); ++i)
-            {
-                WriteAreaData(bytes, value.vAreas[i]);
-            }
-            WriteU16(bytes, static_cast<std::uint16_t>(value.vPlayers.size()));
-            for (std::size_t i = 0; i < value.vPlayers.size(); ++i)
-            {
-                WritePlayerData(bytes, value.vPlayers[i]);
-            }
-        }
-        bool ReadRoomStateData(const std::uint8_t* data, std::size_t size, std::size_t& offset, RoomStateData& value)
-        {
-            if (!ReadRoomVersion(data, size, offset, value.version))
-            {
-                return false;
-            }
-            std::uint8_t state = 0;
-            if (!ReadU8(data, size, offset, state))
-            {
-                return false;
-            }
-            value.state = static_cast<GameState>(state);
-            if (!ReadU8(data, size, offset, value.capacity))
-            {
-                return false;
-            }
-            if (!ReadMatchRules(data, size, offset, value.rules))
-            {
-                return false;
-            }
-            std::uint16_t areasCount = 0;
-            if (!ReadU16(data, size, offset, areasCount) || areasCount > MaxPlayers)
-            {
-                return false;
-            }
-            value.vAreas.resize(areasCount);
-            for (std::size_t i = 0; i < value.vAreas.size(); ++i)
-            {
-                if (!ReadAreaData(data, size, offset, value.vAreas[i]))
-                {
-                    return false;
-                }
-            }
-            std::uint16_t playersCount = 0;
-            if (!ReadU16(data, size, offset, playersCount) || playersCount > MaxPlayers)
-            {
-                return false;
-            }
-            value.vPlayers.resize(playersCount);
-            for (std::size_t i = 0; i < value.vPlayers.size(); ++i)
-            {
-                if (!ReadPlayerData(data, size, offset, value.vPlayers[i]))
-                {
-                    return false;
-                }
-            }
-            return true;
-        }
-        void WritePlayerTransformEntry(std::vector<std::uint8_t>& bytes, const PlayerTransformEntry& value)
-        {
-            WriteSessionToken(bytes, value.m_sessionToken);
-            WritePlayerPose(bytes, value.pose);
-            WriteU32(bytes, value.lastProcessedInput);
-        }
-        bool ReadPlayerTransformEntry(const std::uint8_t* data, std::size_t size, std::size_t& offset, PlayerTransformEntry& value)
-        {
-            if (!ReadSessionToken(data, size, offset, value.m_sessionToken))
-            {
-                return false;
-            }
-            if (!ReadPlayerPose(data, size, offset, value.pose))
-            {
-                return false;
-            }
-            if (!ReadU32(data, size, offset, value.lastProcessedInput))
-            {
-                return false;
-            }
-            return true;
-        }
-        void WriteTargetMotionData(std::vector<std::uint8_t>& bytes, const TargetMotionData& value)
-        {
-            WriteVec3(bytes, value.position);
-            WriteVec3(bytes, value.velocity);
-        }
-        bool ReadTargetMotionData(const std::uint8_t* data, std::size_t size, std::size_t& offset, TargetMotionData& value)
-        {
-            if (!ReadVec3(data, size, offset, value.position))
-            {
-                return false;
-            }
-            if (!ReadVec3(data, size, offset, value.velocity))
-            {
-                return false;
-            }
-            return true;
-        }
-        void WriteTcpHeader(std::vector<std::uint8_t>& bytes, const TcpHeader& value)
-        {
-            WriteU32(bytes, value.size);
-            WriteU16(bytes, static_cast<std::uint16_t>(value.type));
-            WriteU32(bytes, value.requestId);
-        }
-        bool ReadTcpFields(const std::uint8_t* data, std::size_t size, std::size_t& offset, TcpHeader& value)
-        {
-            if (!ReadU32(data, size, offset, value.size))
-            {
-                return false;
-            }
-            std::uint16_t type = 0;
-            if (!ReadU16(data, size, offset, type))
-            {
-                return false;
-            }
-            value.type = static_cast<TcpType>(type);
-            if (!ReadU32(data, size, offset, value.requestId))
-            {
-                return false;
-            }
-            return true;
-        }
-        void WriteUdpHeader(std::vector<std::uint8_t>& bytes, const UdpHeader& value)
-        {
-            WriteU16(bytes, value.magic);
-            WriteU16(bytes, static_cast<std::uint16_t>(value.type));
-            WriteSessionToken(bytes, value.m_sessionToken);
-            WriteU32(bytes, value.sequence);
-            WriteMatchContext(bytes, value.context);
-            WriteU32(bytes, value.membershipId);
-            WriteU32(bytes, value.serverTick);
-        }
-        bool ReadUdpFields(const std::uint8_t* data, std::size_t size, std::size_t& offset, UdpHeader& value)
-        {
-            if (!ReadU16(data, size, offset, value.magic))
-            {
-                return false;
-            }
-            std::uint16_t type = 0;
-            if (!ReadU16(data, size, offset, type))
-            {
-                return false;
-            }
-            value.type = static_cast<UdpType>(type);
-            if (!ReadSessionToken(data, size, offset, value.m_sessionToken))
-            {
-                return false;
-            }
-            if (!ReadU32(data, size, offset, value.sequence))
-            {
-                return false;
-            }
-            if (!ReadMatchContext(data, size, offset, value.context))
-            {
-                return false;
-            }
-            if (!ReadU32(data, size, offset, value.membershipId))
-            {
-                return false;
-            }
-            if (!ReadU32(data, size, offset, value.serverTick))
-            {
-                return false;
-            }
-            return true;
-        }
-        void WriteConnectResult(std::vector<std::uint8_t>& bytes, const ConnectResult& value)
-        {
-            WriteU16(bytes, static_cast<std::uint16_t>(value.result));
-            WriteSessionToken(bytes, value.sessionToken);
-            WriteU16(bytes, value.udpPort);
-            WriteU64(bytes, value.serverTimeMs);
-            WriteU16(bytes, value.tickRate);
-        }
-        bool ReadConnectResult(const std::uint8_t* data, std::size_t size, std::size_t& offset, ConnectResult& value)
-        {
-            std::uint16_t result = 0;
-            if (!ReadU16(data, size, offset, result))
-            {
-                return false;
-            }
-            value.result = static_cast<ErrorCode>(result);
-            if (!ReadSessionToken(data, size, offset, value.sessionToken))
-            {
-                return false;
-            }
-            if (!ReadU16(data, size, offset, value.udpPort))
-            {
-                return false;
-            }
-            if (!ReadU64(data, size, offset, value.serverTimeMs))
-            {
-                return false;
-            }
-            if (!ReadU16(data, size, offset, value.tickRate))
-            {
-                return false;
-            }
-            return true;
-        }
-        void WriteRequestRejected(std::vector<std::uint8_t>& bytes, const RequestRejected& value)
-        {
-            WriteU16(bytes, static_cast<std::uint16_t>(value.reason));
-            WriteMatchContext(bytes, value.context);
-        }
-        bool ReadRequestRejected(const std::uint8_t* data, std::size_t size, std::size_t& offset, RequestRejected& value)
-        {
-            std::uint16_t reason = 0;
-            if (!ReadU16(data, size, offset, reason))
-            {
-                return false;
-            }
-            value.reason = static_cast<ErrorCode>(reason);
-            if (!ReadMatchContext(data, size, offset, value.context))
-            {
-                return false;
-            }
-            return true;
-        }
-        void WriteRoomListRequest(std::vector<std::uint8_t>&, const RoomListRequest&)
-        {
-        }
-        bool ReadRoomListRequest(const std::uint8_t*, std::size_t, std::size_t&, RoomListRequest&)
-        {
-            return true;
-        }
-        void WriteRoomListResult(std::vector<std::uint8_t>& bytes, const RoomListResult& value)
-        {
-            WriteU16(bytes, static_cast<std::uint16_t>(value.rooms.size()));
-            for (std::size_t i = 0; i < value.rooms.size(); ++i)
-            {
-                WriteRoomInfo(bytes, value.rooms[i]);
-            }
-        }
-        bool ReadRoomListResult(const std::uint8_t* data, std::size_t size, std::size_t& offset, RoomListResult& value)
-        {
-            std::uint16_t roomsCount = 0;
-            if (!ReadU16(data, size, offset, roomsCount) || roomsCount > MaxRooms)
-            {
-                return false;
-            }
-            value.rooms.resize(roomsCount);
-            for (std::size_t i = 0; i < value.rooms.size(); ++i)
-            {
-                if (!ReadRoomInfo(data, size, offset, value.rooms[i]))
-                {
-                    return false;
-                }
-            }
-            return true;
-        }
-        void WriteCreateRoomRequest(std::vector<std::uint8_t>&, const CreateRoomRequest&)
-        {
-        }
-        bool ReadCreateRoomRequest(const std::uint8_t*, std::size_t, std::size_t&, CreateRoomRequest&)
-        {
-            return true;
-        }
-        void WriteJoinRoomRequest(std::vector<std::uint8_t>& bytes, const JoinRoomRequest& value)
-        {
-            WriteU32(bytes, value.roomId);
-        }
-        bool ReadJoinRoomRequest(const std::uint8_t* data, std::size_t size, std::size_t& offset, JoinRoomRequest& value)
-        {
-            if (!ReadU32(data, size, offset, value.roomId))
-            {
-                return false;
-            }
-            return true;
-        }
-        void WriteRoomEnterResult(std::vector<std::uint8_t>& bytes, const RoomEnterResult& value)
-        {
-            WriteU16(bytes, static_cast<std::uint16_t>(value.result));
-            if (value.result != ErrorCode::Ok)
-            {
-                return;
-            }
-            WriteU32(bytes, value.membershipId);
-            WriteRoomStateData(bytes, value.room);
-        }
-        bool ReadRoomEnterResult(const std::uint8_t* data, std::size_t size, std::size_t& offset, RoomEnterResult& value)
-        {
-            std::uint16_t result = 0;
-            if (!ReadU16(data, size, offset, result))
-            {
-                return false;
-            }
-            value.result = static_cast<ErrorCode>(result);
-            if (value.result != ErrorCode::Ok)
-            {
-                return true;
-            }
-            if (!ReadU32(data, size, offset, value.membershipId))
-            {
-                return false;
-            }
-            if (!ReadRoomStateData(data, size, offset, value.room))
-            {
-                return false;
-            }
-            return true;
-        }
-        void WriteLeaveRoomRequest(std::vector<std::uint8_t>& bytes, const LeaveRoomRequest& value)
-        {
-            WriteU32(bytes, value.roomId);
-        }
-        bool ReadLeaveRoomRequest(const std::uint8_t* data, std::size_t size, std::size_t& offset, LeaveRoomRequest& value)
-        {
-            if (!ReadU32(data, size, offset, value.roomId))
-            {
-                return false;
-            }
-            return true;
-        }
-        void WriteLeaveRoomResult(std::vector<std::uint8_t>& bytes, const LeaveRoomResult& value)
-        {
-            WriteU16(bytes, static_cast<std::uint16_t>(value.result));
-            WriteU32(bytes, value.roomId);
-        }
-        bool ReadLeaveRoomResult(const std::uint8_t* data, std::size_t size, std::size_t& offset, LeaveRoomResult& value)
-        {
-            std::uint16_t result = 0;
-            if (!ReadU16(data, size, offset, result))
-            {
-                return false;
-            }
-            value.result = static_cast<ErrorCode>(result);
-            if (!ReadU32(data, size, offset, value.roomId))
-            {
-                return false;
-            }
-            return true;
-        }
-        void WriteMapLoaded(std::vector<std::uint8_t>& bytes, const MapLoaded& value)
-        {
-            WriteU32(bytes, value.roomId);
-        }
-        bool ReadMapLoaded(const std::uint8_t* data, std::size_t size, std::size_t& offset, MapLoaded& value)
-        {
-            if (!ReadU32(data, size, offset, value.roomId))
-            {
-                return false;
-            }
-            return true;
-        }
-        void WriteReadyChangeRequest(std::vector<std::uint8_t>& bytes, const ReadyChangeRequest& value)
-        {
-            WriteU32(bytes, value.roomId);
-            WriteU8(bytes, value.ready);
-        }
-        bool ReadReadyChangeRequest(const std::uint8_t* data, std::size_t size, std::size_t& offset, ReadyChangeRequest& value)
-        {
-            if (!ReadU32(data, size, offset, value.roomId))
-            {
-                return false;
-            }
-            if (!ReadU8(data, size, offset, value.ready))
-            {
-                return false;
-            }
-            return true;
-        }
-        void WriteRoomState(std::vector<std::uint8_t>& bytes, const RoomState& value)
-        {
-            WriteRoomStateData(bytes, value.room);
-        }
-        bool ReadRoomState(const std::uint8_t* data, std::size_t size, std::size_t& offset, RoomState& value)
-        {
-            if (!ReadRoomStateData(data, size, offset, value.room))
-            {
-                return false;
-            }
-            return true;
-        }
-        void WriteGameStarted(std::vector<std::uint8_t>& bytes, const GameStarted& value)
-        {
-            WriteRoomVersion(bytes, value.version);
-            WriteU64(bytes, value.serverTimeMs);
-            WriteU64(bytes, value.startsAtMs);
-            WriteU64(bytes, value.endsAtMs);
-            WriteMatchRules(bytes, value.rules);
-            WriteU16(bytes, static_cast<std::uint16_t>(value.players.size()));
-            for (std::size_t i = 0; i < value.players.size(); ++i)
-            {
-                WritePlayerData(bytes, value.players[i]);
-            }
-        }
-        bool ReadGameStarted(const std::uint8_t* data, std::size_t size, std::size_t& offset, GameStarted& value)
-        {
-            if (!ReadRoomVersion(data, size, offset, value.version))
-            {
-                return false;
-            }
-            if (!ReadU64(data, size, offset, value.serverTimeMs))
-            {
-                return false;
-            }
-            if (!ReadU64(data, size, offset, value.startsAtMs))
-            {
-                return false;
-            }
-            if (!ReadU64(data, size, offset, value.endsAtMs))
-            {
-                return false;
-            }
-            if (!ReadMatchRules(data, size, offset, value.rules))
-            {
-                return false;
-            }
-            std::uint16_t playersCount = 0;
-            if (!ReadU16(data, size, offset, playersCount) || playersCount > MaxPlayers)
-            {
-                return false;
-            }
-            value.players.resize(playersCount);
-            for (std::size_t i = 0; i < value.players.size(); ++i)
-            {
-                if (!ReadPlayerData(data, size, offset, value.players[i]))
-                {
-                    return false;
-                }
-            }
-            return true;
-        }
-        void WriteFireRequest(std::vector<std::uint8_t>& bytes, const FireRequest& value)
-        {
-            WriteMatchContext(bytes, value.context);
-            WriteU32(bytes, value.membershipId);
-            WriteU32(bytes, value.shotId);
-            WriteU32(bytes, value.inputSequence);
-            WriteMat4(bytes, value.shooterTransform);
-            WriteVec3(bytes, value.origin);
-        }
-        bool ReadFireRequest(const std::uint8_t* data, std::size_t size, std::size_t& offset, FireRequest& value)
-        {
-            if (!ReadMatchContext(data, size, offset, value.context))
-            {
-                return false;
-            }
-            if (!ReadU32(data, size, offset, value.membershipId))
-            {
-                return false;
-            }
-            if (!ReadU32(data, size, offset, value.shotId))
-            {
-                return false;
-            }
-            if (!ReadU32(data, size, offset, value.inputSequence))
-            {
-                return false;
-            }
-            if (!ReadMat4(data, size, offset, value.shooterTransform))
-            {
-                return false;
-            }
-            if (!ReadVec3(data, size, offset, value.origin))
-            {
-                return false;
-            }
-            return true;
-        }
-        void WriteShotResolved(std::vector<std::uint8_t>& bytes, const ShotResolved& value)
-        {
-            WriteRoomVersion(bytes, value.version);
-            WriteSessionToken(bytes, value.shooterToken);
-            WriteU32(bytes, value.shotId);
-            WriteU8(bytes, static_cast<std::uint8_t>(value.outcome));
-            WritePlayerStats(bytes, value.shooterStats);
-        }
-        bool ReadShotResolved(const std::uint8_t* data, std::size_t size, std::size_t& offset, ShotResolved& value)
-        {
-            if (!ReadRoomVersion(data, size, offset, value.version))
-            {
-                return false;
-            }
-            if (!ReadSessionToken(data, size, offset, value.shooterToken))
-            {
-                return false;
-            }
-            if (!ReadU32(data, size, offset, value.shotId))
-            {
-                return false;
-            }
-            std::uint8_t outcome = 0;
-            if (!ReadU8(data, size, offset, outcome))
-            {
-                return false;
-            }
-            value.outcome = static_cast<ShotOutcome>(outcome);
-            if (!ReadPlayerStats(data, size, offset, value.shooterStats))
-            {
-                return false;
-            }
-            return true;
-        }
-        void WriteMatchTime(std::vector<std::uint8_t>& bytes, const MatchTime& value)
-        {
-            WriteMatchContext(bytes, value.context);
-            WriteU64(bytes, value.serverTimeMs);
-            WriteU64(bytes, value.endsAtMs);
-        }
-        bool ReadMatchTime(const std::uint8_t* data, std::size_t size, std::size_t& offset, MatchTime& value)
-        {
-            if (!ReadMatchContext(data, size, offset, value.context))
-            {
-                return false;
-            }
-            if (!ReadU64(data, size, offset, value.serverTimeMs))
-            {
-                return false;
-            }
-            if (!ReadU64(data, size, offset, value.endsAtMs))
-            {
-                return false;
-            }
-            return true;
-        }
-        void WriteGameResults(std::vector<std::uint8_t>& bytes, const GameResults& value)
-        {
-            WriteRoomStateData(bytes, value.room);
-            WriteU64(bytes, value.endedAtMs);
-            WriteU8(bytes, static_cast<std::uint8_t>(value.reason));
-            WriteU16(bytes, static_cast<std::uint16_t>(value.players.size()));
-            for (std::size_t i = 0; i < value.players.size(); ++i)
-            {
-                WritePlayerResult(bytes, value.players[i]);
-            }
-        }
-        bool ReadGameResults(const std::uint8_t* data, std::size_t size, std::size_t& offset, GameResults& value)
-        {
-            if (!ReadRoomStateData(data, size, offset, value.room))
-            {
-                return false;
-            }
-            if (!ReadU64(data, size, offset, value.endedAtMs))
-            {
-                return false;
-            }
-            std::uint8_t reason = 0;
-            if (!ReadU8(data, size, offset, reason))
-            {
-                return false;
-            }
-            value.reason = static_cast<MatchEndReason>(reason);
-            std::uint16_t playersCount = 0;
-            if (!ReadU16(data, size, offset, playersCount) || playersCount > MaxPlayers)
-            {
-                return false;
-            }
-            value.players.resize(playersCount);
-            for (std::size_t i = 0; i < value.players.size(); ++i)
-            {
-                if (!ReadPlayerResult(data, size, offset, value.players[i]))
-                {
-                    return false;
-                }
-            }
-            return true;
-        }
-        void WriteUdpRegisterRequest(std::vector<std::uint8_t>&, const UdpRegisterRequest&)
-        {
-        }
-        bool ReadUdpRegisterRequest(const std::uint8_t*, std::size_t, std::size_t&, UdpRegisterRequest&)
-        {
-            return true;
-        }
-        void WriteUdpRegisterResult(std::vector<std::uint8_t>& bytes, const UdpRegisterResult& value)
-        {
-            WriteU16(bytes, static_cast<std::uint16_t>(value.result));
-            WriteU32(bytes, value.registrationSequence);
-        }
-        bool ReadUdpRegisterResult(const std::uint8_t* data, std::size_t size, std::size_t& offset, UdpRegisterResult& value)
-        {
-            std::uint16_t result = 0;
-            if (!ReadU16(data, size, offset, result))
-            {
-                return false;
-            }
-            value.result = static_cast<ErrorCode>(result);
-            if (!ReadU32(data, size, offset, value.registrationSequence))
-            {
-                return false;
-            }
-            return true;
-        }
-        void WritePlayerTransform(std::vector<std::uint8_t>& bytes, const PlayerTransform& value)
-        {
-            WriteU32(bytes, value.inputSequence);
-            WritePlayerPose(bytes, value.pose);
-        }
-        bool ReadPlayerTransform(const std::uint8_t* data, std::size_t size, std::size_t& offset, PlayerTransform& value)
-        {
-            if (!ReadU32(data, size, offset, value.inputSequence))
-            {
-                return false;
-            }
-            if (!ReadPlayerPose(data, size, offset, value.pose))
-            {
-                return false;
-            }
-            return true;
-        }
-        void WritePlayerSnapshot(std::vector<std::uint8_t>& bytes, const PlayerSnapshot& value)
-        {
-            WriteU64(bytes, value.serverTimeMs);
-            WriteU32(bytes, value.requiredRevision);
-            WriteU8(bytes, value.playerCount);
-            for (std::size_t i = 0; i < value.playerCount; ++i)
-            {
-                WritePlayerTransformEntry(bytes, value.players[i]);
-            }
-        }
-        bool ReadPlayerSnapshot(const std::uint8_t* data, std::size_t size, std::size_t& offset, PlayerSnapshot& value)
-        {
-            if (!ReadU64(data, size, offset, value.serverTimeMs))
-            {
-                return false;
-            }
-            if (!ReadU32(data, size, offset, value.requiredRevision))
-            {
-                return false;
-            }
-            if (!ReadU8(data, size, offset, value.playerCount))
-            {
-                return false;
-            }
-            if (value.playerCount > MaxPlayers)
-            {
-                return false;
-            }
-            for (std::size_t i = 0; i < value.playerCount; ++i)
-            {
-                if (!ReadPlayerTransformEntry(data, size, offset, value.players[i]))
-                {
-                    return false;
-                }
-            }
-            return true;
-        }
-        void WriteTargetSnapshot(std::vector<std::uint8_t>& bytes, const TargetSnapshot& value)
-        {
-            WriteU16(bytes, value.targetCount);
-            for (std::size_t i = 0; i < value.targetCount; ++i)
-            {
-                WriteTargetMotionData(bytes, value.targets[i]);
-            }
-        }
-        bool ReadTargetSnapshot(const std::uint8_t* data, std::size_t size, std::size_t& offset, TargetSnapshot& value)
-        {
-            if (!ReadU16(data, size, offset, value.targetCount) || value.targetCount > MaxTargets)
-            {
-                return false;
-            }
-            for (std::size_t i = 0; i < value.targetCount; ++i)
-            {
-                if (!ReadTargetMotionData(data, size, offset, value.targets[i]))
-                {
-                    return false;
-                }
-            }
-            return true;
-        }
-        // 코덱은 전송 형식만 검사한다. 경기 규칙과 행렬 판정은 각 담당 로직에서 처리한다.
+        // 기존 값 범위와 본문 검증 정책을 유지한다.
         bool Valid(ErrorCode value) { return value <= ErrorCode::ServerFull && static_cast<std::uint16_t>(value) != 2; }
         bool Valid(GameState value) { return value >= GameState::Preparing && value <= GameState::Results; }
         bool Valid(ReadyState value) { return value >= ReadyState::Connecting && value <= ReadyState::Playing; }
@@ -1197,598 +623,201 @@ namespace Net
     }
     bool PacketCodec::EncodeBody(const ConnectResult& value, std::vector<std::uint8_t>& bytes)
     {
-        if (!ValidateBody(value))
-        {
-            return false;
-        }
-        WriteConnectResult(bytes, value);
-        return true;
+        return EncodeBodyFields(value, bytes);
     }
-
     bool PacketCodec::DecodeBody(TcpType type, const std::uint8_t* data,
         std::size_t size, ConnectResult& output)
     {
-        if (type != PacketTraits<ConnectResult>::type
-            || !CanReadBody(data, size, MaxTcpPacketBytes - TcpHeaderBytes))
-        {
-            return false;
-        }
-        ConnectResult value{};
-        std::size_t offset = 0;
-        if (!ReadConnectResult(data, size, offset, value) || offset != size || !ValidateBody(value))
-        {
-            return false;
-        }
-        output = value;
-        return true;
+        return DecodeBodyFields(type, data, size, output);
     }
     bool PacketCodec::EncodeBody(const RequestRejected& value, std::vector<std::uint8_t>& bytes)
     {
-        if (!ValidateBody(value))
-        {
-            return false;
-        }
-        WriteRequestRejected(bytes, value);
-        return true;
+        return EncodeBodyFields(value, bytes);
     }
-
     bool PacketCodec::DecodeBody(TcpType type, const std::uint8_t* data,
         std::size_t size, RequestRejected& output)
     {
-        if (type != PacketTraits<RequestRejected>::type
-            || !CanReadBody(data, size, MaxTcpPacketBytes - TcpHeaderBytes))
-        {
-            return false;
-        }
-        RequestRejected value{};
-        std::size_t offset = 0;
-        if (!ReadRequestRejected(data, size, offset, value) || offset != size || !ValidateBody(value))
-        {
-            return false;
-        }
-        output = value;
-        return true;
+        return DecodeBodyFields(type, data, size, output);
     }
     bool PacketCodec::EncodeBody(const RoomListRequest& value, std::vector<std::uint8_t>& bytes)
     {
-        if (!ValidateBody(value))
-        {
-            return false;
-        }
-        WriteRoomListRequest(bytes, value);
-        return true;
+        return EncodeBodyFields(value, bytes);
     }
-
     bool PacketCodec::DecodeBody(TcpType type, const std::uint8_t* data,
         std::size_t size, RoomListRequest& output)
     {
-        if (type != PacketTraits<RoomListRequest>::type
-            || !CanReadBody(data, size, MaxTcpPacketBytes - TcpHeaderBytes))
-        {
-            return false;
-        }
-        RoomListRequest value{};
-        std::size_t offset = 0;
-        if (!ReadRoomListRequest(data, size, offset, value) || offset != size || !ValidateBody(value))
-        {
-            return false;
-        }
-        output = value;
-        return true;
+        return DecodeBodyFields(type, data, size, output);
     }
     bool PacketCodec::EncodeBody(const RoomListResult& value, std::vector<std::uint8_t>& bytes)
     {
-        if (!ValidateBody(value))
-        {
-            return false;
-        }
-        WriteRoomListResult(bytes, value);
-        return true;
+        return EncodeBodyFields(value, bytes);
     }
-
     bool PacketCodec::DecodeBody(TcpType type, const std::uint8_t* data,
         std::size_t size, RoomListResult& output)
     {
-        if (type != PacketTraits<RoomListResult>::type
-            || !CanReadBody(data, size, MaxTcpPacketBytes - TcpHeaderBytes))
-        {
-            return false;
-        }
-        RoomListResult value{};
-        std::size_t offset = 0;
-        if (!ReadRoomListResult(data, size, offset, value) || offset != size || !ValidateBody(value))
-        {
-            return false;
-        }
-        output = value;
-        return true;
+        return DecodeBodyFields(type, data, size, output);
     }
     bool PacketCodec::EncodeBody(const CreateRoomRequest& value, std::vector<std::uint8_t>& bytes)
     {
-        if (!ValidateBody(value))
-        {
-            return false;
-        }
-        WriteCreateRoomRequest(bytes, value);
-        return true;
+        return EncodeBodyFields(value, bytes);
     }
-
     bool PacketCodec::DecodeBody(TcpType type, const std::uint8_t* data,
         std::size_t size, CreateRoomRequest& output)
     {
-        if (type != PacketTraits<CreateRoomRequest>::type
-            || !CanReadBody(data, size, MaxTcpPacketBytes - TcpHeaderBytes))
-        {
-            return false;
-        }
-        CreateRoomRequest value{};
-        std::size_t offset = 0;
-        if (!ReadCreateRoomRequest(data, size, offset, value) || offset != size || !ValidateBody(value))
-        {
-            return false;
-        }
-        output = value;
-        return true;
+        return DecodeBodyFields(type, data, size, output);
     }
     bool PacketCodec::EncodeBody(const JoinRoomRequest& value, std::vector<std::uint8_t>& bytes)
     {
-        if (!ValidateBody(value))
-        {
-            return false;
-        }
-        WriteJoinRoomRequest(bytes, value);
-        return true;
+        return EncodeBodyFields(value, bytes);
     }
-
     bool PacketCodec::DecodeBody(TcpType type, const std::uint8_t* data,
         std::size_t size, JoinRoomRequest& output)
     {
-        if (type != PacketTraits<JoinRoomRequest>::type
-            || !CanReadBody(data, size, MaxTcpPacketBytes - TcpHeaderBytes))
-        {
-            return false;
-        }
-        JoinRoomRequest value{};
-        std::size_t offset = 0;
-        if (!ReadJoinRoomRequest(data, size, offset, value) || offset != size || !ValidateBody(value))
-        {
-            return false;
-        }
-        output = value;
-        return true;
+        return DecodeBodyFields(type, data, size, output);
     }
     bool PacketCodec::EncodeBody(const RoomEnterResult& value, std::vector<std::uint8_t>& bytes)
     {
-        if (!ValidateBody(value))
-        {
-            return false;
-        }
-        WriteRoomEnterResult(bytes, value);
-        return true;
+        return EncodeBodyFields(value, bytes);
     }
-
     bool PacketCodec::DecodeBody(TcpType type, const std::uint8_t* data,
         std::size_t size, RoomEnterResult& output)
     {
-        if (type != PacketTraits<RoomEnterResult>::type
-            || !CanReadBody(data, size, MaxTcpPacketBytes - TcpHeaderBytes))
-        {
-            return false;
-        }
-        RoomEnterResult value{};
-        std::size_t offset = 0;
-        if (!ReadRoomEnterResult(data, size, offset, value) || offset != size || !ValidateBody(value))
-        {
-            return false;
-        }
-        output = value;
-        return true;
+        return DecodeBodyFields(type, data, size, output);
     }
     bool PacketCodec::EncodeBody(const LeaveRoomRequest& value, std::vector<std::uint8_t>& bytes)
     {
-        if (!ValidateBody(value))
-        {
-            return false;
-        }
-        WriteLeaveRoomRequest(bytes, value);
-        return true;
+        return EncodeBodyFields(value, bytes);
     }
-
     bool PacketCodec::DecodeBody(TcpType type, const std::uint8_t* data,
         std::size_t size, LeaveRoomRequest& output)
     {
-        if (type != PacketTraits<LeaveRoomRequest>::type
-            || !CanReadBody(data, size, MaxTcpPacketBytes - TcpHeaderBytes))
-        {
-            return false;
-        }
-        LeaveRoomRequest value{};
-        std::size_t offset = 0;
-        if (!ReadLeaveRoomRequest(data, size, offset, value) || offset != size || !ValidateBody(value))
-        {
-            return false;
-        }
-        output = value;
-        return true;
+        return DecodeBodyFields(type, data, size, output);
     }
     bool PacketCodec::EncodeBody(const LeaveRoomResult& value, std::vector<std::uint8_t>& bytes)
     {
-        if (!ValidateBody(value))
-        {
-            return false;
-        }
-        WriteLeaveRoomResult(bytes, value);
-        return true;
+        return EncodeBodyFields(value, bytes);
     }
-
     bool PacketCodec::DecodeBody(TcpType type, const std::uint8_t* data,
         std::size_t size, LeaveRoomResult& output)
     {
-        if (type != PacketTraits<LeaveRoomResult>::type
-            || !CanReadBody(data, size, MaxTcpPacketBytes - TcpHeaderBytes))
-        {
-            return false;
-        }
-        LeaveRoomResult value{};
-        std::size_t offset = 0;
-        if (!ReadLeaveRoomResult(data, size, offset, value) || offset != size || !ValidateBody(value))
-        {
-            return false;
-        }
-        output = value;
-        return true;
+        return DecodeBodyFields(type, data, size, output);
     }
     bool PacketCodec::EncodeBody(const MapLoaded& value, std::vector<std::uint8_t>& bytes)
     {
-        if (!ValidateBody(value))
-        {
-            return false;
-        }
-        WriteMapLoaded(bytes, value);
-        return true;
+        return EncodeBodyFields(value, bytes);
     }
-
     bool PacketCodec::DecodeBody(TcpType type, const std::uint8_t* data,
         std::size_t size, MapLoaded& output)
     {
-        if (type != PacketTraits<MapLoaded>::type
-            || !CanReadBody(data, size, MaxTcpPacketBytes - TcpHeaderBytes))
-        {
-            return false;
-        }
-        MapLoaded value{};
-        std::size_t offset = 0;
-        if (!ReadMapLoaded(data, size, offset, value) || offset != size || !ValidateBody(value))
-        {
-            return false;
-        }
-        output = value;
-        return true;
+        return DecodeBodyFields(type, data, size, output);
     }
     bool PacketCodec::EncodeBody(const ReadyChangeRequest& value, std::vector<std::uint8_t>& bytes)
     {
-        if (!ValidateBody(value))
-        {
-            return false;
-        }
-        WriteReadyChangeRequest(bytes, value);
-        return true;
+        return EncodeBodyFields(value, bytes);
     }
-
     bool PacketCodec::DecodeBody(TcpType type, const std::uint8_t* data,
         std::size_t size, ReadyChangeRequest& output)
     {
-        if (type != PacketTraits<ReadyChangeRequest>::type
-            || !CanReadBody(data, size, MaxTcpPacketBytes - TcpHeaderBytes))
-        {
-            return false;
-        }
-        ReadyChangeRequest value{};
-        std::size_t offset = 0;
-        if (!ReadReadyChangeRequest(data, size, offset, value) || offset != size || !ValidateBody(value))
-        {
-            return false;
-        }
-        output = value;
-        return true;
+        return DecodeBodyFields(type, data, size, output);
     }
     bool PacketCodec::EncodeBody(const RoomState& value, std::vector<std::uint8_t>& bytes)
     {
-        if (!ValidateBody(value))
-        {
-            return false;
-        }
-        WriteRoomState(bytes, value);
-        return true;
+        return EncodeBodyFields(value, bytes);
     }
-
     bool PacketCodec::DecodeBody(TcpType type, const std::uint8_t* data,
         std::size_t size, RoomState& output)
     {
-        if (type != PacketTraits<RoomState>::type
-            || !CanReadBody(data, size, MaxTcpPacketBytes - TcpHeaderBytes))
-        {
-            return false;
-        }
-        RoomState value{};
-        std::size_t offset = 0;
-        if (!ReadRoomState(data, size, offset, value) || offset != size || !ValidateBody(value))
-        {
-            return false;
-        }
-        output = value;
-        return true;
+        return DecodeBodyFields(type, data, size, output);
     }
     bool PacketCodec::EncodeBody(const GameStarted& value, std::vector<std::uint8_t>& bytes)
     {
-        if (!ValidateBody(value))
-        {
-            return false;
-        }
-        WriteGameStarted(bytes, value);
-        return true;
+        return EncodeBodyFields(value, bytes);
     }
-
     bool PacketCodec::DecodeBody(TcpType type, const std::uint8_t* data,
         std::size_t size, GameStarted& output)
     {
-        if (type != PacketTraits<GameStarted>::type
-            || !CanReadBody(data, size, MaxTcpPacketBytes - TcpHeaderBytes))
-        {
-            return false;
-        }
-        GameStarted value{};
-        std::size_t offset = 0;
-        if (!ReadGameStarted(data, size, offset, value) || offset != size || !ValidateBody(value))
-        {
-            return false;
-        }
-        output = value;
-        return true;
+        return DecodeBodyFields(type, data, size, output);
     }
     bool PacketCodec::EncodeBody(const FireRequest& value, std::vector<std::uint8_t>& bytes)
     {
-        if (!ValidateBody(value))
-        {
-            return false;
-        }
-        WriteFireRequest(bytes, value);
-        return true;
+        return EncodeBodyFields(value, bytes);
     }
-
     bool PacketCodec::DecodeBody(TcpType type, const std::uint8_t* data,
         std::size_t size, FireRequest& output)
     {
-        if (type != PacketTraits<FireRequest>::type
-            || !CanReadBody(data, size, MaxTcpPacketBytes - TcpHeaderBytes))
-        {
-            return false;
-        }
-        FireRequest value{};
-        std::size_t offset = 0;
-        if (!ReadFireRequest(data, size, offset, value) || offset != size || !ValidateBody(value))
-        {
-            return false;
-        }
-        output = value;
-        return true;
+        return DecodeBodyFields(type, data, size, output);
     }
     bool PacketCodec::EncodeBody(const ShotResolved& value, std::vector<std::uint8_t>& bytes)
     {
-        if (!ValidateBody(value))
-        {
-            return false;
-        }
-        WriteShotResolved(bytes, value);
-        return true;
+        return EncodeBodyFields(value, bytes);
     }
-
     bool PacketCodec::DecodeBody(TcpType type, const std::uint8_t* data,
         std::size_t size, ShotResolved& output)
     {
-        if (type != PacketTraits<ShotResolved>::type
-            || !CanReadBody(data, size, MaxTcpPacketBytes - TcpHeaderBytes))
-        {
-            return false;
-        }
-        ShotResolved value{};
-        std::size_t offset = 0;
-        if (!ReadShotResolved(data, size, offset, value) || offset != size || !ValidateBody(value))
-        {
-            return false;
-        }
-        output = value;
-        return true;
+        return DecodeBodyFields(type, data, size, output);
     }
     bool PacketCodec::EncodeBody(const MatchTime& value, std::vector<std::uint8_t>& bytes)
     {
-        if (!ValidateBody(value))
-        {
-            return false;
-        }
-        WriteMatchTime(bytes, value);
-        return true;
+        return EncodeBodyFields(value, bytes);
     }
-
     bool PacketCodec::DecodeBody(TcpType type, const std::uint8_t* data,
         std::size_t size, MatchTime& output)
     {
-        if (type != PacketTraits<MatchTime>::type
-            || !CanReadBody(data, size, MaxTcpPacketBytes - TcpHeaderBytes))
-        {
-            return false;
-        }
-        MatchTime value{};
-        std::size_t offset = 0;
-        if (!ReadMatchTime(data, size, offset, value) || offset != size || !ValidateBody(value))
-        {
-            return false;
-        }
-        output = value;
-        return true;
+        return DecodeBodyFields(type, data, size, output);
     }
     bool PacketCodec::EncodeBody(const GameResults& value, std::vector<std::uint8_t>& bytes)
     {
-        if (!ValidateBody(value))
-        {
-            return false;
-        }
-        WriteGameResults(bytes, value);
-        return true;
+        return EncodeBodyFields(value, bytes);
     }
-
     bool PacketCodec::DecodeBody(TcpType type, const std::uint8_t* data,
         std::size_t size, GameResults& output)
     {
-        if (type != PacketTraits<GameResults>::type
-            || !CanReadBody(data, size, MaxTcpPacketBytes - TcpHeaderBytes))
-        {
-            return false;
-        }
-        GameResults value{};
-        std::size_t offset = 0;
-        if (!ReadGameResults(data, size, offset, value) || offset != size || !ValidateBody(value))
-        {
-            return false;
-        }
-        output = value;
-        return true;
+        return DecodeBodyFields(type, data, size, output);
     }
-
     bool PacketCodec::EncodeBody(const UdpRegisterRequest& value, std::vector<std::uint8_t>& bytes)
     {
-        if (!ValidateBody(value))
-        {
-            return false;
-        }
-        WriteUdpRegisterRequest(bytes, value);
-        return true;
+        return EncodeBodyFields(value, bytes);
     }
-
     bool PacketCodec::DecodeBody(UdpType type, const std::uint8_t* data,
         std::size_t size, UdpRegisterRequest& output)
     {
-        if (type != PacketTraits<UdpRegisterRequest>::type
-            || !CanReadBody(data, size, MaxUdpPacketBytes - UdpHeaderBytes))
-        {
-            return false;
-        }
-        UdpRegisterRequest value{};
-        std::size_t offset = 0;
-        if (!ReadUdpRegisterRequest(data, size, offset, value) || offset != size || !ValidateBody(value))
-        {
-            return false;
-        }
-        output = value;
-        return true;
+        return DecodeBodyFields(type, data, size, output);
     }
     bool PacketCodec::EncodeBody(const UdpRegisterResult& value, std::vector<std::uint8_t>& bytes)
     {
-        if (!ValidateBody(value))
-        {
-            return false;
-        }
-        WriteUdpRegisterResult(bytes, value);
-        return true;
+        return EncodeBodyFields(value, bytes);
     }
-
     bool PacketCodec::DecodeBody(UdpType type, const std::uint8_t* data,
         std::size_t size, UdpRegisterResult& output)
     {
-        if (type != PacketTraits<UdpRegisterResult>::type
-            || !CanReadBody(data, size, MaxUdpPacketBytes - UdpHeaderBytes))
-        {
-            return false;
-        }
-        UdpRegisterResult value{};
-        std::size_t offset = 0;
-        if (!ReadUdpRegisterResult(data, size, offset, value) || offset != size || !ValidateBody(value))
-        {
-            return false;
-        }
-        output = value;
-        return true;
+        return DecodeBodyFields(type, data, size, output);
     }
     bool PacketCodec::EncodeBody(const PlayerTransform& value, std::vector<std::uint8_t>& bytes)
     {
-        if (!ValidateBody(value))
-        {
-            return false;
-        }
-        WritePlayerTransform(bytes, value);
-        return true;
+        return EncodeBodyFields(value, bytes);
     }
-
     bool PacketCodec::DecodeBody(UdpType type, const std::uint8_t* data,
         std::size_t size, PlayerTransform& output)
     {
-        if (type != PacketTraits<PlayerTransform>::type
-            || !CanReadBody(data, size, MaxUdpPacketBytes - UdpHeaderBytes))
-        {
-            return false;
-        }
-        PlayerTransform value{};
-        std::size_t offset = 0;
-        if (!ReadPlayerTransform(data, size, offset, value) || offset != size || !ValidateBody(value))
-        {
-            return false;
-        }
-        output = value;
-        return true;
+        return DecodeBodyFields(type, data, size, output);
     }
     bool PacketCodec::EncodeBody(const PlayerSnapshot& value, std::vector<std::uint8_t>& bytes)
     {
-        if (!ValidateBody(value))
-        {
-            return false;
-        }
-        WritePlayerSnapshot(bytes, value);
-        return true;
+        return EncodeBodyFields(value, bytes);
     }
-
     bool PacketCodec::DecodeBody(UdpType type, const std::uint8_t* data,
         std::size_t size, PlayerSnapshot& output)
     {
-        if (type != PacketTraits<PlayerSnapshot>::type
-            || !CanReadBody(data, size, MaxUdpPacketBytes - UdpHeaderBytes))
-        {
-            return false;
-        }
-        PlayerSnapshot value{};
-        std::size_t offset = 0;
-        if (!ReadPlayerSnapshot(data, size, offset, value) || offset != size || !ValidateBody(value))
-        {
-            return false;
-        }
-        output = value;
-        return true;
+        return DecodeBodyFields(type, data, size, output);
     }
     bool PacketCodec::EncodeBody(const TargetSnapshot& value, std::vector<std::uint8_t>& bytes)
     {
-        if (!ValidateBody(value))
-        {
-            return false;
-        }
-        WriteTargetSnapshot(bytes, value);
-        return true;
+        return EncodeBodyFields(value, bytes);
     }
-
     bool PacketCodec::DecodeBody(UdpType type, const std::uint8_t* data,
         std::size_t size, TargetSnapshot& output)
     {
-        if (type != PacketTraits<TargetSnapshot>::type
-            || !CanReadBody(data, size, MaxUdpPacketBytes - UdpHeaderBytes))
-        {
-            return false;
-        }
-        TargetSnapshot value{};
-        std::size_t offset = 0;
-        if (!ReadTargetSnapshot(data, size, offset, value) || offset != size || !ValidateBody(value))
-        {
-            return false;
-        }
-        output = value;
-        return true;
+        return DecodeBodyFields(type, data, size, output);
     }
     bool PacketCodec::ValidateHeader(const TcpHeader& header)
     {
@@ -1830,7 +859,10 @@ namespace Net
         }
         PacketData packet;
         packet.transport = PacketTransport::Tcp;
-        WriteTcpHeader(packet.bytes, header);
+        TcpHeader candidate = header;
+        PacketIO io(packet.bytes);
+        if (!Transfer(io, candidate))
+            return false;
         for (std::size_t i = 0; i < bytes.size(); ++i)
         {
             packet.bytes.push_back(bytes[i]);
@@ -1865,7 +897,10 @@ namespace Net
         }
         PacketData packet;
         packet.transport = PacketTransport::Udp;
-        WriteUdpHeader(packet.bytes, header);
+        UdpHeader candidate = header;
+        PacketIO io(packet.bytes);
+        if (!Transfer(io, candidate))
+            return false;
         for (std::size_t i = 0; i < bytes.size(); ++i)
         {
             packet.bytes.push_back(bytes[i]);
@@ -1890,8 +925,8 @@ namespace Net
             return DecodeStatus::NeedMore;
         }
         TcpHeader header;
-        std::size_t offset = 0;
-        if (!ReadTcpFields(data, size, offset, header) || !ValidateHeader(header)
+        PacketIO io(data, size);
+        if (!Transfer(io, header) || !ValidateHeader(header)
             || (expected != nullptr && header.type != *expected))
         {
             return DecodeStatus::Invalid;
@@ -1912,8 +947,8 @@ namespace Net
             return false;
         }
         UdpHeader header;
-        std::size_t offset = 0;
-        if (!ReadUdpFields(data, size, offset, header) || !ValidateHeader(header))
+        PacketIO io(data, size);
+        if (!Transfer(io, header) || !ValidateHeader(header))
         {
             return false;
         }

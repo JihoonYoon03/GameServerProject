@@ -59,11 +59,11 @@ int main(int argc, char** argv)
 		std::uint16_t tcpPort = 0;
 		if (!ReadPort(portText, tcpPort))
 			throw std::runtime_error("TCP 포트는 1~65535 사이여야 합니다.");
-		NetworkClient network;
-		if (!network.ConnectServer(address, tcpPort) || !network.StartNetwork())
+		std::unique_ptr<NetworkClient> network = std::make_unique<NetworkClient>();
+		if (!network->ConnectServer(address, tcpPort) || !network->StartNetwork())
 			throw std::runtime_error("서버 연결을 시작하지 못했습니다.");
 		std::cout << "서버 접속 및 최초 UDP 등록을 기다립니다.\n";
-		Framework framework(&network);
+		Framework framework(std::move(network));
 		// 접속 인자는 GLUT가 해석하지 않도록 실행 파일 이름만 전달한다.
 		int glutArgc = 1;
 		char* glutArgv[] = {argv[0], nullptr};

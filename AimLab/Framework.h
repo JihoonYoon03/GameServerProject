@@ -8,7 +8,8 @@ class NetworkClient;
 class Framework
 {
 public:
-	explicit Framework(NetworkClient* network = nullptr) : network_(network) {}
+	explicit Framework(std::unique_ptr<NetworkClient> network = nullptr);
+	~Framework();
 	int Run(int argc, char** argv, std::unique_ptr<Scene> scene);
 
 private:
@@ -33,7 +34,7 @@ private:
 	static void MotionCallback(int x, int y);
 	static void CloseCallback();
 
-	NetworkClient* network_ = nullptr;
+	std::unique_ptr<NetworkClient> network_;
 	bool sceneInitialized_ = false;
 	std::unique_ptr<Scene>				  scene_;
 	Input								  input_;

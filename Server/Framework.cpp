@@ -46,13 +46,6 @@ void Framework::RunServer(const std::function<bool()>& shouldStop)
     network_->NetworkLoop(shouldStop);
 }
 
-void Framework::SetRoomStopCallback(const std::function<void()>& callback)
-{
-    // 실행 중인 종료 콜백이 자기 자신을 교체하지 못하게 한다.
-    if (!stopInProgress_)
-        roomStopCallback_ = callback;
-}
-
 void Framework::StopServer()
 {
     if (network_ == nullptr || stopInProgress_)
@@ -68,16 +61,6 @@ void Framework::StopServer()
     // 방 스레드를 먼저 합류시켜 송신 큐를 더 이상 사용하지 않도록 한다.
     if (roomManager_ != nullptr)
         roomManager_->StopRooms();
-    // 방 종료 콜백이 실패해도 소켓은 정리한다.
-    try
-    {
-        if (roomStopCallback_)
-            roomStopCallback_();
-    }
-    catch (...)
-    {
-        fputs("Room stop callback failed.\n", stderr);
-    }
 
     network_->StopNetwork();
     network_.reset();

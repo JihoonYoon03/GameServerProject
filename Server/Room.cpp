@@ -32,6 +32,7 @@ Room::Room(Net::MatchContext context, Target& targets,
 
 Room::~Room()
 {
+	StopRoom();
 	DeleteCriticalSection(&commandCS_);
 }
 
@@ -224,6 +225,37 @@ void Room::SendRoomState()
 		request.packet = packet;
 		m_SendPacket(request);
 	}
+}
+
+bool Room::StartRoomThread()
+{
+	if (roomThread_ != nullptr || stopRequested_)
+		return false;
+
+	roomThread_ = CreateThread(nullptr, 0, RoomProc, this, 0, nullptr);
+	if (roomThread_ == nullptr)
+	{
+		stopRequested_ = true;
+		return false;
+	}
+	return true;
+}
+
+void Room::StopRoom()
+{
+	RequestStop();
+	if (roomThread_ != nullptr)
+	{
+		WaitForSingleObject(roomThread_, INFINITE);
+		CloseHandle(roomThread_);
+		roomThread_ = nullptr;
+	}
+}
+
+bool Room::IsThreadFinished() const
+{
+	return roomThread_ != nullptr
+		&& WaitForSingleObject(roomThread_, 0) == WAIT_OBJECT_0;
 }
 
 DWORD WINAPI Room::RoomProc(LPVOID parameter)

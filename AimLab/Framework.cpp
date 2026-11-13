@@ -6,6 +6,13 @@
 
 Framework* Framework::current_ = nullptr;
 
+Framework::Framework(std::unique_ptr<NetworkClient> network)
+	: network_(std::move(network))
+{
+}
+
+Framework::~Framework() = default;
+
 namespace
 {
 	constexpr int UpdateIntervalMs = 1000 / 240;

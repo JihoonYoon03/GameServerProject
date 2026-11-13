@@ -2,25 +2,23 @@
 #include "StageController.h"
 #include "Target.h"
 
-void StageController::StartGame(const Net::MatchRules& rules, Target& targets)
+namespace
 {
-	const Net::ServerTimeMs nowMs = GetTickCount64(); // 시작 시간 저장
-	const std::uint16_t initialTargetCount = rules.activeTargetCount < Net::MaxTargets
-		? rules.activeTargetCount : Net::MaxTargets; // 초기 타겟의 개수, 설정한 타겟 개수 / 최대 타겟 개수 중 작은 값
+	constexpr Net::ServerTimeMs TargetSpawnIntervalMs = 500;
+}
 
+void StageController::StartGame(const Net::MatchRules& rules, Target& targets, Net::ServerTimeMs nowMs)
+{
 	targets.ClearTargets();
-	for (std::uint16_t index = 0; index < initialTargetCount; ++index)
-	{
-		targets.SpawnTargets(rules, nowMs);
-	} // 타겟 스폰
 
 	startsAtMs_ = nowMs;
 	endsAtMs_ = nowMs + rules.durationMs;
 	lastUpdateAtMs_ = nowMs;
+	nextTargetSpawnAtMs_ = nowMs + TargetSpawnIntervalMs;
 	state_ = Net::GameState::Playing;
 }
 
-Net::GameState StageController::UpdateMatch(Net::ServerTimeMs nowMs, Target& targets)
+Net::GameState StageController::UpdateMatch(const Net::MatchRules& rules, Target& targets, Net::ServerTimeMs nowMs)
 {
 	if (state_ != Net::GameState::Playing) return state_; // 경기중이 아니면 리턴
 
@@ -36,6 +34,12 @@ Net::GameState StageController::UpdateMatch(Net::ServerTimeMs nowMs, Target& tar
 		const float deltaSeconds = static_cast<float>(nowMs - lastUpdateAtMs_) / 1000.0f;
 		targets.UpdateTargets(deltaSeconds, nowMs); // 타겟 갱신
 		lastUpdateAtMs_ = nowMs; // 마지막 갱신 시간 업데이트
+	}
+
+	while (nowMs >= nextTargetSpawnAtMs_)
+	{
+		targets.SpawnTargets(rules, nowMs);
+		nextTargetSpawnAtMs_ += TargetSpawnIntervalMs;
 	}
 
 	return state_;

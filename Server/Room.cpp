@@ -167,8 +167,7 @@ void Room::StartGameIfReady()
 		return;
 
 	Net::ServerTimeMs nowMs = GetTickCount64();
-	// 이성노 후속 연결: 경기 관리자의 시작 시각을 공지와 공유할 수 있는 인터페이스가 필요하다.
-	stageController_.StartGame(m_state.rules, *targets_);
+	stageController_.StartGame(m_state.rules, *targets_, nowMs);
 	++m_state.version.context.matchId;
 	++m_state.version.revision;
 	m_state.state = Net::GameState::Playing;
@@ -370,6 +369,19 @@ void Room::ProcessCommand(const Net::RoomCommand& command)
 void Room::Tick()
 {
 	ProcessCommands();
+	if (stopRequested_ || m_state.state != Net::GameState::Playing)
+		return;
+
+	Net::ServerTimeMs nowMs = GetTickCount64();
+	Net::GameState state = stageController_.UpdateMatch(m_state.rules, *targets_, nowMs);
+	if (state != m_state.state)
+	{
+		m_state.state = state;
+		++m_state.version.revision;
+		SendRoomState();
+	}
+
+	SendTargetPositions(nowMs);
 	SendTransformData();
 }
 

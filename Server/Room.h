@@ -42,8 +42,12 @@ public:
 	void SendRoomState();
 	void StartGameIfReady();
 
-	// 스레드 소유자는 RoomProc 종료를 기다린 뒤 방을 삭제한다.
+	// 시작, 종료 대기, 종료 확인은 메인 스레드에서만 호출한다.
+	bool StartRoomThread();
+	void StopRoom();
+	bool IsThreadFinished() const;
 	static DWORD WINAPI RoomProc(LPVOID parameter);
+	// 방 스레드 안에서는 대기하지 않고 종료만 요청한다.
 	void RequestStop();
 	bool AddCommand(const Net::RoomCommand& command);
 	std::queue<Net::RoomManagementEvent> TakeStateEvents();
@@ -69,6 +73,7 @@ private:
 	StageController stageController_;
 	std::vector<Net::BoxData> m_vWorldBoxes;
 
+	HANDLE roomThread_ = nullptr;
 	std::atomic<bool> stopRequested_{false};
 	//방마다 임계 영역이 필요한 이유: 서버 메인 쓰레드가 패킷을 받아 방의 큐에 넣어주고,
 	//방 쓰레드는 ProcessCommands에서 해당 큐를 사용하기 때문

@@ -31,9 +31,7 @@ public:
 	void UpdateRooms();
 
 private:
-	bool StartRoomThread(Net::RoomId roomId);
 	std::unordered_map<Net::RoomId, std::unique_ptr<Room>> rooms_;
-	std::unordered_map<Net::RoomId, HANDLE> roomThreads_;
 	std::unordered_map<Net::RoomId, Net::RoomInfo> roomSummaries_;
 	Net::RoomId nextRoomId_ = 1;
 	Net::PacketSender sendPacket_;

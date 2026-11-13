@@ -32,12 +32,12 @@ Net::RoomId RoomManager::CreateGameRoom(const Net::SessionToken& creator,
 		command.body = Net::RoomEnterCommand{UDPRegistered};
 		if (!room->AddCommand(command))
 			return 0;
-		rooms_.emplace(roomId, std::move(room));
+		auto roomEntry = rooms_.emplace(roomId, std::move(room)).first;
 		Net::RoomInfo summary;
 		summary.roomId = roomId;
 		summary.capacity = 1;
 		roomSummaries_.emplace(roomId, summary);
-		if (StartRoomThread(roomId))
+		if (roomEntry->second->StartRoomThread())
 			return roomId;
 	}
 	catch (...)
@@ -46,23 +46,6 @@ Net::RoomId RoomManager::CreateGameRoom(const Net::SessionToken& creator,
 	}
 	DeleteRoom(roomId);
 	return 0;
-}
-
-bool RoomManager::StartRoomThread(Net::RoomId roomId)
-{
-	auto room = rooms_.find(roomId);
-	if (stopping_ || room == rooms_.end() || roomThreads_.find(roomId) != roomThreads_.end())
-		return false;
-
-	// 스레드를 시작하기 전에 핸들을 보관할 공간부터 확보한다.
-	auto entry = roomThreads_.emplace(roomId, nullptr).first;
-	entry->second = CreateThread(nullptr, 0, Room::RoomProc, room->second.get(), 0, nullptr);
-	if (entry->second == nullptr)
-	{
-		roomThreads_.erase(entry);
-		return false;
-	}
-	return true;
 }
 
 bool RoomManager::AddCommand(const Net::RoomCommand& command)
@@ -83,14 +66,7 @@ void RoomManager::DeleteRoom(Net::RoomId roomId)
 	auto room = rooms_.find(roomId);
 	if (room == rooms_.end())
 		return;
-	room->second->RequestStop();
-	auto thread = roomThreads_.find(roomId);
-	if (thread != roomThreads_.end())
-	{
-		WaitForSingleObject(thread->second, INFINITE);
-		CloseHandle(thread->second);
-		roomThreads_.erase(thread);
-	}
+	room->second->StopRoom();
 	// 방의 임계 영역과 상태는 스레드가 끝난 뒤 해제한다.
 	rooms_.erase(room);
 	roomSummaries_.erase(roomId);
@@ -126,11 +102,11 @@ void RoomManager::UpdateRooms()
 		}
 	}
 	// 예외 등으로 먼저 끝난 방도 핸들을 합류시킨 뒤 정리한다.
-	for (auto thread = roomThreads_.begin(); thread != roomThreads_.end();)
+	for (auto room = rooms_.begin(); room != rooms_.end();)
 	{
-		Net::RoomId roomId = thread->first;
-		bool ended = WaitForSingleObject(thread->second, 0) == WAIT_OBJECT_0;
-		++thread;
+		Net::RoomId roomId = room->first;
+		bool ended = room->second->IsThreadFinished();
+		++room;
 		if (ended)
 			DeleteRoom(roomId);
 	}

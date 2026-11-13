@@ -315,6 +315,16 @@ bool NetworkClient::ProcessTcpPacket(const Net::PacketData& packet)
             return false;
         break;
     }
+    case Net::TcpType::ShotResolved:
+    {
+        Net::ShotResolved result;
+        if (!Net::PacketCodec::ReadMessage(header.type, messageBytes, size, result))
+            return false;
+        if (result.version.context.roomId != m_ReceiveContext.roomId
+            || result.version.context.matchId != m_ReceiveContext.matchId)
+            return true;
+        break;
+    }
     case Net::TcpType::GameStarted:
     {
         Net::GameStarted result;

@@ -196,6 +196,9 @@
     <ClInclude Include="..\Shared\NetworkPackets.h">
       <Filter>Network\Shared</Filter>
     </ClInclude>
+    <ClInclude Include="..\Shared\ShootingRange.h">
+      <Filter>Network\Shared</Filter>
+    </ClInclude>
     <ClInclude Include="..\Shared\NetworkTypes.h">
       <Filter>Network\Shared</Filter>
     </ClInclude>

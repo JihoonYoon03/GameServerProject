@@ -20,6 +20,8 @@ namespace Net
         case TcpType::LeaveRoomResult:
         case TcpType::MapLoaded:
         case TcpType::RoomState:
+        case TcpType::FireRequest:
+        case TcpType::ShotResolved:
         case TcpType::GameStarted:
             return true;
         default:

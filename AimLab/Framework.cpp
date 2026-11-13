@@ -159,9 +159,18 @@ void Framework::UpdateConnection()
 
 	for (const Net::PacketData& packet : network_->GetReceivedPackets())
 	{
-		if (packet.transport != Net::PacketTransport::Tcp)
+		if (packet.transport == Net::PacketTransport::Udp)
 		{
-			// 윤지훈·이성노 연결 필요: 검증된 위치·표적 목록을 각 화면 반영 함수에 전달한다.
+			Net::UdpHeader header;
+			Net::PlayerSnapshot snapshot;
+
+			//헤더를 읽은 뒤, 타입 판단 후 Read. 성공 시 변환 데이터 적용
+			if (sceneInitialized_ && Net::PacketCodec::ReadUdpHeader(packet.bytes.data(), packet.bytes.size(), header)
+				&& header.type == Net::UdpType::PlayerSnapshot
+				&& Net::PacketCodec::ReadMessage(header.type, packet.bytes.data() + Net::UdpHeaderBytes,
+					packet.bytes.size() - Net::UdpHeaderBytes, snapshot))
+				shooting->RecvTransformData(snapshot);
+
 			continue;
 		}
 		Net::TcpHeader header;
@@ -204,6 +213,13 @@ void Framework::UpdateConnection()
 			Net::GameStarted event;
 			if (sceneInitialized_ && Net::PacketCodec::ReadMessage(header.type, messageBytes, messageSize, event))
 				shooting->OnGameStarted(event);
+			break;
+		}
+		case Net::TcpType::ShotResolved:
+		{
+			Net::ShotResolved result;
+			if (sceneInitialized_ && Net::PacketCodec::ReadMessage(header.type, messageBytes, messageSize, result))
+				shooting->RecvShootResult(result);
 			break;
 		}
 		case Net::TcpType::RequestRejected:

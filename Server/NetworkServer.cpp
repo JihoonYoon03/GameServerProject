@@ -502,6 +502,16 @@ void NetworkServer::DispatchPacket(const Net::SessionToken& verifiedSender, cons
 			command.body = request;
 			break;
 		}
+		case Net::TcpType::FireRequest:
+		{
+			Net::FireRequest request;
+			if (!Net::PacketCodec::ReadMessage(header.type, messageBytes, messageSize, request)
+				|| command.context.matchId == 0 || request.context.roomId != command.context.roomId
+				|| request.context.matchId != command.context.matchId || request.membershipId != command.membershipId)
+				return;
+			command.body = request;
+			break;
+		}
 		case Net::TcpType::MapLoaded:
 		{
 			Net::MapLoaded request;

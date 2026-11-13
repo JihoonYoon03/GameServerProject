@@ -19,21 +19,19 @@ void Player::ApplyCommand(const PlayerCommand& command, float deltaTime, const S
 		glm::vec3(rotation * glm::vec4(movement.x, 0, movement.y, 0)) * m_fMoveSpeed * deltaTime;
 	// 원본은 X/Z 중심 판정 후 이번 이동 전체를 취소합니다.
 
-	if (movement != glm::vec2(0))
-	{
-		transform.position += displacement;
-		m_vec3LastDisplacement = displacement;
-		m_vec3EyePosition = transform.position + glm::vec3(0.0f, 0.75f, -0.4f);
-		m_bEyeInitialized = true;
-	}
-
+	glm::vec3 previousPosition = transform.position;
+	transform.position += displacement;
 	for (const std::unique_ptr<Object>& object : scene.GetObjects())
 	{
-		if (object.get() != this && object->active && object->blocksMovement && object->collider == ColliderType::Box && Collision::OverlapsXZ(GetWorldBox(), object->GetWorldBox()))
+		if (object.get() != this && object->active && object->blocksMovement
+			&& object->collider == ColliderType::Box && Collision::OverlapsXZ(GetWorldBox(), object->GetWorldBox()))
 		{
-			transform.position -= m_vec3LastDisplacement;
+			transform.position = previousPosition;
+			break;
 		}
 	}
+	m_vec3EyePosition = transform.position + glm::vec3(0.0f, 0.75f, -0.4f);
+	m_bEyeInitialized = true;
 }
 
 void Player::UpdateCamera(Camera& camera) const
@@ -68,6 +66,5 @@ bool Player::ApplyNetworkPose(const Net::PlayerPose& pose)
 	m_fPitch = pose.pitch;
 	m_vec3EyePosition = transform.position + glm::vec3(0.0f, 0.75f, -0.4f);
 	m_bEyeInitialized = true;
-	m_vec3LastDisplacement = glm::vec3(0.0f);
 	return true;
 }

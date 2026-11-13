@@ -234,6 +234,7 @@
     <ClInclude Include="..\Shared\NetworkConversions.h" />
     <ClInclude Include="..\Shared\NetworkMessages.h" />
     <ClInclude Include="..\Shared\NetworkPackets.h" />
+    <ClInclude Include="..\Shared\ShootingRange.h" />
     <ClInclude Include="..\Shared\NetworkTypes.h" />
     <ClInclude Include="..\Shared\PacketCodec.h" />
     <ClInclude Include="MainScene.h" />

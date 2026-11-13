@@ -9,6 +9,7 @@
 #include "NetworkMessages.h"
 #include "NetworkConversions.h"
 #include <cstring>
+#include <cmath>
 #include <utility>
 
 namespace Net
@@ -339,6 +340,32 @@ namespace Net
             return Serialize(io, value.version) && Serialize(io, value.serverTimeMs)
                 && Serialize(io, value.startsAtMs) && Serialize(io, value.endsAtMs)
                 && Serialize(io, value.rules) && SerializeList(io, value.players, MaxPlayers);
+        }
+        inline bool Serialize(PacketStream& io, ShotOutcome& value)
+        {
+            std::uint8_t number = static_cast<std::uint8_t>(value);
+            if (!Serialize(io, number) || number > static_cast<std::uint8_t>(ShotOutcome::BlockedByWorld))
+                return false;
+            value = static_cast<ShotOutcome>(number);
+            return true;
+        }
+        inline bool Serialize(PacketStream& io, FireRequest& value)
+        {
+            if (!Serialize(io, value.context) || !Serialize(io, value.membershipId)
+                || !Serialize(io, value.shotId) || !Serialize(io, value.inputSequence)
+                || !Serialize(io, value.shooterTransform) || !Serialize(io, value.origin))
+                return false;
+            for (int col = 0; col < 4; ++col)
+                for (int row = 0; row < 4; ++row)
+                    if (!std::isfinite(value.shooterTransform[col][row]))
+                        return false;
+            return std::isfinite(value.origin.x) && std::isfinite(value.origin.y) && std::isfinite(value.origin.z);
+        }
+        inline bool Serialize(PacketStream& io, ShotResolved& value)
+        {
+            return Serialize(io, value.version) && Serialize(io, value.shooterToken)
+                && Serialize(io, value.shotId) && Serialize(io, value.outcome)
+                && Serialize(io, value.shooterStats);
         }
         inline bool Serialize(PacketStream&, UdpRegisterRequest&)
         {

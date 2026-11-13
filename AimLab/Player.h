@@ -39,6 +39,4 @@ public:
 private:
 	glm::vec3	m_vec3EyePosition{0.0f};
 	bool		m_bEyeInitialized = false;
-
-	glm::vec3	m_vec3LastDisplacement{0.0f};
 };

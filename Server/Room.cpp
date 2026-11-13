@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "Room.h"
 #include "../Shared/PacketCodec.h"
+#include "../Shared/ShootingRange.h"
 
 #include <algorithm>
 #include <utility>
@@ -38,14 +39,23 @@ void Room::AssignPlayerAreas()
 {
 	if (m_state.vAreas.empty())
 	{
-		// 기존 사격장의 남쪽 구역과 시작 위치를 그대로 사용한다.
+		//기존 사격장의 남쪽 구역과 시작 위치를 그대로 사용한다.
 		Net::AreaData area;
 		area.areaId = 0;
-		area.movementBounds.min.x = -2.0f;
-		area.movementBounds.min.z = 7.0f;
-		area.movementBounds.max.x = 2.0f;
-		area.movementBounds.max.z = 11.0f;
-		area.spawnTransform[3] = glm::vec4(0.0f, 1.0f, 9.0f, 1.0f);
+		glm::vec3 center = ShootingRange::AreaCenters[ShootingRange::SouthArea];
+		area.movementBounds.min = center - glm::vec3(ShootingRange::AreaInnerHalfSize);
+		area.movementBounds.max = center + glm::vec3(ShootingRange::AreaInnerHalfSize);
+		area.spawnTransform[3] = glm::vec4(center + glm::vec3(0, 1, 0), 1.0f);
+		m_vWorldBoxes.clear();
+
+		//스테이지 지형 정보 저장
+		for (const glm::vec3& areaCenter : ShootingRange::AreaCenters)
+			for (const ShootingRange::AreaPart& part : ShootingRange::AreaParts)
+				if (part.solid)
+				{
+					glm::vec3 wallCenter = areaCenter + part.offset;
+					m_vWorldBoxes.push_back({wallCenter - part.halfSize, wallCenter + part.halfSize});
+				}
 		m_state.vAreas.push_back(area);
 	}
 	for (ClientPlayer& player : m_vPlayers)
@@ -173,6 +183,7 @@ void Room::StartGameIfReady()
 	m_state.state = Net::GameState::Playing;
 	m_vPlayers[0].m_PlayerData.ready = Net::ReadyState::Playing;
 	m_vPlayers[0].m_PlayerData.stats = {};
+	m_vPlayers[0].m_nLastShotId = 0;
 	m_state.vPlayers = {m_vPlayers[0].m_PlayerData};
 
 	Net::GameStarted event;
@@ -361,6 +372,12 @@ void Room::ProcessCommand(const Net::RoomCommand& command)
 			SetPlayerLoaded(command.sessionToken);
 		return;
 	}
+	const Net::FireRequest* shot = std::get_if<Net::FireRequest>(&command.body);
+	if (shot)
+	{
+		RecvShoot(command, *shot);
+		return;
+	}
 	const Net::PlayerTransform* input = std::get_if<Net::PlayerTransform>(&command.body);
 	if (input)
 		UpdatePlayerTransform(command.sessionToken, *input, command.receivedAtMs);
@@ -368,21 +385,109 @@ void Room::ProcessCommand(const Net::RoomCommand& command)
 
 void Room::Tick()
 {
+	if (stopRequested_)
+		return;
+
+	// Advance server targets and finish expired matches before judging queued shots.
+	Net::ServerTimeMs nowMs = GetTickCount64();
+	if (m_state.state == Net::GameState::Playing)
+	{
+		Net::GameState state = stageController_.UpdateMatch(m_state.rules, *targets_, nowMs);
+		if (state != m_state.state)
+		{
+			m_state.state = state;
+			++m_state.version.revision;
+			SendRoomState();
+			SendTargetPositions(nowMs);
+		}
+	}
+
 	ProcessCommands();
 	if (stopRequested_ || m_state.state != Net::GameState::Playing)
 		return;
 
-	Net::ServerTimeMs nowMs = GetTickCount64();
-	Net::GameState state = stageController_.UpdateMatch(m_state.rules, *targets_, nowMs);
-	if (state != m_state.state)
+	// StageController owns the 0.5-second spawn cadence; do not fill targets again here.
+	SendTargetPositions(GetTickCount64());
+	SendTransformData();
+}
+
+void Room::RecvShoot(const Net::RoomCommand& command, const Net::FireRequest& request)
+{
+	auto player = std::find_if(m_vPlayers.begin(), m_vPlayers.end(), [&](const ClientPlayer& entry)
 	{
-		m_state.state = state;
-		++m_state.version.revision;
-		SendRoomState();
+		return entry.m_PlayerData.m_sessionToken == command.sessionToken;
+	});
+	if (player == m_vPlayers.end())
+		return;
+
+	Net::ErrorCode error = Net::ErrorCode::Ok;
+
+	if (m_state.state != Net::GameState::Playing)
+	{
+		error = Net::ErrorCode::NotPlaying;
+	}
+	else if (request.context.roomId != m_state.version.context.roomId
+		|| request.context.matchId != m_state.version.context.matchId || request.membershipId != command.membershipId)
+	{
+		error = Net::ErrorCode::StaleMatch;
+	}
+	else if (request.shotId == 0 || (player->m_nLastShotId != 0
+		&& !Net::IsNewerSequence(request.shotId, player->m_nLastShotId)))
+	{
+		error = Net::ErrorCode::DuplicateShot;
 	}
 
-	SendTargetPositions(nowMs);
-	SendTransformData();
+	if (error != Net::ErrorCode::Ok)
+	{
+		Net::RequestRejected rejected;
+		rejected.reason = error;
+		rejected.context = m_state.version.context;
+		Net::SendRequest response;
+		response.recipientToken = command.sessionToken;
+		if (m_SendPacket && Net::PacketCodec::EncodeTcp(rejected, command.requestId, response.packet))
+			m_SendPacket(response);
+		return;
+	}
+
+	player->m_nLastShotId = request.shotId;
+	Net::ShotResolved result = JudgeShoot(*player, request, GetTickCount64());
+	SendShootResult(result, command.requestId);
+}
+
+Net::ShotResolved Room::JudgeShoot(ClientPlayer& player, const Net::FireRequest& request, Net::ServerTimeMs nowMs)
+{
+	glm::vec3 direction = glm::vec3(request.shooterTransform * glm::vec4(0, 0, -1, 0));
+	Net::ShotResolved result;
+	result.shooterToken = player.m_PlayerData.m_sessionToken;
+	result.shotId = request.shotId;
+	result.outcome = targets_->TargetHits(request.origin, direction, m_vWorldBoxes, m_state.rules, nowMs);
+	++player.m_PlayerData.stats.shotsFired;
+
+	if (result.outcome == Net::ShotOutcome::HitTarget)
+		player.m_PlayerData.stats.score += m_state.rules.pointsPerHit;
+
+	++m_state.version.revision;
+	result.version = m_state.version;
+	result.shooterStats = player.m_PlayerData.stats;
+
+	return result;
+}
+
+void Room::SendShootResult(const Net::ShotResolved& result, std::uint32_t requestId)
+{
+	if (!m_SendPacket) return;
+
+	Net::PacketData packet;
+
+	if (!Net::PacketCodec::EncodeTcp(result, requestId, packet)) return;
+
+	for (const TargetRecipient& recipient : targetRecipients_)
+	{
+		Net::SendRequest response;
+		response.recipientToken = recipient.sessionToken;
+		response.packet = packet;
+		m_SendPacket(response);
+	}
 }
 
 bool Room::UpdatePlayerTransform(const Net::SessionToken& token,

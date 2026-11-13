@@ -25,6 +25,8 @@ namespace Net
 		MapLoaded = 0x0201,
 		RoomState = 0x0203,
 		GameStarted = 0x0301,
+		FireRequest = 0x0302,
+		ShotResolved = 0x0303,
 	};
 
 	enum class UdpType : std::uint16_t
@@ -140,6 +142,27 @@ namespace Net
 
 
 
+
+	struct FireRequest
+	{
+		static constexpr TcpType type = TcpType::FireRequest;
+		MatchContext context;
+		MembershipId membershipId = 0;
+		ShotId shotId = 0;
+		Sequence inputSequence = 0;
+		glm::mat4 shooterTransform{1.0f};
+		glm::vec3 origin{0.0f};
+	};
+
+	struct ShotResolved
+	{
+		static constexpr TcpType type = TcpType::ShotResolved;
+		RoomVersion version;
+		SessionToken shooterToken{};
+		ShotId shotId = 0;
+		ShotOutcome outcome = ShotOutcome::Miss;
+		PlayerStats shooterStats;
+	};
 
 	// 사용: 클라 NetworkClient::RegisterUDP() → 서버 NetworkServer::RegisterPlayerUDP() [선언]
 	struct UdpRegisterRequest

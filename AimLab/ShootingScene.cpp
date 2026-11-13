@@ -2,10 +2,11 @@
 #include "ShootingScene.h"
 #include "NetworkClient.h"
 #include "../Shared/PacketCodec.h"
+#include "../Shared/ShootingRange.h"
 
 namespace
 {
-	constexpr float TargetAreaHalfSize = 5.0f;
+	constexpr float TargetAreaHalfSize = ShootingRange::TargetHalfSize;
 }
 
 Object* ShootingScene::AddProp(const std::string& name, const std::shared_ptr<Mesh>& mesh, const std::shared_ptr<Material>& material, const glm::vec3& position, const glm::vec3& scale, bool solid)
@@ -63,31 +64,10 @@ void ShootingScene::Initialize()
 	std::shared_ptr<Material> areaMaterial = std::make_shared<Material>(shader);
 	areaMaterial->color = {0.68f, 0.78f, 0.88f};
 
-	constexpr float AreaInnerHalfSize = 2.0f;
-	constexpr float WallHalfThickness = 0.1f;
-	constexpr float WallHalfHeight = 0.375f;
-	constexpr float FloorHalfThickness = 0.04f;
-	constexpr float WallOffset = AreaInnerHalfSize + WallHalfThickness;
-	constexpr float AreaOuterHalfSize = WallOffset + WallHalfThickness;
-	constexpr float WallCenterY = 2.0f * FloorHalfThickness + WallHalfHeight;
-
-	struct AreaPart
-	{
-		glm::vec3 offset;
-		glm::vec3 halfSize;
-		bool solid;
-	};
-	const std::array<AreaPart, 5> areaParts{{
-		{{0, FloorHalfThickness, 0}, {AreaOuterHalfSize, FloorHalfThickness, AreaOuterHalfSize}, false},
-		{{-WallOffset, WallCenterY, 0}, {WallHalfThickness, WallHalfHeight, AreaInnerHalfSize}, true},
-		{{WallOffset, WallCenterY, 0}, {WallHalfThickness, WallHalfHeight, AreaInnerHalfSize}, true},
-		{{0, WallCenterY, -WallOffset}, {AreaOuterHalfSize, WallHalfHeight, WallHalfThickness}, true},
-		{{0, WallCenterY, WallOffset}, {AreaOuterHalfSize, WallHalfHeight, WallHalfThickness}, true},
-	}};
 
 	std::vector<Vertex> areaVertices;
-	areaVertices.reserve(cube->GetVertices().size() * areaParts.size());
-	for (const AreaPart& part : areaParts)
+	areaVertices.reserve(cube->GetVertices().size() * ShootingRange::AreaParts.size());
+	for (const ShootingRange::AreaPart& part : ShootingRange::AreaParts)
 	{
 		for (Vertex vertex : cube->GetVertices())
 		{
@@ -97,18 +77,14 @@ void ShootingScene::Initialize()
 	}
 	std::shared_ptr<Mesh> areaMesh = std::make_shared<Mesh>(std::move(areaVertices));
 
-	constexpr float AreaDistance = 9.0f;
-	const glm::vec3 southArea{0, 0, AreaDistance};
-	const std::array<std::pair<const char*, glm::vec3>, 4> playerAreas{{
-		{"East player area", {AreaDistance, 0, 0}},
-		{"West player area", {-AreaDistance, 0, 0}},
-		{"North player area", {0, 0, -AreaDistance}},
-		{"South player area", southArea},
-	}};
-	for (const auto& [name, center] : playerAreas)
+	const glm::vec3 southArea = ShootingRange::AreaCenters[ShootingRange::SouthArea];
+	const std::array<const char*, 4> areaNames{{"East player area", "West player area", "North player area", "South player area"}};
+	for (std::size_t index = 0; index < ShootingRange::AreaCenters.size(); ++index)
 	{
+		const char* name = areaNames[index];
+		glm::vec3 center = ShootingRange::AreaCenters[index];
 		AddProp(name, areaMesh, areaMaterial, center, glm::vec3(1.0f));
-		for (const AreaPart& part : areaParts)
+		for (const ShootingRange::AreaPart& part : ShootingRange::AreaParts)
 		{
 			if (part.solid)
 			{
@@ -123,11 +99,15 @@ void ShootingScene::Initialize()
 
 	std::unique_ptr<Player> player = std::make_unique<Player>(cube, playerMaterial);
 	player_ = player.get();
+	player_->m_SessionToken = sessionToken_;
 	player->name = "Local player";
 	player->transform.position = southArea + glm::vec3(0, 1, 0);
 	player->transform.scale = glm::vec3(Net::PlayerHalfExtent);
 	player->collider = ColliderType::Box;
 	AddObject(std::move(player));
+	for (const Net::PlayerData& entry : roomState_.vPlayers)
+		if (entry.m_sessionToken == sessionToken_)
+			player_->ApplyNetworkPose(entry.pose);
 	player_->UpdateCamera(camera_);
 
 	std::shared_ptr<Material> gunMaterial = std::make_shared<Material>(shader);
@@ -149,6 +129,27 @@ void ShootingScene::Initialize()
 
 void ShootingScene::Update(float deltaTime, const Input& input)
 {
+	if (network_ != nullptr)
+	{
+		bool playing = roomState_.state == Net::GameState::Playing;
+		if (playing)
+			ApplyPlayerCommand(ReadPlayerInput(input), deltaTime);
+		Scene::Update(deltaTime, input);
+		if (playing)
+		{
+			float interval = 1.0f / Net::ServerTickRate;
+			movementSendElapsed_ += std::max(deltaTime, 0.0f);
+			if (movementSendElapsed_ >= interval || hasShot_)
+			{
+				SendPlayerTransform();
+				movementSendElapsed_ = std::fmod(movementSendElapsed_, interval);
+			}
+			Shoot();
+		}
+		gun_->FollowCamera(camera_, player_->transform.position);
+		return;
+	}
+
 	for (unsigned char key = '1'; key <= '3'; ++key)
 	{
 		if (input.WasPressed(key))
@@ -171,12 +172,7 @@ void ShootingScene::Update(float deltaTime, const Input& input)
 		targetSpawnTime_ = 0.0f;
 	}
 
-	PlayerCommand command;
-	command.movement.x = static_cast<float>(input.IsDown('d')) - static_cast<float>(input.IsDown('a'));
-	command.movement.y = static_cast<float>(input.IsDown('s')) - static_cast<float>(input.IsDown('w'));
-	command.lookDelta = input.mouseDelta;
-	command.fire = input.firePressed;
-	ApplyPlayerCommand(command, deltaTime);
+	ApplyPlayerCommand(ReadPlayerInput(input), deltaTime);
 	// 기존 표적의 수명부터 갱신합니다. 이번 프레임에 생성할 표적은 아직 나이를 세지 않습니다.
 	Scene::Update(deltaTime, input);
 	RemoveDestroyedTargets();
@@ -209,6 +205,7 @@ void ShootingScene::ApplyPlayerCommand(const PlayerCommand& command, float delta
 	if (command.fire && gun_->Fire())
 	{
 		shot_ = {camera_.position, camera_.GetForward()};
+		shotTransform_ = glm::translate(glm::mat4(1.0f), player_->transform.position) * camera_.GetRotation();
 		hasShot_ = true;
 	}
 }
@@ -263,6 +260,11 @@ void ShootingScene::Shoot()
 {
 	if (!hasShot_) return;
 	hasShot_ = false;
+	if (network_ != nullptr)
+	{
+		SendShoot();
+		return;
+	}
 
 	// 원본은 마지막 광선을 유지하고 매 업데이트마다 등록 순서의 첫 표적을 검사합니다.
 
@@ -281,6 +283,19 @@ void ShootingScene::Shoot()
 Hud ShootingScene::GetHud() const
 {
 	Hud hud;
+	if (network_ != nullptr)
+	{
+		hud.lines = {"point: " + std::to_string(networkStats_.score),
+			"shots: " + std::to_string(networkStats_.shotsFired)};
+		if (roomState_.state == Net::GameState::Preparing)
+			hud.message = "Waiting for server";
+		else if (roomState_.state == Net::GameState::Results)
+			hud.message = "Match finished";
+		else if (lastResolvedShotId_ != 0)
+			hud.message = lastShotOutcome_ == Net::ShotOutcome::HitTarget ? "Hit"
+				: (lastShotOutcome_ == Net::ShotOutcome::BlockedByWorld ? "Blocked" : "Miss");
+		return hud;
+	}
 	hud.lines = {"stage: " + std::to_string(stages_.GetStageNumber()), "point: " + std::to_string(stages_.GetScore()),
 		"target point: " + std::to_string(stages_.GetRequiredScore()),
 		"timer: " + std::to_string(stages_.GetRemainingSeconds())};
@@ -376,9 +391,109 @@ void ShootingScene::OnGameStarted(const Net::GameStarted& event)
 	roomState_.rules = event.rules;
 	roomState_.vPlayers = event.players;
 	startedMatchId_ = matchId;
+	inputSequence_ = lastAppliedInput_ = 0;
+	hasAppliedInput_ = false;
+	movementSendElapsed_ = 0.0f;
+	nextShotId_ = 1;
+	lastResolvedShotId_ = 0;
+	networkStats_ = {};
+	hasShot_ = false;
+	ClearTargets();
+	for (const Net::PlayerData& entry : event.players)
+		if (entry.m_sessionToken == sessionToken_)
+		{
+			networkStats_ = entry.stats;
+			player_->ApplyNetworkPose(entry.pose);
+			player_->UpdateCamera(camera_);
+		}
 	serverTimeMs_ = event.serverTimeMs;
 	startsAtMs_ = event.startsAtMs;
 	endsAtMs_ = event.endsAtMs;
 	std::cout << "서버의 1인 경기 시작 응답을 반영했습니다.\n";
 	// 이성노 후속 연결: 서버 경기 상태와 시각을 HUD에 사용한다. 로컬 단계는 시작하지 않는다.
+}
+
+PlayerCommand ShootingScene::ReadPlayerInput(const Input& input) const
+{
+	PlayerCommand command;
+	command.movement.x = static_cast<float>(input.IsDown('d')) - static_cast<float>(input.IsDown('a'));
+	command.movement.y = static_cast<float>(input.IsDown('s')) - static_cast<float>(input.IsDown('w'));
+	command.lookDelta = input.mouseDelta;
+	command.fire = input.firePressed;
+	return command;
+}
+
+void ShootingScene::SendPlayerTransform()
+{
+	if (network_ == nullptr || roomState_.state != Net::GameState::Playing || !network_->IsConnected())
+		return;
+	Net::UdpPacket<Net::PlayerTransform> request;
+	request.header.type = Net::UdpType::PlayerTransform;
+	request.header.m_sessionToken = sessionToken_;
+	request.header.context = roomState_.version.context;
+	request.header.membershipId = membershipId_;
+	request.header.sequence = ++inputSequence_;
+	request.packetData.inputSequence = inputSequence_;
+	request.packetData.pose = player_->GetNetworkPose();
+	Net::PacketData packet;
+	if (!Net::PacketCodec::EncodeUdp(request, packet) || !network_->SendPacket(packet))
+		throw std::runtime_error("Failed to send player pose");
+}
+
+void ShootingScene::RecvTransformData(const Net::PlayerSnapshot& snapshot)
+{
+	if (network_ == nullptr || roomState_.state != Net::GameState::Playing
+		|| Net::IsNewerSequence(snapshot.requiredRevision, roomState_.version.revision))
+		return;
+	for (std::size_t index = 0; index < snapshot.playerCount; ++index)
+	{
+		const Net::PlayerTransformEntry& entry = snapshot.players[index];
+		if (entry.m_sessionToken != sessionToken_)
+			continue;
+		if (Net::IsNewerSequence(entry.lastProcessedInput, inputSequence_)
+			|| (hasAppliedInput_ && !Net::IsNewerSequence(entry.lastProcessedInput, lastAppliedInput_)))
+			return;
+		if (player_->ApplyNetworkPose(entry.pose))
+		{
+			lastAppliedInput_ = entry.lastProcessedInput;
+			hasAppliedInput_ = true;
+			player_->UpdateCamera(camera_);
+		}
+		return;
+	}
+}
+
+void ShootingScene::SendShoot()
+{
+	if (network_ == nullptr || roomState_.state != Net::GameState::Playing || !network_->IsConnected())
+		return;
+	Net::FireRequest request;
+	request.context = roomState_.version.context;
+	request.membershipId = membershipId_;
+	request.shotId = nextShotId_++;
+	request.inputSequence = inputSequence_;
+	request.shooterTransform = shotTransform_;
+	request.origin = shot_.origin;
+	Net::PacketData packet;
+	if (!Net::PacketCodec::EncodeTcp(request, network_->NextRequestId(), packet) || !network_->SendPacket(packet))
+		throw std::runtime_error("Failed to send shot");
+}
+
+void ShootingScene::RecvShootResult(const Net::ShotResolved& result)
+{
+	Net::MatchContext context = roomState_.version.context;
+	if (result.version.context.roomId != context.roomId || result.version.context.matchId != context.matchId
+		|| (result.version.revision != roomState_.version.revision
+			&& !Net::IsNewerSequence(result.version.revision, roomState_.version.revision)))
+		return;
+	roomState_.version = result.version;
+	for (Net::PlayerData& player : roomState_.vPlayers)
+		if (player.m_sessionToken == result.shooterToken)
+			player.stats = result.shooterStats;
+	if (result.shooterToken != sessionToken_ || result.shotId == 0
+		|| (lastResolvedShotId_ != 0 && !Net::IsNewerSequence(result.shotId, lastResolvedShotId_)))
+		return;
+	networkStats_ = result.shooterStats;
+	lastShotOutcome_ = result.outcome;
+	lastResolvedShotId_ = result.shotId;
 }

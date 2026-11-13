@@ -25,6 +25,8 @@ public:
 	void UpdateCamera();
 	void SendPlayerTransform();
 	void RecvTransformData(const Net::PlayerSnapshot& snapshot);
+	void SendShoot();
+	void RecvShootResult(const Net::ShotResolved& result);
 	void OnRoomStateChanged(const Net::RoomStateData& state);
 	void OnGameStarted(const Net::GameStarted& event);
 	void DrawHUD();
@@ -43,6 +45,15 @@ private:
 	Net::ServerTimeMs serverTimeMs_ = 0;
 	Net::ServerTimeMs startsAtMs_ = 0;
 	Net::ServerTimeMs endsAtMs_ = 0;
+	Net::Sequence inputSequence_ = 0;
+	Net::Sequence lastAppliedInput_ = 0;
+	bool hasAppliedInput_ = false;
+	float movementSendElapsed_ = 0.0f;
+	Net::ShotId nextShotId_ = 1;
+	Net::ShotId lastResolvedShotId_ = 0;
+	Net::PlayerStats networkStats_{};
+	Net::ShotOutcome lastShotOutcome_ = Net::ShotOutcome::Miss;
+	glm::mat4 shotTransform_{1.0f};
 
 	Object* AddProp(const std::string& name, const std::shared_ptr<Mesh>& mesh, const std::shared_ptr<Material>& material, const glm::vec3& position, const glm::vec3& scale, bool solid = false);
 	void SpawnTargets();

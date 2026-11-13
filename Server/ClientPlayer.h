@@ -9,6 +9,7 @@ public:
 
 	Net::PlayerData		m_PlayerData;
 
+	Net::ShotId m_nLastShotId = 0;
 	Net::Sequence		m_nLastProcessedInput = 0;
 	Net::ServerTimeMs	m_nLastMovementTimeMs = 0;
 	bool				m_bHasProcessedInput = false;

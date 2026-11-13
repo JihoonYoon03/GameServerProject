@@ -52,6 +52,9 @@ public:
 		const Net::PlayerTransform& input, Net::ServerTimeMs receivedAtMs);
 	// 방 스레드에서 전체 플레이어의 서버 확정 위치와 마지막 처리 입력 순번을 송신한다.
 	void SendTransformData();
+	void RecvShoot(const Net::RoomCommand& command, const Net::FireRequest& request);
+	Net::ShotResolved JudgeShoot(ClientPlayer& player, const Net::FireRequest& request, Net::ServerTimeMs nowMs);
+	void SendShootResult(const Net::ShotResolved& result, std::uint32_t requestId);
 
 	// 활성 표적 전체 목록을 동일 시점 기준으로 나눠 UDP 전송한다.
 	void SendTargetPositions(Net::ServerTimeMs nowMs);

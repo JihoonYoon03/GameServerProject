@@ -9,6 +9,8 @@ public:
 	void StartGame(const Net::MatchRules& rules, Target& targets, Net::ServerTimeMs nowMs);
 	Net::GameState UpdateMatch(const Net::MatchRules& rules, Target& targets, Net::ServerTimeMs nowMs);
 
+	Net::ServerTimeMs GetEndsAtMs() const { return endsAtMs_; }
+
 private:
 	Net::ServerTimeMs startsAtMs_ = 0;
 	Net::ServerTimeMs endsAtMs_ = 0;

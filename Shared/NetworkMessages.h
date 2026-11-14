@@ -37,7 +37,7 @@ namespace Net
         ServerTimeMs receivedAtMs = 0;
         //std::variant를 통해 union처럼 동작함. 방 내부에서 클라이언트가 보내는 요청 타입에 따라 바뀜
         std::variant<RoomEnterCommand, LeaveRoomRequest, MapLoaded,
-            PlayerTransform, FireRequest, ClientDisconnected> body;
+            PlayerTransform, FireRequest, StartGameRequest, ClientDisconnected> body;
     };
 
     enum class RoomManagementEventType : std::uint8_t { SummaryChanged, RoomEmpty };

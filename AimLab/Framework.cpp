@@ -169,14 +169,24 @@ void Framework::UpdateConnection()
 		if (packet.transport == Net::PacketTransport::Udp)
 		{
 			Net::UdpHeader header;
-			Net::PlayerSnapshot snapshot;
+			if (!sceneInitialized_ || !Net::PacketCodec::ReadUdpHeader(
+				packet.bytes.data(), packet.bytes.size(), header))
+				continue;
 
-			//헤더를 읽은 뒤, 타입 판단 후 Read. 성공 시 변환 데이터 적용
-			if (sceneInitialized_ && Net::PacketCodec::ReadUdpHeader(packet.bytes.data(), packet.bytes.size(), header)
-				&& header.type == Net::UdpType::PlayerSnapshot
-				&& Net::PacketCodec::ReadMessage(header.type, packet.bytes.data() + Net::UdpHeaderBytes,
-					packet.bytes.size() - Net::UdpHeaderBytes, snapshot))
-				shooting->RecvTransformData(snapshot);
+			const std::uint8_t* messageBytes = packet.bytes.data() + Net::UdpHeaderBytes;
+			std::size_t messageSize = packet.bytes.size() - Net::UdpHeaderBytes;
+			if (header.type == Net::UdpType::PlayerSnapshot)
+			{
+				Net::PlayerSnapshot snapshot;
+				if (Net::PacketCodec::ReadMessage(header.type, messageBytes, messageSize, snapshot))
+					shooting->RecvTransformData(snapshot);
+			}
+			else if (header.type == Net::UdpType::TargetSnapshot)
+			{
+				Net::TargetSnapshot snapshot;
+				if (Net::PacketCodec::ReadMessage(header.type, messageBytes, messageSize, snapshot))
+					shooting->ApplyTargetPositions(header, snapshot);
+			}
 
 			continue;
 		}
@@ -222,6 +232,20 @@ void Framework::UpdateConnection()
 				shooting->OnGameStarted(event);
 			break;
 		}
+		case Net::TcpType::MatchTime:
+		{
+			Net::MatchTime time;
+			if (sceneInitialized_ && Net::PacketCodec::ReadMessage(header.type, messageBytes, messageSize, time))
+				shooting->UpdateMatchTime(time);
+			break;
+		}
+		case Net::TcpType::GameResults:
+		{
+			Net::GameResults result;
+			if (sceneInitialized_ && Net::PacketCodec::ReadMessage(header.type, messageBytes, messageSize, result))
+				shooting->RecvGameResults(result);
+			break;
+		}
 		case Net::TcpType::ShotResolved:
 		{
 			Net::ShotResolved result;
@@ -238,7 +262,6 @@ void Framework::UpdateConnection()
 			break;
 		}
 		default:
-			// 윤지훈·이성노 연결 필요: 사격 응답·표적·점수·시간·결과를 각 담당 함수에 반영한다.
 			break;
 		}
 	}

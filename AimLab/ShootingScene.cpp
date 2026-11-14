@@ -7,6 +7,7 @@
 namespace
 {
 	constexpr float TargetAreaHalfSize = ShootingRange::TargetHalfSize;
+	constexpr float TargetScale = 0.15f;
 }
 
 Object* ShootingScene::AddProp(const std::string& name, const std::shared_ptr<Mesh>& mesh, const std::shared_ptr<Material>& material, const glm::vec3& position, const glm::vec3& scale, bool solid)
@@ -131,6 +132,16 @@ void ShootingScene::Update(float deltaTime, const Input& input)
 {
 	if (network_ != nullptr)
 	{
+		if (input.WasPressed('1') && roomState_.state == Net::GameState::Preparing
+			&& mapLoadedSent_ && network_->IsConnected())
+		{
+			Net::StartGameRequest request{roomState_.version.context.roomId};
+			Net::PacketData packet;
+			if (!Net::PacketCodec::EncodeTcp(request, network_->NextRequestId(), packet)
+				|| !network_->SendPacket(packet))
+				throw std::runtime_error("Failed to send match start request");
+		}
+
 		bool playing = roomState_.state == Net::GameState::Playing;
 		if (playing)
 			ApplyPlayerCommand(ReadPlayerInput(input), deltaTime);
@@ -145,6 +156,7 @@ void ShootingScene::Update(float deltaTime, const Input& input)
 				movementSendElapsed_ = std::fmod(movementSendElapsed_, interval);
 			}
 			Shoot();
+			AdvanceRemoteTargets(deltaTime);
 		}
 		gun_->FollowCamera(camera_, player_->transform.position);
 		return;
@@ -212,7 +224,6 @@ void ShootingScene::ApplyPlayerCommand(const PlayerCommand& command, float delta
 
 void ShootingScene::SpawnTargets()
 {
-	constexpr float TargetScale = 0.15f;
 	constexpr float SpawnHalfSize = TargetAreaHalfSize - TargetScale;
 	std::uniform_real_distribution<float> horizontal(-SpawnHalfSize, SpawnHalfSize);
 	std::uniform_real_distribution<float> height(0.5f, 2.0f);
@@ -288,12 +299,24 @@ Hud ShootingScene::GetHud() const
 		hud.lines = {"point: " + std::to_string(networkStats_.score),
 			"shots: " + std::to_string(networkStats_.shotsFired)};
 		if (roomState_.state == Net::GameState::Preparing)
-			hud.message = "Waiting for server";
+			hud.message = "Press 1 to start";
 		else if (roomState_.state == Net::GameState::Results)
+		{
+			hud.lines.push_back("timer: 0");
+			if (finalRank_ != 0)
+				hud.lines.push_back("rank: " + std::to_string(finalRank_));
 			hud.message = "Match finished";
+		}
 		else if (lastResolvedShotId_ != 0)
 			hud.message = lastShotOutcome_ == Net::ShotOutcome::HitTarget ? "Hit"
 				: (lastShotOutcome_ == Net::ShotOutcome::BlockedByWorld ? "Blocked" : "Miss");
+		if (roomState_.state == Net::GameState::Playing)
+		{
+			Net::ServerTimeMs remainingMs = endsAtMs_ > serverTimeMs_ ? endsAtMs_ - serverTimeMs_ : 0;
+			Net::ServerTimeMs elapsedMs = GetTickCount64() - matchTimeReceivedAtMs_;
+			remainingMs = elapsedMs < remainingMs ? remainingMs - elapsedMs : 0;
+			hud.lines.push_back("timer: " + std::to_string((remainingMs + 999) / 1000));
+		}
 		return hud;
 	}
 	hud.lines = {"stage: " + std::to_string(stages_.GetStageNumber()), "point: " + std::to_string(stages_.GetScore()),
@@ -371,6 +394,8 @@ void ShootingScene::OnRoomStateChanged(const Net::RoomStateData& state)
 		return;
 
 	roomState_ = state;
+	if (state.state == Net::GameState::Results)
+		ApplyTargetSnapshot({});
 	// 다인 참가자·구역 표시는 후속 방 확장 일정에서 연결한다.
 }
 
@@ -399,6 +424,8 @@ void ShootingScene::OnGameStarted(const Net::GameStarted& event)
 	networkStats_ = {};
 	hasShot_ = false;
 	ClearTargets();
+	ApplyTargetSnapshot({});
+	finalRank_ = 0;
 	for (const Net::PlayerData& entry : event.players)
 		if (entry.m_sessionToken == sessionToken_)
 		{
@@ -409,8 +436,82 @@ void ShootingScene::OnGameStarted(const Net::GameStarted& event)
 	serverTimeMs_ = event.serverTimeMs;
 	startsAtMs_ = event.startsAtMs;
 	endsAtMs_ = event.endsAtMs;
+	matchTimeReceivedAtMs_ = GetTickCount64();
 	std::cout << "서버의 1인 경기 시작 응답을 반영했습니다.\n";
-	// 이성노 후속 연결: 서버 경기 상태와 시각을 HUD에 사용한다. 로컬 단계는 시작하지 않는다.
+}
+
+void ShootingScene::ApplyTargetPositions(const Net::UdpHeader& header, const Net::TargetSnapshot& snapshot)
+{
+	const Net::MatchContext& context = roomState_.version.context;
+	if (roomState_.state != Net::GameState::Playing || header.context.roomId != context.roomId
+		|| header.context.matchId != context.matchId || header.membershipId != membershipId_
+		|| header.m_sessionToken != sessionToken_)
+		return;
+
+	ApplyTargetSnapshot(snapshot);
+}
+
+void ShootingScene::ApplyTargetSnapshot(const Net::TargetSnapshot& snapshot)
+{
+	while (remoteTargets_.size() > snapshot.targetCount)
+	{
+		RemoveObject(remoteTargets_.back().object->GetId());
+		remoteTargets_.pop_back();
+	}
+
+	for (std::size_t index = 0; index < snapshot.targetCount; ++index)
+	{
+		const Net::TargetMotionData& motion = snapshot.targets[index];
+		if (index == remoteTargets_.size())
+		{
+			Object* object = AddProp("Remote target", targetMesh_, targetMaterial_, motion.position, glm::vec3(TargetScale));
+			remoteTargets_.push_back({object, motion.velocity});
+		}
+		else
+		{
+			remoteTargets_[index].object->transform.position = motion.position;
+			remoteTargets_[index].velocity = motion.velocity;
+		}
+	}
+}
+
+void ShootingScene::AdvanceRemoteTargets(float deltaSeconds)
+{
+	for (const RemoteTarget& target : remoteTargets_)
+		target.object->transform.position += target.velocity * deltaSeconds;
+}
+
+void ShootingScene::UpdateMatchTime(const Net::MatchTime& time)
+{
+	const Net::MatchContext& context = roomState_.version.context;
+	if (roomState_.state != Net::GameState::Playing || time.context.roomId != context.roomId
+		|| time.context.matchId != context.matchId || time.serverTimeMs < serverTimeMs_)
+		return;
+
+	serverTimeMs_ = time.serverTimeMs;
+	endsAtMs_ = time.endsAtMs;
+	matchTimeReceivedAtMs_ = GetTickCount64();
+}
+
+void ShootingScene::RecvGameResults(const Net::GameResults& result)
+{
+	const Net::RoomVersion& current = roomState_.version;
+	const Net::RoomVersion& received = result.room.version;
+	if (received.context.roomId != current.context.roomId || received.context.matchId != current.context.matchId
+		|| (received.revision != current.revision && !Net::IsNewerSequence(received.revision, current.revision)))
+		return;
+
+	OnRoomStateChanged(result.room);
+	endsAtMs_ = result.endedAtMs;
+	for (const Net::PlayerResult& player : result.players)
+	{
+		if (player.sessionToken == sessionToken_)
+		{
+			networkStats_ = player.stats;
+			finalRank_ = player.rank;
+			break;
+		}
+	}
 }
 
 PlayerCommand ShootingScene::ReadPlayerInput(const Input& input) const

@@ -19,9 +19,12 @@ namespace Net
         case TcpType::LeaveRoomRequest:
         case TcpType::LeaveRoomResult:
         case TcpType::MapLoaded:
+        case TcpType::StartGameRequest:
         case TcpType::RoomState:
         case TcpType::FireRequest:
         case TcpType::ShotResolved:
+        case TcpType::MatchTime:
+        case TcpType::GameResults:
         case TcpType::GameStarted:
             return true;
         default:

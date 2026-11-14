@@ -233,6 +233,11 @@ namespace Net
             return Serialize(io, value.score)
                 && Serialize(io, value.shotsFired);
         }
+        inline bool Serialize(PacketStream& io, PlayerResult& value)
+        {
+            return Serialize(io, value.sessionToken) && Serialize(io, value.stats)
+                && Serialize(io, value.rank) && value.rank <= MaxPlayers;
+        }
         inline bool Serialize(PacketStream& io, PlayerData& value)
         {
             return Serialize(io, value.m_sessionToken)
@@ -331,6 +336,10 @@ namespace Net
         {
             return Serialize(io, value.roomId);
         }
+        inline bool Serialize(PacketStream& io, StartGameRequest& value)
+        {
+            return Serialize(io, value.roomId) && value.roomId != 0;
+        }
         inline bool Serialize(PacketStream& io, RoomState& value)
         {
             return Serialize(io, value.room);
@@ -340,6 +349,25 @@ namespace Net
             return Serialize(io, value.version) && Serialize(io, value.serverTimeMs)
                 && Serialize(io, value.startsAtMs) && Serialize(io, value.endsAtMs)
                 && Serialize(io, value.rules) && SerializeList(io, value.players, MaxPlayers);
+        }
+        inline bool Serialize(PacketStream& io, MatchTime& value)
+        {
+            return Serialize(io, value.context) && Serialize(io, value.serverTimeMs)
+                && Serialize(io, value.endsAtMs) && value.serverTimeMs <= value.endsAtMs;
+        }
+        inline bool Serialize(PacketStream& io, MatchEndReason& value)
+        {
+            std::uint8_t number = static_cast<std::uint8_t>(value);
+            if (!Serialize(io, number) || number > static_cast<std::uint8_t>(MatchEndReason::ServerStopped))
+                return false;
+            value = static_cast<MatchEndReason>(number);
+            return true;
+        }
+        inline bool Serialize(PacketStream& io, GameResults& value)
+        {
+            return Serialize(io, value.room) && value.room.state == GameState::Results
+                && Serialize(io, value.endedAtMs) && Serialize(io, value.reason)
+                && SerializeList(io, value.players, MaxPlayers);
         }
         inline bool Serialize(PacketStream& io, ShotOutcome& value)
         {

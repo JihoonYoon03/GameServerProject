@@ -521,6 +521,15 @@ void NetworkServer::DispatchPacket(const Net::SessionToken& verifiedSender, cons
 			command.body = request;
 			break;
 		}
+		case Net::TcpType::StartGameRequest:
+		{
+			Net::StartGameRequest request;
+			if (!Net::PacketCodec::ReadMessage(header.type, messageBytes, messageSize, request) ||
+				request.roomId != command.context.roomId)
+				return;
+			command.body = request;
+			break;
+		}
 		default:
 			return;
 		}

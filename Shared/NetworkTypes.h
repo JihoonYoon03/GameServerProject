@@ -61,6 +61,13 @@ namespace Net
 		Results = 2
 	};
 
+	enum class MatchEndReason : std::uint8_t
+	{
+		TimeLimit = 0,
+		TooFewPlayers = 1,
+		ServerStopped = 2
+	};
+
 	enum class ErrorCode : std::uint16_t
 	{
 		Ok = 0,
@@ -144,6 +151,13 @@ namespace Net
 		GameState state = GameState::Preparing;
 	};
 
+
+	struct PlayerResult
+	{
+		SessionToken sessionToken{};
+		PlayerStats stats;
+		std::uint8_t rank = 0;
+	};
 
 	// 사용: 서버 Room::SendRoomState() / 클라 ShootingScene::OnRoomStateChanged(), ShootingScene::OnGameEnded() [선언]
 	struct RoomStateData

@@ -165,20 +165,19 @@ void Room::SetPlayerLoaded(const Net::SessionToken& token)
 		data.ready = Net::ReadyState::Waiting;
 		++m_state.version.revision;
 		SendRoomState();
-		StartGameIfReady();
 		return;
 	}
 }
 
 void Room::StartGameIfReady()
 {
-	// 1인 전용 방은 로딩이 끝나면 별도 준비 버튼 없이 시작한다.
 	if (m_state.capacity != 1 || m_state.state != Net::GameState::Preparing
 		|| m_vPlayers.size() != 1 || m_vPlayers[0].m_PlayerData.mapLoaded == 0)
 		return;
 
 	Net::ServerTimeMs nowMs = GetTickCount64();
 	stageController_.StartGame(m_state.rules, *targets_, nowMs);
+	nextMatchTimeAtMs_ = nowMs + 1000;
 	++m_state.version.context.matchId;
 	++m_state.version.revision;
 	m_state.state = Net::GameState::Playing;
@@ -404,6 +403,13 @@ void Room::ProcessCommand(const Net::RoomCommand& command)
 			SetPlayerLoaded(command.sessionToken);
 		return;
 	}
+	const Net::StartGameRequest* start = std::get_if<Net::StartGameRequest>(&command.body);
+	if (start)
+	{
+		if (start->roomId == context.roomId)
+			StartGameIfReady();
+		return;
+	}
 	const Net::FireRequest* shot = std::get_if<Net::FireRequest>(&command.body);
 	if (shot)
 	{
@@ -430,6 +436,7 @@ void Room::Tick()
 			m_state.state = state;
 			++m_state.version.revision;
 			SendRoomState();
+			SendGameResults();
 			SendTargetPositions(nowMs);
 		}
 	}
@@ -441,6 +448,45 @@ void Room::Tick()
 	// StageController owns the 0.5-second spawn cadence; do not fill targets again here.
 	SendTargetPositions(GetTickCount64());
 	SendTransformData();
+	if (nowMs >= nextMatchTimeAtMs_)
+	{
+		SendMatchTime(nowMs);
+		nextMatchTimeAtMs_ = nowMs + 1000;
+	}
+}
+
+void Room::SendMatchTime(Net::ServerTimeMs nowMs)
+{
+	if (!m_SendPacket) return;
+
+	Net::MatchTime time{m_state.version.context, nowMs, stageController_.GetEndsAtMs()};
+	Net::PacketData packet;
+	if (!Net::PacketCodec::EncodeTcp(time, 0, packet)) return;
+
+	for (const Net::PlayerData& player : m_state.vPlayers)
+		m_SendPacket(Net::SendRequest{player.m_sessionToken, packet});
+}
+
+void Room::SendGameResults()
+{
+	if (!m_SendPacket) return;
+
+	Net::GameResults result;
+	result.room = m_state;
+	result.endedAtMs = stageController_.GetEndsAtMs();
+	for (const Net::PlayerData& player : result.room.vPlayers)
+	{
+		Net::PlayerResult entry{player.m_sessionToken, player.stats};
+		if (result.room.vPlayers.size() == 1)
+			entry.rank = 1;
+		result.players.push_back(entry);
+	}
+
+	Net::PacketData packet;
+	if (!Net::PacketCodec::EncodeTcp(result, 0, packet)) return;
+
+	for (const Net::PlayerData& player : result.room.vPlayers)
+		m_SendPacket(Net::SendRequest{player.m_sessionToken, packet});
 }
 
 void Room::RecvShoot(const Net::RoomCommand& command, const Net::FireRequest& request)

@@ -64,6 +64,8 @@ public:
 	void SendTargetPositions(Net::ServerTimeMs nowMs);
 private:
 	void Tick();
+	void SendMatchTime(Net::ServerTimeMs nowMs);
+	void SendGameResults();
 	void ProcessCommands();
 	void ProcessCommand(const Net::RoomCommand& command);
 	void EnterPlayer(const Net::RoomCommand& command, const Net::RoomEnterCommand& enter);
@@ -74,6 +76,7 @@ private:
 	std::vector<ClientPlayer> m_vPlayers;
 	Target targetController_;
 	StageController stageController_;
+	Net::ServerTimeMs nextMatchTimeAtMs_ = 0;
 	std::vector<Net::BoxData> m_vWorldBoxes;
 
 	HANDLE roomThread_ = nullptr;

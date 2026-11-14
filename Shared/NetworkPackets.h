@@ -24,9 +24,12 @@ namespace Net
 		LeaveRoomResult = 0x0114,
 		MapLoaded = 0x0201,
 		RoomState = 0x0203,
+		StartGameRequest = 0x0204,
 		GameStarted = 0x0301,
 		FireRequest = 0x0302,
 		ShotResolved = 0x0303,
+		MatchTime = 0x0305,
+		GameResults = 0x0306,
 	};
 
 	enum class UdpType : std::uint16_t
@@ -119,6 +122,12 @@ namespace Net
 		RoomId roomId = 0;
 	};
 
+	struct StartGameRequest
+	{
+		static constexpr TcpType type = TcpType::StartGameRequest;
+		RoomId roomId = 0;
+	};
+
 
 	// 사용: 서버 Room::SendRoomState() → 클라 ShootingScene::OnRoomStateChanged() [선언] / 묶음: 참가자·준비·구역
 	struct RoomState
@@ -162,6 +171,23 @@ namespace Net
 		ShotId shotId = 0;
 		ShotOutcome outcome = ShotOutcome::Miss;
 		PlayerStats shooterStats;
+	};
+
+	struct MatchTime
+	{
+		static constexpr TcpType type = TcpType::MatchTime;
+		MatchContext context;
+		ServerTimeMs serverTimeMs = 0;
+		ServerTimeMs endsAtMs = 0;
+	};
+
+	struct GameResults
+	{
+		static constexpr TcpType type = TcpType::GameResults;
+		RoomStateData room;
+		ServerTimeMs endedAtMs = 0;
+		MatchEndReason reason = MatchEndReason::TimeLimit;
+		std::vector<PlayerResult> players;
 	};
 
 	// 사용: 클라 NetworkClient::RegisterUDP() → 서버 NetworkServer::RegisterPlayerUDP() [선언]

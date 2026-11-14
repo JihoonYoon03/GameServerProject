@@ -325,6 +325,20 @@ bool NetworkClient::ProcessTcpPacket(const Net::PacketData& packet)
             return true;
         break;
     }
+    case Net::TcpType::MatchTime:
+    {
+        Net::MatchTime time;
+        if (!Net::PacketCodec::ReadMessage(header.type, messageBytes, size, time))
+            return false;
+        break;
+    }
+    case Net::TcpType::GameResults:
+    {
+        Net::GameResults result;
+        if (!Net::PacketCodec::ReadMessage(header.type, messageBytes, size, result))
+            return false;
+        break;
+    }
     case Net::TcpType::GameStarted:
     {
         Net::GameStarted result;

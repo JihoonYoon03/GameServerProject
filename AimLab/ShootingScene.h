@@ -32,7 +32,8 @@ public:
 	void DrawHUD();
 	void ApplyTargetPositions(const Net::UdpHeader& header,
 	    const Net::TargetSnapshot& snapshot);
-	void ApplyTargetSnapshot(const Net::TargetSnapshot& snapshot);
+	void UpdateMatchTime(const Net::MatchTime& time);
+	void RecvGameResults(const Net::GameResults& result);
 
 private:
 	// 통신 참조와 세션 상태는 장면이 살아 있는 동안 메인 스레드에서만 사용한다.
@@ -45,6 +46,17 @@ private:
 	Net::ServerTimeMs serverTimeMs_ = 0;
 	Net::ServerTimeMs startsAtMs_ = 0;
 	Net::ServerTimeMs endsAtMs_ = 0;
+	Net::ServerTimeMs matchTimeReceivedAtMs_ = 0;
+	std::uint8_t finalRank_ = 0;
+
+	struct RemoteTarget
+	{
+		Object* object;
+		glm::vec3 velocity;
+	};
+	std::vector<RemoteTarget> remoteTargets_;
+	void ApplyTargetSnapshot(const Net::TargetSnapshot& snapshot);
+	void AdvanceRemoteTargets(float deltaSeconds);
 	Net::Sequence inputSequence_ = 0;
 	Net::Sequence lastAppliedInput_ = 0;
 	bool hasAppliedInput_ = false;

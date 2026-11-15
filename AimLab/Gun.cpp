@@ -20,6 +20,7 @@ Gun::~Gun()
 
 void Gun::Update(float deltaTime)
 {
+	deltaTime = std::max(deltaTime, 0.0f);
 	//발사 속도
 	if (m_fFireCooldown > 0.0f)
 	{
@@ -30,16 +31,7 @@ void Gun::Update(float deltaTime)
 	}
 
 	//재장전
-	if (m_fReloadRemainingTime > 0.0f)
-	{
-		m_fReloadRemainingTime -= deltaTime;
-
-		if (m_fReloadRemainingTime < 0.0f)
-		{
-			m_fReloadRemainingTime = 0.0f;
-			m_nAmmo = Net::MagazineCapacity;
-		}
-	}
+	UpdateReload(deltaTime);
 
 	//아래는 반동 관련
 	if (m_bIsRecoiling)
@@ -65,11 +57,12 @@ bool Gun::Fire()
 
 bool Gun::TryFire()
 {
-	if (m_fFireCooldown > 0.0f) return false;
+	//발사 간격이 남았거나 재장전 중이면 탄 수와 반동 상태를 건드리지 않고 종료.
+	if (m_fFireCooldown > 0.0f || m_bIsReloading) return false;
 	if (m_nAmmo == 0)
 	{
-		if (m_fReloadRemainingTime == 0.0f)
-			m_fReloadRemainingTime = Net::ReloadSeconds;
+		//빈 탄창에서 발사를 시도하면 재장전 시작. 이번 발사는 처리하지 않음.
+		StartReload();
 
 		return false;
 	}
@@ -82,6 +75,29 @@ bool Gun::TryFire()
 	m_fRecoilProgress = 0.0f;
 
 	return true;
+}
+
+void Gun::StartReload()
+{
+	//재장전 요청이 반복돼도 남은 시간을 처음부터 다시 세지 않게 함. 탄창이 가득 찬 경우도 제외.
+	if (m_bIsReloading || m_nAmmo == Net::MagazineCapacity)
+		return;
+	m_bIsReloading = true;
+	m_fReloadRemainingTime = Net::ReloadSeconds;
+}
+
+void Gun::UpdateReload(float deltaTime)
+{
+	if (!m_bIsReloading)
+		return;
+	//시간을 0 아래로 내리지 않음. deltaTime이 음수여도 재장전 시간이 다시 늘어나지 않게 제한.
+	m_fReloadRemainingTime = std::max(0.0f, m_fReloadRemainingTime - std::max(deltaTime, 0.0f));
+	//시간이 정확히 0이 된 경우도 완료 처리. 탄창을 채우고 재장전 상태를 같이 해제.
+	if (m_fReloadRemainingTime == 0.0f)
+	{
+		m_nAmmo = Net::MagazineCapacity;
+		m_bIsReloading = false;
+	}
 }
 
 void Gun::FollowCamera(const Camera& camera)

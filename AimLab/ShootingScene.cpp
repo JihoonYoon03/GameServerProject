@@ -212,6 +212,13 @@ void ShootingScene::Update(float deltaTime, const Input& input)
 void ShootingScene::ApplyPlayerCommand(const PlayerCommand& command, float deltaTime)
 {
 	player_->ApplyCommand(command, deltaTime, *this);
+	if (network_ != nullptr)
+	{
+		Net::PlayerPose pose = player_->GetNetworkPose();
+		//클라에서 먼저 계산한 이동도 서버가 배정한 구역 안으로 제한. 카메라와 발사 원점은 이 위치를 사용.
+		pose.position = ClampToPlayerArea(pose.position);
+		player_->ApplyNetworkPose(pose);
+	}
 	player_->UpdateCamera(camera_);
 
 	if (command.fire && gun_->Fire())
@@ -416,7 +423,9 @@ void ShootingScene::OnGameStarted(const Net::GameStarted& event)
 	roomState_.rules = event.rules;
 	roomState_.vPlayers = event.players;
 	startedMatchId_ = matchId;
+	//경기가 바뀌면 이전 경기의 이동 순번과 보정 기준을 같이 초기화.
 	inputSequence_ = lastAppliedInput_ = 0;
+	sentPositions_ = {};
 	hasAppliedInput_ = false;
 	movementSendElapsed_ = 0.0f;
 	nextShotId_ = 1;
@@ -433,6 +442,8 @@ void ShootingScene::OnGameStarted(const Net::GameStarted& event)
 			player_->ApplyNetworkPose(entry.pose);
 			player_->UpdateCamera(camera_);
 		}
+	//첫 이동 요청 전에는 서버가 처리한 순번이 0이므로, 시작 위치도 비교 기준으로 저장.
+	sentPositions_[0] = {0, player_->transform.position, true};
 	serverTimeMs_ = event.serverTimeMs;
 	startsAtMs_ = event.startsAtMs;
 	endsAtMs_ = event.endsAtMs;
@@ -539,10 +550,14 @@ void ShootingScene::SendPlayerTransform()
 	Net::PacketData packet;
 	if (!Net::PacketCodec::EncodeUdp(request, packet) || !network_->SendPacket(packet))
 		throw std::runtime_error("Failed to send player pose");
+	//서버가 돌려준 순번으로 전송 당시 위치를 찾기 위해 저장. 나머지 연산으로 최근 64칸을 재사용.
+	SentPosition& sent = sentPositions_[inputSequence_ % sentPositions_.size()];
+	sent = {inputSequence_, request.packetData.pose.position, true};
 }
 
 void ShootingScene::RecvTransformData(const Net::PlayerSnapshot& snapshot)
 {
+	//해당 위치에 필요한 TCP 상태를 아직 못 받았다면 적용하지 않음.
 	if (network_ == nullptr || roomState_.state != Net::GameState::Playing
 		|| Net::IsNewerSequence(snapshot.requiredRevision, roomState_.version.revision))
 		return;
@@ -551,15 +566,55 @@ void ShootingScene::RecvTransformData(const Net::PlayerSnapshot& snapshot)
 		const Net::PlayerTransformEntry& entry = snapshot.players[index];
 		if (entry.m_sessionToken != sessionToken_)
 			continue;
+		//보낸 적 없는 순번이거나 이미 적용한 응답이면 위치를 다시 보정하지 않음.
 		if (Net::IsNewerSequence(entry.lastProcessedInput, inputSequence_)
 			|| (hasAppliedInput_ && !Net::IsNewerSequence(entry.lastProcessedInput, lastAppliedInput_)))
 			return;
-		if (player_->ApplyNetworkPose(entry.pose))
+		SentPosition& acknowledged = sentPositions_[entry.lastProcessedInput % sentPositions_.size()];
+		//같은 배열 칸이 더 최근 요청으로 덮였을 수 있으므로, 유효 여부와 실제 순번을 모두 확인.
+		if (!acknowledged.valid || acknowledged.sequence != entry.lastProcessedInput)
+			return;
+
+		//서버 확정 위치 - 해당 요청을 보낼 때의 위치 = 그 요청까지 발생한 위치 오차.
+		//이 차이만 현재 위치에 더해서, 응답을 기다리는 동안 이동한 거리와 현재 시선은 유지.
+		Net::PlayerPose previous = player_->GetNetworkPose();
+		Net::PlayerPose corrected = previous;
+		corrected.position = ClampToPlayerArea(previous.position + (entry.pose.position - acknowledged.position));
+		if (!player_->ApplyNetworkPose(corrected))
+			return;
+
+		Box playerBox = player_->GetWorldBox();
+		for (const std::unique_ptr<Object>& object : GetObjects())
 		{
-			lastAppliedInput_ = entry.lastProcessedInput;
-			hasAppliedInput_ = true;
-			player_->UpdateCamera(camera_);
+			if (!object->active || !object->blocksMovement || object->collider != ColliderType::Box)
+				continue;
+			Box wall = object->GetWorldBox();
+			if (playerBox.min.x < wall.max.x && playerBox.max.x > wall.min.x
+				&& playerBox.min.z < wall.max.z && playerBox.max.z > wall.min.z)
+			{
+				//보정한 위치가 벽 안이면 서버가 확정한 위치로 이동. yaw, pitch는 현재 클라 값을 유지.
+				corrected.position = ClampToPlayerArea(entry.pose.position);
+				player_->ApplyNetworkPose(corrected);
+				break;
+			}
 		}
+
+		//구역 제한과 벽 보정까지 끝난 뒤 실제로 이동한 보정량 계산.
+		glm::vec3 correction = player_->transform.position - previous.position;
+		for (SentPosition& sent : sentPositions_)
+		{
+			if (!sent.valid)
+				continue;
+			//서버가 처리했다고 확인된 요청은 비움. 아직 확인 못한 요청의 기준 위치도 같은 만큼 옮김.
+			//안 옮기면 다음 응답에서 이번에 반영한 오차를 다시 적용할 수 있음.
+			if (!Net::IsNewerSequence(sent.sequence, entry.lastProcessedInput))
+				sent.valid = false;
+			else
+				sent.position += correction;
+		}
+		lastAppliedInput_ = entry.lastProcessedInput;
+		hasAppliedInput_ = true;
+		player_->UpdateCamera(camera_);
 		return;
 	}
 }
@@ -587,14 +642,36 @@ void ShootingScene::RecvShootResult(const Net::ShotResolved& result)
 		|| (result.version.revision != roomState_.version.revision
 			&& !Net::IsNewerSequence(result.version.revision, roomState_.version.revision)))
 		return;
+	//이미 받은 발사 결과는 방의 점수와 HUD를 바꾸기 전에 걸러서 과거 점수로 돌아가지 않게 함.
+	if (result.shooterToken == sessionToken_ && (result.shotId == 0
+		|| (lastResolvedShotId_ != 0 && !Net::IsNewerSequence(result.shotId, lastResolvedShotId_))))
+		return;
 	roomState_.version = result.version;
 	for (Net::PlayerData& player : roomState_.vPlayers)
 		if (player.m_sessionToken == result.shooterToken)
 			player.stats = result.shooterStats;
-	if (result.shooterToken != sessionToken_ || result.shotId == 0
-		|| (lastResolvedShotId_ != 0 && !Net::IsNewerSequence(result.shotId, lastResolvedShotId_)))
+	if (result.shooterToken != sessionToken_)
 		return;
 	networkStats_ = result.shooterStats;
 	lastShotOutcome_ = result.outcome;
 	lastResolvedShotId_ = result.shotId;
+}
+
+//플레이어 이동 구역에 따라 이동 범위를 clamp해주는 함수
+glm::vec3 ShootingScene::ClampToPlayerArea(glm::vec3 position) const
+{
+	//본인 토큰으로 배정된 구역을 찾음. 표적 구역이나 다른 플레이어 구역으로 제한하면 안 됨.
+	for (const Net::PlayerData& player : roomState_.vPlayers)
+		if (player.m_sessionToken == sessionToken_)
+			for (const Net::AreaData& area : roomState_.vAreas)
+				if (area.areaId == player.areaId)
+				{
+					//위치는 플레이어 중심이므로 min에는 몸체 절반을 더하고 max에서는 빼서 몸이 경계를 넘지 않게 함.
+					position.x = std::clamp(position.x, area.movementBounds.min.x + Net::PlayerHalfExtent,
+						area.movementBounds.max.x - Net::PlayerHalfExtent);
+					position.z = std::clamp(position.z, area.movementBounds.min.z + Net::PlayerHalfExtent,
+						area.movementBounds.max.z - Net::PlayerHalfExtent);
+					return position;
+				}
+	return position;
 }

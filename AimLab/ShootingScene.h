@@ -57,6 +57,16 @@ private:
 	std::vector<RemoteTarget> remoteTargets_;
 	void ApplyTargetSnapshot(const Net::TargetSnapshot& snapshot);
 	void AdvanceRemoteTargets(float deltaSeconds);
+	//입력을 다시 실행하는 용도가 아니라, 서버 응답과 전송 당시 위치의 차이를 구하기 위한 기록.
+	struct SentPosition
+	{
+		Net::Sequence sequence = 0;
+		glm::vec3 position{0.0f};
+		bool valid = false;
+	};
+	//응답 처리가 끝난 기록은 비우고, 늦은 응답과 배열을 재사용한 새 요청은 sequence로 구분.
+	std::array<SentPosition, 64> sentPositions_{};
+	glm::vec3 ClampToPlayerArea(glm::vec3 position) const;
 	Net::Sequence inputSequence_ = 0;
 	Net::Sequence lastAppliedInput_ = 0;
 	bool hasAppliedInput_ = false;

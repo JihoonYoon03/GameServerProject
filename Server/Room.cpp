@@ -40,13 +40,20 @@ void Room::AssignPlayerAreas()
 {
 	if (m_state.vAreas.empty())
 	{
-		//기존 사격장의 남쪽 구역과 시작 위치를 그대로 사용한다.
-		Net::AreaData area;
-		area.areaId = 0;
-		glm::vec3 center = ShootingRange::AreaCenters[ShootingRange::SouthArea];
-		area.movementBounds.min = center - glm::vec3(ShootingRange::AreaInnerHalfSize);
-		area.movementBounds.max = center + glm::vec3(ShootingRange::AreaInnerHalfSize);
-		area.spawnTransform[3] = glm::vec4(center + glm::vec3(0, 1, 0), 1.0f);
+		//1인 방은 원래대로 남쪽 구역을 사용하고, 다인 방은 정원만큼 구역을 준비한다.
+		std::size_t areaCount = (std::min)(static_cast<std::size_t>(m_state.capacity),
+			ShootingRange::AreaCenters.size());
+		for (std::size_t index = 0; index < areaCount; ++index)
+		{
+			std::size_t centerIndex = (ShootingRange::SouthArea + index) % ShootingRange::AreaCenters.size();
+			glm::vec3 center = ShootingRange::AreaCenters[centerIndex];
+			Net::AreaData area;
+			area.areaId = static_cast<std::uint8_t>(index);
+			area.movementBounds.min = center - glm::vec3(ShootingRange::AreaInnerHalfSize);
+			area.movementBounds.max = center + glm::vec3(ShootingRange::AreaInnerHalfSize);
+			area.spawnTransform[3] = glm::vec4(center + glm::vec3(0, 1, 0), 1.0f);
+			m_state.vAreas.push_back(area);
+		}
 		m_vWorldBoxes.clear();
 
 		//스테이지 지형 정보 저장
@@ -57,12 +64,26 @@ void Room::AssignPlayerAreas()
 					glm::vec3 wallCenter = areaCenter + part.offset;
 					m_vWorldBoxes.push_back({wallCenter - part.halfSize, wallCenter + part.halfSize});
 				}
-		m_state.vAreas.push_back(area);
 	}
+
 	for (ClientPlayer& player : m_vPlayers)
 	{
-		player.m_PlayerData.areaId = m_state.vAreas[0].areaId;
-		player.m_PlayerData.pose.position = glm::vec3(m_state.vAreas[0].spawnTransform[3]);
+		if (player.m_PlayerData.areaId != Net::UnassignedArea)
+			continue;
+
+		// 새 참가자만 빈 구역에 배정한다. 기존 참가자의 구역과 위치는 유지한다.
+		const auto area = std::find_if(m_state.vAreas.begin(), m_state.vAreas.end(), [&](const Net::AreaData& candidate)
+		{
+			return std::none_of(m_vPlayers.begin(), m_vPlayers.end(), [&](const ClientPlayer& occupant)
+			{
+				return occupant.m_PlayerData.areaId == candidate.areaId;
+			});
+		});
+		if (area != m_state.vAreas.end())
+		{
+			player.m_PlayerData.areaId = area->areaId;
+			player.m_PlayerData.pose.position = glm::vec3(area->spawnTransform[3]);
+		}
 	}
 }
 

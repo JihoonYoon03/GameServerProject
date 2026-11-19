@@ -14,9 +14,16 @@ glm::vec3 Camera::GetForward() const
 	return glm::vec3(GetRotation() * glm::vec4(0, 0, -1, 0));
 }
 
-glm::mat4 Camera::GetView() const
+glm::mat4 Camera::GetView(bool rotationOnly) const
 {
-	return glm::lookAt(position, position + GetForward(), glm::vec3(0, 1, 0));
+	glm::mat4 retval = glm::lookAt(position, position + GetForward(), glm::vec3(0, 1, 0));
+	if (rotationOnly)
+	{
+		//회전 성분만 남기기 위해 이동 역변환을 먼저 곱함
+		retval = retval * glm::translate(glm::mat4(1.0f), -position);
+	}
+
+	return retval;
 }
 
 glm::mat4 Camera::GetProjection(float aspect) const

@@ -262,6 +262,8 @@
   <ItemGroup>
     <None Include="Shaders\Lit.frag" />
     <None Include="Shaders\Lit.vert" />
+    <None Include="Shaders\UI.frag" />
+    <None Include="Shaders\UI.vert" />
   </ItemGroup>
   <ItemGroup>
     <Image Include="Resources\Textures\GroundTex.png" />

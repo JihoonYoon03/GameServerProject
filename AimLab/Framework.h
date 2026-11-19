@@ -17,6 +17,8 @@ private:
 	void UpdateConnection();
 	void Render();
 	void DrawObjects();
+	//DrawOverlay 대체 예정
+	void DrawUI();
 	void DrawOverlay();
 	void DrawColliders();
 	void UploadLights(const Shader& shader) const;

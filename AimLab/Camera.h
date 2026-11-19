@@ -12,6 +12,6 @@ public:
 	float	  farPlane = 200.0f;
 	glm::mat4 GetRotation() const;
 	glm::vec3 GetForward() const;
-	glm::mat4 GetView() const;
+	glm::mat4 GetView(bool rotationOnly = false) const;
 	glm::mat4 GetProjection(float aspect) const;
 };

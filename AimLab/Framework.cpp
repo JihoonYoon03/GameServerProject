@@ -322,6 +322,7 @@ void Framework::DrawObjects()
 			continue;
 		}
 
+		//스케일 요소 중 하나라도 0에 근접한 경우
 		if (glm::any(glm::lessThan(glm::abs(object->transform.scale), glm::vec3(0.000001f))))
 		{
 			throw std::runtime_error("Object scale must be nonzero: " + object->name);
@@ -342,6 +343,106 @@ void Framework::DrawObjects()
 		shader.Set("model", object->GetModelMatrix());
 		mesh->Draw();
 	}
+}
+
+void Framework::DrawUI()
+{
+	const Camera& camera = scene_->GetCamera();
+	//직교 투영 z범위는 -1 ~ 1 (OpenGL기준)
+	glm::mat4 projection = glm::ortho(-1.0f, 1.0f, -1.0f, 1.0f);
+	const Shader* previousShader = nullptr;
+
+	for (const std::unique_ptr<Object>& object : scene_->GetUIObjects())
+	{
+		if (!object->active || !object->visible)
+		{
+			continue;
+		}
+
+		const std::shared_ptr<Mesh>& mesh = object->GetMesh();
+		const std::shared_ptr<Material>& material = object->GetMaterial();
+
+		if (!mesh || !material || !material->shader)
+		{
+			continue;
+		}
+
+		//스케일 요소 중 하나라도 0에 근접한 경우
+		if (glm::any(glm::lessThan(glm::abs(object->transform.scale), glm::vec3(0.000001f))))
+		{
+			throw std::runtime_error("Object scale must be nonzero: " + object->name);
+		}
+
+		material->Apply();
+		const Shader& shader = *material->shader;
+
+		if (previousShader != &shader)
+		{
+			shader.Set("projection", projection);
+			previousShader = &shader;
+		}
+
+		shader.Set("model", object->GetModelMatrix());
+		mesh->Draw();
+	}
+}
+
+//LegacyGL
+void Framework::DrawOverlay()
+{
+	const Hud hud = scene_->GetHud();
+	// Program 0 selects the fixed-function pipeline in this compatibility context.
+	//LegacyGL
+	glUseProgram(0);
+	glDisable(GL_DEPTH_TEST);
+	glDisable(GL_CULL_FACE);
+	//LegacyGL
+	glMatrixMode(GL_PROJECTION);
+	//LegacyGL
+	glLoadIdentity();
+	//LegacyGL
+	glOrtho(-1, 1, -1, 1, -1, 1);
+	//LegacyGL
+	glMatrixMode(GL_MODELVIEW);
+	//LegacyGL
+	glLoadIdentity();
+
+	if (hud.crosshair)
+	{
+		//LegacyGL
+		glColor3f(1, 1, 1);
+		glLineWidth(2.0f);
+		//LegacyGL
+		glBegin(GL_LINES);
+		//LegacyGL
+		glVertex2f(0.025f, 0);
+		//LegacyGL
+		glVertex2f(-0.025f, 0);
+		//LegacyGL
+		glVertex2f(0, 0.025f);
+		//LegacyGL
+		glVertex2f(0, -0.025f);
+		//LegacyGL
+		glEnd();
+		// 원본은 이후 HUD에도 선 두께 2를 유지합니다.
+	}
+
+	//LegacyGL
+	glColor3f(0, 0, 0);
+	const std::array<glm::vec2, 4> positions{{{-0.99f, 0.9f}, {-0.99f, 0.8f}, {-0.3f, 0.9f}, {0.6f, 0.9f}}};
+
+	for (size_t i = 0; i < hud.lines.size() && i < positions.size(); ++i)
+	{
+		DrawText(hud.lines[i], positions[i].x, positions[i].y, 0.0005f);
+	}
+
+	if (!hud.message.empty())
+	{
+		DrawText(hud.message, -0.6f, -0.15f, hud.messageScale);
+	}
+
+	glEnable(GL_DEPTH_TEST);
+	glEnable(GL_CULL_FACE);
 }
 
 //LegacyGL
@@ -403,64 +504,6 @@ void Framework::DrawColliders()
 		glPopMatrix();
 	}
 
-	glEnable(GL_CULL_FACE);
-}
-
-//LegacyGL
-void Framework::DrawOverlay()
-{
-	const Hud hud = scene_->GetHud();
-	// Program 0 selects the fixed-function pipeline in this compatibility context.
-	//LegacyGL
-	glUseProgram(0);
-	glDisable(GL_DEPTH_TEST);
-	glDisable(GL_CULL_FACE);
-	//LegacyGL
-	glMatrixMode(GL_PROJECTION);
-	//LegacyGL
-	glLoadIdentity();
-	//LegacyGL
-	glOrtho(-1, 1, -1, 1, -1, 1);
-	//LegacyGL
-	glMatrixMode(GL_MODELVIEW);
-	//LegacyGL
-	glLoadIdentity();
-
-	if (hud.crosshair)
-	{
-		//LegacyGL
-		glColor3f(1, 1, 1);
-		glLineWidth(2.0f);
-		//LegacyGL
-		glBegin(GL_LINES);
-		//LegacyGL
-		glVertex2f(0.025f, 0);
-		//LegacyGL
-		glVertex2f(-0.025f, 0);
-		//LegacyGL
-		glVertex2f(0, 0.025f);
-		//LegacyGL
-		glVertex2f(0, -0.025f);
-		//LegacyGL
-		glEnd();
-		// 원본은 이후 HUD에도 선 두께 2를 유지합니다.
-	}
-
-	//LegacyGL
-	glColor3f(0, 0, 0);
-	const std::array<glm::vec2, 4> positions{{{-0.99f, 0.9f}, {-0.99f, 0.8f}, {-0.3f, 0.9f}, {0.6f, 0.9f}}};
-
-	for (size_t i = 0; i < hud.lines.size() && i < positions.size(); ++i)
-	{
-		DrawText(hud.lines[i], positions[i].x, positions[i].y, 0.0005f);
-	}
-
-	if (!hud.message.empty())
-	{
-		DrawText(hud.message, -0.6f, -0.15f, hud.messageScale);
-	}
-
-	glEnable(GL_DEPTH_TEST);
 	glEnable(GL_CULL_FACE);
 }
 

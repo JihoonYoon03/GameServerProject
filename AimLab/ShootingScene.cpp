@@ -130,6 +130,9 @@ void ShootingScene::Initialize()
 
 void ShootingScene::Update(float deltaTime, const Input& input)
 {
+	float sensitivityChange = static_cast<float>(input.WasPressed(']')) - static_cast<float>(input.WasPressed('['));
+	player_->m_fSensitivity = std::clamp(player_->m_fSensitivity + sensitivityChange * 0.02f, 0.02f, 2.0f);
+
 	if (network_ != nullptr)
 	{
 		if (input.WasPressed('1') && roomState_.state == Net::GameState::Preparing
@@ -300,11 +303,15 @@ void ShootingScene::Shoot()
 
 Hud ShootingScene::GetHud() const
 {
+	std::ostringstream sensitivity;
+	sensitivity.precision(2);
+	sensitivity << std::fixed << player_->m_fSensitivity;
+	std::string sensitivityLabel = "  sensitivity: " + sensitivity.str() + " ([ / ])";
 	Hud hud;
 	if (network_ != nullptr)
 	{
 		hud.lines = {"point: " + std::to_string(networkStats_.score),
-			"shots: " + std::to_string(networkStats_.shotsFired)};
+			"shots: " + std::to_string(networkStats_.shotsFired) + sensitivityLabel};
 		if (roomState_.state == Net::GameState::Preparing)
 			hud.message = "Press 1 to start";
 		else if (roomState_.state == Net::GameState::Results)
@@ -326,7 +333,7 @@ Hud ShootingScene::GetHud() const
 		}
 		return hud;
 	}
-	hud.lines = {"stage: " + std::to_string(stages_.GetStageNumber()), "point: " + std::to_string(stages_.GetScore()),
+	hud.lines = {"stage: " + std::to_string(stages_.GetStageNumber()), "point: " + std::to_string(stages_.GetScore()) + sensitivityLabel,
 		"target point: " + std::to_string(stages_.GetRequiredScore()),
 		"timer: " + std::to_string(stages_.GetRemainingSeconds())};
 

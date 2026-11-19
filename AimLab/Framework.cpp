@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "Framework.h"
 #include "NetworkClient.h"
+#include "MainScene.h"
 #include "ShootingScene.h"
 #include "../Shared/PacketCodec.h"
 
@@ -16,6 +17,10 @@ Framework::~Framework() = default;
 namespace
 {
 	constexpr int UpdateIntervalMs = 1000 / 240;
+	constexpr float ReadyLeft = -0.80f;
+	constexpr float ReadyRight = 0.08f;
+	constexpr float ReadyBottom = -0.45f;
+	constexpr float ReadyTop = -0.25f;
 
 	//LegacyGL
 	void DrawText(const std::string& text, float x, float y, float scale)
@@ -36,6 +41,37 @@ namespace
 
 		//LegacyGL
 		glPopMatrix();
+	}
+
+	float ReadyTextWidth(const std::string& text)
+	{
+		return static_cast<float>(glutStrokeLength(GLUT_STROKE_ROMAN,
+			reinterpret_cast<const unsigned char*>(text.c_str())));
+	}
+
+	void DrawReadyPanel(const Hud& hud)
+	{
+		glColor3f(0.10f, 0.13f, 0.17f);
+		glRectf(-0.90f, -0.70f, 0.46f, 0.82f);
+		glLineWidth(1.7f);
+		float y = 0.64f;
+		for (std::size_t i = 0; i < hud.lines.size(); ++i)
+		{
+			float scale = i == 0 ? 0.00072f : 0.00050f;
+			glColor3f(0.94f, 0.96f, 0.98f);
+			DrawText(hud.lines[i], ReadyLeft, y, std::min(scale, 1.16f / std::max(1.0f, ReadyTextWidth(hud.lines[i]))));
+			y -= i == 0 ? 0.21f : 0.14f;
+		}
+
+		glColor3f(0.53f, 0.86f, 0.76f);
+		glRectf(ReadyLeft, ReadyBottom, ReadyRight, ReadyTop);
+		float width = std::max(1.0f, ReadyTextWidth(hud.readyButton));
+		float scale = std::min(0.00064f, (ReadyRight - ReadyLeft - 0.08f) / width);
+		glColor3f(0.04f, 0.12f, 0.11f);
+		DrawText(hud.readyButton, (ReadyLeft + ReadyRight - width * scale) / 2.0f, -0.38f, scale);
+
+		glColor3f(0.83f, 0.87f, 0.90f);
+		DrawText(hud.message, ReadyLeft, -0.60f, std::min(0.00046f, 1.16f / std::max(1.0f, ReadyTextWidth(hud.message))));
 	}
 } // namespace
 
@@ -160,17 +196,22 @@ void Framework::Tick()
 void Framework::UpdateConnection()
 {
 	network_->UpdateNetwork();
+	MainScene* lobby = dynamic_cast<MainScene*>(scene_.get());
 	ShootingScene* shooting = dynamic_cast<ShootingScene*>(scene_.get());
-	if (shooting == nullptr)
-		throw std::runtime_error("1인 접속에 필요한 사격장 장면이 없습니다.");
 
 	for (const Net::PacketData& packet : network_->GetReceivedPackets())
 	{
 		if (packet.transport == Net::PacketTransport::Udp)
 		{
 			Net::UdpHeader header;
-			if (!sceneInitialized_ || !Net::PacketCodec::ReadUdpHeader(
-				packet.bytes.data(), packet.bytes.size(), header))
+			if (!Net::PacketCodec::ReadUdpHeader(packet.bytes.data(), packet.bytes.size(), header))
+				continue;
+			if (lobby && !sceneInitialized_ && header.type == Net::UdpType::RegisterResult && network_->IsConnected())
+			{
+				lobby->Initialize();
+				sceneInitialized_ = true;
+			}
+			if (!sceneInitialized_ || !shooting)
 				continue;
 
 			const std::uint8_t* messageBytes = packet.bytes.data() + Net::UdpHeaderBytes;
@@ -198,15 +239,26 @@ void Framework::UpdateConnection()
 		std::size_t messageSize = packet.bytes.size() - Net::TcpHeaderBytes;
 		switch (header.type)
 		{
+		case Net::TcpType::RoomListResult:
+		{
+			Net::RoomListResult result;
+			if (!Net::PacketCodec::ReadMessage(header.type, messageBytes, messageSize, result))
+				throw std::runtime_error("방 목록 응답을 읽지 못했습니다.");
+			if (lobby)
+				lobby->UpdateRoomList(header.requestId, result);
+			break;
+		}
 		case Net::TcpType::RoomEnterResult:
 		{
 			Net::RoomEnterResult result;
 			if (!Net::PacketCodec::ReadMessage(header.type, messageBytes, messageSize, result))
 				throw std::runtime_error("방 입장 응답을 읽지 못했습니다.");
-			if (result.result != Net::ErrorCode::Ok)
-				throw std::runtime_error("방 입장 실패: " + std::to_string(static_cast<unsigned int>(result.result)));
-			if (sceneInitialized_)
+			if (!lobby || !lobby->JoinRoom(result))
 				break;
+			auto nextScene = std::make_unique<ShootingScene>();
+			shooting = nextScene.get();
+			scene_ = std::move(nextScene);
+			lobby = nullptr;
 			if (!shooting->SetNetworkSession(*network_, result))
 				throw std::runtime_error("방 입장 정보가 올바르지 않습니다.");
 
@@ -215,41 +267,43 @@ void Framework::UpdateConnection()
 			sceneInitialized_ = true;
 			previousTime_ = std::chrono::steady_clock::now();
 			shooting->SendMapLoaded();
-			std::cout << "1인 방 입장 및 맵 로딩 완료: " << result.room.version.context.roomId << '\n';
+			std::cout << "Room " << result.room.version.context.roomId << " joined ("
+				<< result.room.vPlayers.size() << '/' << static_cast<int>(result.room.capacity)
+				<< "). Map loaded." << std::endl;
 			break;
 		}
 		case Net::TcpType::RoomState:
 		{
 			Net::RoomState state;
-			if (sceneInitialized_ && Net::PacketCodec::ReadMessage(header.type, messageBytes, messageSize, state))
+			if (shooting && Net::PacketCodec::ReadMessage(header.type, messageBytes, messageSize, state))
 				shooting->OnRoomStateChanged(state.room);
 			break;
 		}
 		case Net::TcpType::GameStarted:
 		{
 			Net::GameStarted event;
-			if (sceneInitialized_ && Net::PacketCodec::ReadMessage(header.type, messageBytes, messageSize, event))
+			if (shooting && Net::PacketCodec::ReadMessage(header.type, messageBytes, messageSize, event))
 				shooting->OnGameStarted(event);
 			break;
 		}
 		case Net::TcpType::MatchTime:
 		{
 			Net::MatchTime time;
-			if (sceneInitialized_ && Net::PacketCodec::ReadMessage(header.type, messageBytes, messageSize, time))
+			if (shooting && Net::PacketCodec::ReadMessage(header.type, messageBytes, messageSize, time))
 				shooting->UpdateMatchTime(time);
 			break;
 		}
 		case Net::TcpType::GameResults:
 		{
 			Net::GameResults result;
-			if (sceneInitialized_ && Net::PacketCodec::ReadMessage(header.type, messageBytes, messageSize, result))
+			if (shooting && Net::PacketCodec::ReadMessage(header.type, messageBytes, messageSize, result))
 				shooting->RecvGameResults(result);
 			break;
 		}
 		case Net::TcpType::ShotResolved:
 		{
 			Net::ShotResolved result;
-			if (sceneInitialized_ && Net::PacketCodec::ReadMessage(header.type, messageBytes, messageSize, result))
+			if (shooting && Net::PacketCodec::ReadMessage(header.type, messageBytes, messageSize, result))
 				shooting->RecvShootResult(result);
 			break;
 		}
@@ -264,6 +318,14 @@ void Framework::UpdateConnection()
 		default:
 			break;
 		}
+	}
+	bool preparing = shooting && shooting->IsPreparing();
+	if (readyPanelActive_ != preparing)
+	{
+		readyPanelActive_ = preparing;
+		glutSetCursor(preparing ? GLUT_CURSOR_LEFT_ARROW : GLUT_CURSOR_NONE);
+		centerAimOnMotion_ = !preparing;
+		input_.EndFrame();
 	}
 }
 
@@ -426,38 +488,43 @@ void Framework::DrawOverlay()
 	//LegacyGL
 	glLoadIdentity();
 
-	if (hud.crosshair)
+	if (!hud.readyButton.empty())
+		DrawReadyPanel(hud);
+	else
 	{
-		//LegacyGL
-		glColor3f(1, 1, 1);
-		glLineWidth(2.0f);
-		//LegacyGL
-		glBegin(GL_LINES);
-		//LegacyGL
-		glVertex2f(0.025f, 0);
-		//LegacyGL
-		glVertex2f(-0.025f, 0);
-		//LegacyGL
-		glVertex2f(0, 0.025f);
-		//LegacyGL
-		glVertex2f(0, -0.025f);
-		//LegacyGL
-		glEnd();
-		// 원본은 이후 HUD에도 선 두께 2를 유지합니다.
-	}
+		if (hud.crosshair)
+		{
+			//LegacyGL
+			glColor3f(1, 1, 1);
+			glLineWidth(2.0f);
+			//LegacyGL
+			glBegin(GL_LINES);
+			//LegacyGL
+			glVertex2f(0.025f, 0);
+			//LegacyGL
+			glVertex2f(-0.025f, 0);
+			//LegacyGL
+			glVertex2f(0, 0.025f);
+			//LegacyGL
+			glVertex2f(0, -0.025f);
+			//LegacyGL
+			glEnd();
+			// 원본은 이후 HUD에도 선 두께 2를 유지합니다.
+		}
 
-	//LegacyGL
-	glColor3f(0, 0, 0);
-	const std::array<glm::vec2, 4> positions{{{-0.99f, 0.9f}, {-0.99f, 0.8f}, {-0.3f, 0.9f}, {0.6f, 0.9f}}};
+		//LegacyGL
+		glColor3f(0, 0, 0);
+		const std::array<glm::vec2, 4> positions{{{-0.99f, 0.9f}, {-0.99f, 0.8f}, {-0.3f, 0.9f}, {0.6f, 0.9f}}};
 
-	for (size_t i = 0; i < hud.lines.size() && i < positions.size(); ++i)
-	{
-		DrawText(hud.lines[i], positions[i].x, positions[i].y, 0.0005f);
-	}
+		for (size_t i = 0; i < hud.lines.size() && i < positions.size(); ++i)
+		{
+			DrawText(hud.lines[i], positions[i].x, positions[i].y, 0.0005f);
+		}
 
-	if (!hud.message.empty())
-	{
-		DrawText(hud.message, -0.6f, -0.15f, hud.messageScale);
+		if (!hud.message.empty())
+		{
+			DrawText(hud.message, -0.6f, -0.15f, hud.messageScale);
+		}
 	}
 
 	glEnable(GL_DEPTH_TEST);
@@ -533,6 +600,8 @@ void Framework::KeyDownCallback(unsigned char key, int, int)
 		return;
 	}
 
+	if (key == ' ' && current_->readyPanelActive_ && current_->input_.IsDown(key))
+		return;
 	current_->input_.SetKey(key, true);
 }
 
@@ -541,20 +610,33 @@ void Framework::KeyUpCallback(unsigned char key, int, int)
 	current_->input_.SetKey(key, false);
 }
 
-void Framework::MouseCallback(int button, int state, int, int)
+void Framework::MouseCallback(int button, int state, int x, int y)
 {
 	if (button != GLUT_LEFT_BUTTON || state != GLUT_DOWN) return;
 
+	if (current_->readyPanelActive_)
+	{
+		float px = 2.0f * x / current_->width_ - 1.0f;
+		float py = 1.0f - 2.0f * y / current_->height_;
+		if (px >= ReadyLeft && px <= ReadyRight && py >= ReadyBottom && py <= ReadyTop)
+			current_->input_.readyClicked = true;
+		return;
+	}
 	current_->input_.firePressed = true;
 }
 
 void Framework::MotionCallback(int x, int y)
 {
+	if (current_->readyPanelActive_) return;
 	int dx = x - current_->width_ / 2, dy = y - current_->height_ / 2;
 
+	// 대기 화면을 닫고 처음 움직일 때는 버튼과 조준점 사이의 거리를 시선에 적용하지 않는다.
+	bool recenter = current_->centerAimOnMotion_;
+	current_->centerAimOnMotion_ = false;
 	if (dx == 0 && dy == 0) return;
 
-	current_->input_.mouseDelta += glm::vec2(dx, dy);
+	if (!recenter)
+		current_->input_.mouseDelta += glm::vec2(dx, dy);
 	glutWarpPointer(current_->width_ / 2, current_->height_ / 2);
 }
 

@@ -12,6 +12,7 @@ struct Hud
 	std::string				 message;
 	bool					 crosshair = true;
 	float					 messageScale = 0.0015f;
+	std::string              readyButton;
 };
 
 class Scene

@@ -14,11 +14,15 @@ namespace Net
         {
         case TcpType::ConnectResult:
         case TcpType::RequestRejected:
+        case TcpType::RoomListRequest:
+        case TcpType::RoomListResult:
         case TcpType::CreateRoomRequest:
+        case TcpType::JoinRoomRequest:
         case TcpType::RoomEnterResult:
         case TcpType::LeaveRoomRequest:
         case TcpType::LeaveRoomResult:
         case TcpType::MapLoaded:
+        case TcpType::ReadyChangeRequest:
         case TcpType::StartGameRequest:
         case TcpType::RoomState:
         case TcpType::FireRequest:

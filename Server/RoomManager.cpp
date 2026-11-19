@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "RoomManager.h"
 #include "Room.h"
+#include "../Shared/PacketCodec.h"
 #include <utility>
 
 RoomManager::RoomManager(Net::PacketSender sender) : sendPacket_(std::move(sender))
@@ -23,29 +24,49 @@ Net::RoomId RoomManager::CreateGameRoom(const Net::SessionToken& creator,
 	try
 	{
 		std::unique_ptr<Room> room = std::make_unique<Room>(roomId, sendPacket_);
-		Net::RoomCommand command;
-		command.sessionToken = creator;
-		command.requestId = requestId;
-		command.context.roomId = roomId;
-		command.membershipId = membershipId;
-		command.receivedAtMs = GetTickCount64();
-		command.body = Net::RoomEnterCommand{UDPRegistered};
-		if (!room->AddCommand(command))
-			return 0;
 		auto roomEntry = rooms_.emplace(roomId, std::move(room)).first;
 		Net::RoomInfo summary;
 		summary.roomId = roomId;
-		summary.capacity = 1;
 		roomSummaries_.emplace(roomId, summary);
-		if (roomEntry->second->StartRoomThread())
+		if (JoinGameRoom(roomId, creator, membershipId, UDPRegistered, requestId) &&
+			roomEntry->second->StartRoomThread())
 			return roomId;
 	}
 	catch (...)
 	{
-		fputs("1인 방을 생성하지 못했습니다.\n", stderr);
+		fputs("방을 생성하지 못했습니다.\n", stderr);
 	}
 	DeleteRoom(roomId);
 	return 0;
+}
+
+bool RoomManager::JoinGameRoom(Net::RoomId roomId, const Net::SessionToken& token,
+	Net::MembershipId membershipId, bool UDPRegistered, std::uint32_t requestId)
+{
+	Net::RoomCommand command;
+	command.sessionToken = token;
+	command.requestId = requestId;
+	command.context.roomId = roomId;
+	command.membershipId = membershipId;
+	command.receivedAtMs = GetTickCount64();
+	command.body = Net::RoomEnterCommand{UDPRegistered};
+	return AddCommand(command);
+}
+
+void RoomManager::SendRoomList(const Net::SessionToken& recipient, std::uint32_t requestId) const
+{
+	if (stopping_ || !sendPacket_)
+		return;
+
+	Net::RoomListResult result;
+	result.rooms.reserve(roomSummaries_.size());
+	for (const auto& entry : roomSummaries_)
+		result.rooms.push_back(entry.second);
+
+	Net::SendRequest response;
+	response.recipientToken = recipient;
+	if (Net::PacketCodec::EncodeTcp(result, requestId, response.packet))
+		sendPacket_(response);
 }
 
 bool RoomManager::AddCommand(const Net::RoomCommand& command)

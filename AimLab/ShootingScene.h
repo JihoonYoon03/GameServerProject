@@ -20,6 +20,7 @@ public:
 	// 세션 제어를 연결하고, 이동·표적·화면 함수는 각 담당 일정에서 구현한다.
 	bool SetNetworkSession(NetworkClient& network, const Net::RoomEnterResult& result);
 	void SendMapLoaded();
+	bool IsPreparing() const;
 	PlayerCommand ReadPlayerInput(const Input& input) const;
 	void UpdatePlayer(const PlayerCommand& command, float deltaTime);
 	void UpdateCamera();
@@ -41,6 +42,10 @@ private:
 	Net::SessionToken sessionToken_{};
 	Net::MembershipId membershipId_ = 0;
 	Net::RoomStateData roomState_{};
+	// 버튼은 마지막으로 보낸 선택을 토글하고 참가자 표시는 서버가 확정한 값을 쓴다.
+	bool requestedReady_ = false;
+	void RequestReadyChange();
+	Hud ShowReadyUI() const;
 	bool mapLoadedSent_ = false;
 	Net::MatchId startedMatchId_ = 0;
 	Net::ServerTimeMs serverTimeMs_ = 0;

@@ -46,7 +46,8 @@ public:
 
 private:
 	bool ApplyRoomResponse(Client& client, const Net::PacketData& packet);
-	void CreateSinglePlayerRoom(Client& client, std::uint32_t requestId);
+	void RequestRoomEntry(Client& client, const Net::TcpHeader& header, Net::RoomId roomId);
+	void RejectRoomEntry(Client& client, std::uint32_t requestId, Net::ErrorCode reason);
 	bool ReceiveTcp(Client& client);
 	void ReceiveUdp();
 	bool NotifyCommand(const Net::RoomCommand& command);

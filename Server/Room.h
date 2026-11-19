@@ -37,10 +37,12 @@ public:
 
 	void AssignPlayerAreas();
 	void SetPlayerLoaded(const Net::SessionToken& player);
+	void SetPlayerReady(const Net::RoomCommand& command, bool ready);
+	bool AreAllPlayersReady() const;
 	void RemovePlayerFromRoom(const Net::SessionToken& player);
 
 	void SendRoomState();
-	void StartGameIfReady();
+	void StartGameIfReady(bool singlePlayerTest = false);
 
 	// 시작, 종료 대기, 종료 확인은 메인 스레드에서만 호출한다.
 	bool StartRoomThread();

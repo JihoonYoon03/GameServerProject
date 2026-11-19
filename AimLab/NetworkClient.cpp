@@ -287,6 +287,9 @@ bool NetworkClient::ProcessTcpPacket(const Net::PacketData& packet)
             return false;
         break;
     }
+    case Net::TcpType::RoomListResult:
+        // 방 목록 본문과 요청 번호는 메인 스레드에서 함께 확인한다.
+        break;
     case Net::TcpType::RoomEnterResult:
     {
         Net::RoomEnterResult result;
@@ -498,6 +501,29 @@ void NetworkClient::NetworkLoop()
     }
 }
 
+bool NetworkClient::RequestGameRoom(Net::RoomId roomId)
+{
+    if (GetCurrentThreadId() != m_ControlThreadId || !IsConnected() || m_PendingRoomRequestId != 0)
+        return false;
+
+    Net::PacketData packet;
+    std::uint32_t requestId = NextRequestId();
+    bool encoded;
+    if (roomId == 0)
+        encoded = Net::PacketCodec::EncodeTcp(Net::CreateRoomRequest{}, requestId, packet);
+    else
+        encoded = Net::PacketCodec::EncodeTcp(Net::JoinRoomRequest{roomId}, requestId, packet);
+    if (!encoded)
+        return false;
+
+    m_PendingRoomRequestId = requestId;
+    if (SendPacket(packet))
+        return true;
+
+    m_PendingRoomRequestId = 0;
+    return false;
+}
+
 void NetworkClient::UpdateNetwork()
 {
     if (GetCurrentThreadId() != m_ControlThreadId)
@@ -510,26 +536,6 @@ void NetworkClient::UpdateNetwork()
     while (!received.empty())
     {
         Net::PacketData& packet = received.front();
-        if (!m_RoomRequested && packet.transport == Net::PacketTransport::Udp)
-        {
-            Net::UdpPacket<Net::UdpRegisterResult> result;
-            if (Net::PacketCodec::DecodeUdp(packet.bytes.data(), packet.bytes.size(), result)
-                && result.packetData.result == Net::ErrorCode::Ok && IsConnected())
-            {
-                // 최초 UDP 등록이 승인된 뒤 기존 방 생성 요청을 한 번만 보낸다.
-                m_RoomRequested = true;
-                Net::PacketData request;
-                std::uint32_t requestId = NextRequestId();
-                // 송신 전에 번호를 공개해 빠른 입장 응답도 같은 요청인지 확인한다.
-                m_PendingRoomRequestId = requestId;
-                if (!Net::PacketCodec::EncodeTcp(Net::CreateRoomRequest{}, requestId, request)
-                    || !SendPacket(request))
-                {
-                    m_PendingRoomRequestId = 0;
-                    m_bStopRequested = true;
-                }
-            }
-        }
         m_ReceivedPackets.push_back(std::move(packet));
         received.pop();
     }
@@ -580,7 +586,6 @@ void NetworkClient::DisconnectServer()
         m_qReceiveQueue.pop();
     LeaveCriticalSection(&m_CSReceiveQueue);
     m_ReceivedPackets.clear();
-    m_RoomRequested = false;
     m_NextRequestId = 1;
     m_PendingRoomRequestId = 0;
     m_TcpReceiveBuffer.clear();

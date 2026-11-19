@@ -238,6 +238,12 @@ namespace Net
             return Serialize(io, value.sessionToken) && Serialize(io, value.stats)
                 && Serialize(io, value.rank) && value.rank <= MaxPlayers;
         }
+        inline bool Serialize(PacketStream& io, RoomInfo& value)
+        {
+            return Serialize(io, value.roomId) && Serialize(io, value.playerCount)
+                && Serialize(io, value.capacity) && Serialize(io, value.state)
+                && value.playerCount <= value.capacity && value.capacity <= MaxPlayers && Valid(value.state);
+        }
         inline bool Serialize(PacketStream& io, PlayerData& value)
         {
             return Serialize(io, value.m_sessionToken)
@@ -312,9 +318,21 @@ namespace Net
             return Serialize(io, value.reason)
                 && Serialize(io, value.context) && Valid(value.reason);
         }
+        inline bool Serialize(PacketStream&, RoomListRequest&)
+        {
+            return true;
+        }
+        inline bool Serialize(PacketStream& io, RoomListResult& value)
+        {
+            return SerializeList(io, value.rooms, MaxRooms);
+        }
         inline bool Serialize(PacketStream&, CreateRoomRequest&)
         {
             return true;
+        }
+        inline bool Serialize(PacketStream& io, JoinRoomRequest& value)
+        {
+            return Serialize(io, value.roomId);
         }
         inline bool Serialize(PacketStream& io, RoomEnterResult& value)
         {
@@ -335,6 +353,10 @@ namespace Net
         inline bool Serialize(PacketStream& io, MapLoaded& value)
         {
             return Serialize(io, value.roomId);
+        }
+        inline bool Serialize(PacketStream& io, ReadyChangeRequest& value)
+        {
+            return Serialize(io, value.roomId) && Serialize(io, value.ready) && value.ready <= 1;
         }
         inline bool Serialize(PacketStream& io, StartGameRequest& value)
         {

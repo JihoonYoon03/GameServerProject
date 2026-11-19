@@ -20,6 +20,7 @@ Client::Client(Client && other) noexcept
     m_bUDPRegistered = other.m_bUDPRegistered;
     m_nRoomId = other.m_nRoomId;
     m_nMembershipId = other.m_nMembershipId;
+    m_pendingEnterRequestId = other.m_pendingEnterRequestId;
     m_vTcpReceiveBuffer = std::move(other.m_vTcpReceiveBuffer);
     m_qPendingSend = std::move(other.m_qPendingSend);
     m_nSendOffset = other.m_nSendOffset;
@@ -43,6 +44,7 @@ Client& Client::operator=(Client && other) noexcept
         m_bUDPRegistered = other.m_bUDPRegistered;
         m_nRoomId = other.m_nRoomId;
         m_nMembershipId = other.m_nMembershipId;
+        m_pendingEnterRequestId = other.m_pendingEnterRequestId;
         m_vTcpReceiveBuffer = std::move(other.m_vTcpReceiveBuffer);
         m_qPendingSend = std::move(other.m_qPendingSend);
         m_nSendOffset = other.m_nSendOffset;
@@ -66,6 +68,7 @@ void Client::Close()
     m_nRoomId = 0;
     m_nMatchId = 0;
     m_nMembershipId = 0;
+    m_pendingEnterRequestId.reset();
     m_LastUdpSequence = 0;
     m_HasUdpSequence = false;
     m_vTcpReceiveBuffer.clear();

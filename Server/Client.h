@@ -1,6 +1,7 @@
 #pragma once
 #include "../Shared/NetworkMessages.h"
 #include <cstddef>
+#include <optional>
 #include <queue>
 #include <vector>
 
@@ -57,6 +58,8 @@ private:
 
     Net::RoomId                 m_nRoomId = 0;
     Net::MembershipId           m_nMembershipId = 0;
+    // 방 스레드가 입장을 승인하거나 거절할 때까지 원래 요청 번호를 보관한다.
+    std::optional<std::uint32_t> m_pendingEnterRequestId;
 
     //현재 참가한 방의 경기 번호
     Net::MatchId                m_nMatchId = 0;

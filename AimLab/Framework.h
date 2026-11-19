@@ -36,6 +36,8 @@ private:
 
 	std::unique_ptr<NetworkClient> network_;
 	bool sceneInitialized_ = false;
+	bool readyPanelActive_ = false;
+	bool centerAimOnMotion_ = false;
 	std::unique_ptr<Scene>				  scene_;
 	Input								  input_;
 	int									  window_ = 0;

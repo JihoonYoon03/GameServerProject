@@ -110,6 +110,9 @@
     <ClCompile Include="Target.cpp">
       <Filter>Engine\Source</Filter>
     </ClCompile>
+    <ClCompile Include="MainScene.cpp">
+      <Filter>Network\Client\Source</Filter>
+    </ClCompile>
     <ClCompile Include="NetworkClient.cpp">
       <Filter>Network\Client\Source</Filter>
     </ClCompile>

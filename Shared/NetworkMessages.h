@@ -36,7 +36,7 @@ namespace Net
         MembershipId membershipId = 0;
         ServerTimeMs receivedAtMs = 0;
         //std::variant를 통해 union처럼 동작함. 방 내부에서 클라이언트가 보내는 요청 타입에 따라 바뀜
-        std::variant<RoomEnterCommand, LeaveRoomRequest, MapLoaded,
+        std::variant<RoomEnterCommand, LeaveRoomRequest, MapLoaded, ReadyChangeRequest,
             PlayerTransform, FireRequest, StartGameRequest, ClientDisconnected> body;
     };
 

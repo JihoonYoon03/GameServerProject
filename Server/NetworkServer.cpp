@@ -162,7 +162,8 @@ bool NetworkServer::ApplyRoomResponse(Client& client, const Net::PacketData& pac
 	case Net::TcpType::RoomEnterResult:
 	{
 		Net::RoomEnterResult result;
-		if (!Net::PacketCodec::ReadMessage(header.type, messageBytes, messageSize, result))
+		if (client.m_pendingEnterRequestId != header.requestId ||
+			!Net::PacketCodec::ReadMessage(header.type, messageBytes, messageSize, result))
 			return false;
 		if (result.result == Net::ErrorCode::Ok)
 		{
@@ -171,6 +172,9 @@ bool NetworkServer::ApplyRoomResponse(Client& client, const Net::PacketData& pac
 				return false;
 			client.SetMatchContext(result.room.version.context, result.membershipId);
 		}
+		else
+			client.SetMatchContext({}, 0);
+		client.m_pendingEnterRequestId.reset();
 		break;
 	}
 	case Net::TcpType::GameStarted:
@@ -416,32 +420,47 @@ void NetworkServer::ReceiveUdp()
 	DispatchPacket(sender, packet);
 }
 
-void NetworkServer::CreateSinglePlayerRoom(Client& client, std::uint32_t requestId)
+void NetworkServer::RejectRoomEntry(Client& client, std::uint32_t requestId, Net::ErrorCode reason)
 {
 	Net::RoomEnterResult result;
+	result.result = reason;
+	Net::PacketData packet;
+	if (Net::PacketCodec::EncodeTcp(result, requestId, packet))
+		client.QueueSend(packet);
+}
+
+void NetworkServer::RequestRoomEntry(Client& client, const Net::TcpHeader& header, Net::RoomId roomId)
+{
+	Net::ErrorCode error;
 	if (client.GetRoomId() != 0)
-		result.result = Net::ErrorCode::AlreadyInRoom;
+		error = Net::ErrorCode::AlreadyInRoom;
 	else if (!client.IsUDPRegistered())
-		result.result = Net::ErrorCode::UdpNotRegistered;
+		error = Net::ErrorCode::UdpNotRegistered;
 	else if (m_pRoomManager == nullptr || client.m_nNextMembershipId == 0)
-		result.result = Net::ErrorCode::ServerFull;
+		error = Net::ErrorCode::ServerFull;
 	else
 	{
 		Net::MembershipId membership = client.m_nNextMembershipId;
-		Net::RoomId roomId = m_pRoomManager->CreateGameRoom(client.GetSessionToken(), membership, true, requestId);
-		if (roomId != 0)
+		if (header.type == Net::TcpType::CreateRoomRequest)
 		{
-			// 응답을 소비하기 전에 서버 메인에서 입장 정보를 예약한다.
+			roomId = m_pRoomManager->CreateGameRoom(client.GetSessionToken(), membership, true, header.requestId);
+			error = roomId != 0 ? Net::ErrorCode::Ok : Net::ErrorCode::ServerFull;
+		}
+		else
+		{
+			bool queued = m_pRoomManager->JoinGameRoom(roomId, client.GetSessionToken(), membership, true, header.requestId);
+			error = queued ? Net::ErrorCode::Ok : Net::ErrorCode::RoomNotFound;
+		}
+		if (error == Net::ErrorCode::Ok)
+		{
+			// 입장 처리 중에도 같은 접속의 중복 입장과 접속 종료를 구분한다.
 			client.SetMatchContext({roomId, 0}, membership);
+			client.m_pendingEnterRequestId = header.requestId;
 			++client.m_nNextMembershipId;
 			return;
 		}
-		result.result = Net::ErrorCode::ServerFull;
 	}
-	Net::SendRequest response;
-	response.recipientToken = client.GetSessionToken();
-	if (Net::PacketCodec::EncodeTcp(result, requestId, response.packet))
-		SendPacket(response);
+	RejectRoomEntry(client, header.requestId, error);
 }
 
 void NetworkServer::DispatchPacket(const Net::SessionToken& verifiedSender, const Net::PacketData& packet)
@@ -479,16 +498,30 @@ void NetworkServer::DispatchPacket(const Net::SessionToken& verifiedSender, cons
 		const std::uint8_t* messageBytes = bytes + Net::TcpHeaderBytes;
 		std::size_t messageSize = size - Net::TcpHeaderBytes;
 		command.requestId = header.requestId;
+		if (header.type == Net::TcpType::RoomListRequest)
+		{
+			Net::RoomListRequest request;
+			if (m_pRoomManager && Net::PacketCodec::ReadMessage(header.type, messageBytes, messageSize, request))
+				m_pRoomManager->SendRoomList(verifiedSender, header.requestId);
+			return;
+		}
 		if (header.type == Net::TcpType::CreateRoomRequest)
 		{
 			Net::CreateRoomRequest request;
 			if (!Net::PacketCodec::ReadMessage(header.type, messageBytes, messageSize, request))
 				return;
 
-			CreateSinglePlayerRoom(*sender, header.requestId);
+			RequestRoomEntry(*sender, header, 0);
 			return;
 		}
-		if (!m_commandSink || command.context.roomId == 0 || command.membershipId == 0)
+		if (header.type == Net::TcpType::JoinRoomRequest)
+		{
+			Net::JoinRoomRequest request;
+			if (Net::PacketCodec::ReadMessage(header.type, messageBytes, messageSize, request))
+				RequestRoomEntry(*sender, header, request.roomId);
+			return;
+		}
+		if (sender->m_pendingEnterRequestId || !m_commandSink || command.context.roomId == 0 || command.membershipId == 0)
 			return;
 
 		switch (header.type)
@@ -515,6 +548,15 @@ void NetworkServer::DispatchPacket(const Net::SessionToken& verifiedSender, cons
 		case Net::TcpType::MapLoaded:
 		{
 			Net::MapLoaded request;
+			if (!Net::PacketCodec::ReadMessage(header.type, messageBytes, messageSize, request) ||
+				request.roomId != command.context.roomId)
+				return;
+			command.body = request;
+			break;
+		}
+		case Net::TcpType::ReadyChangeRequest:
+		{
+			Net::ReadyChangeRequest request;
 			if (!Net::PacketCodec::ReadMessage(header.type, messageBytes, messageSize, request) ||
 				request.roomId != command.context.roomId)
 				return;
@@ -647,9 +689,19 @@ void NetworkServer::NetworkLoop(const std::function<bool()>& shouldStop)
 			if (m_pRoomManager != nullptr && client.GetRoomId() != 0
 				&& !m_pRoomManager->HasRoom(client.GetRoomId()))
 			{
-				const Net::SessionToken token = client.GetSessionToken();
-				OnClientDisconnected(token);
-				continue;
+				if (client.m_pendingEnterRequestId)
+				{
+					// 마지막 참가자가 먼저 나가 방이 닫혔으면 로비에서 다시 선택할 수 있다.
+					RejectRoomEntry(client, *client.m_pendingEnterRequestId, Net::ErrorCode::RoomNotFound);
+					client.m_pendingEnterRequestId.reset();
+					client.SetMatchContext({}, 0);
+				}
+				else
+				{
+					const Net::SessionToken token = client.GetSessionToken();
+					OnClientDisconnected(token);
+					continue;
+				}
 			}
 			if (!ReceiveTcp(client))
 			{

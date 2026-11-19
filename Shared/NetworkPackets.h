@@ -18,11 +18,15 @@ namespace Net
 	{
 		ConnectResult = 0x0001,
 		RequestRejected = 0x0002,
+		RoomListRequest = 0x0101,
+		RoomListResult = 0x0102,
 		CreateRoomRequest = 0x0110,
+		JoinRoomRequest = 0x0111,
 		RoomEnterResult = 0x0112,
 		LeaveRoomRequest = 0x0113,
 		LeaveRoomResult = 0x0114,
 		MapLoaded = 0x0201,
+		ReadyChangeRequest = 0x0202,
 		RoomState = 0x0203,
 		StartGameRequest = 0x0204,
 		GameStarted = 0x0301,
@@ -82,7 +86,16 @@ namespace Net
 		MatchContext context;
 	};
 
+	struct RoomListRequest
+	{
+		static constexpr TcpType type = TcpType::RoomListRequest;
+	};
 
+	struct RoomListResult
+	{
+		static constexpr TcpType type = TcpType::RoomListResult;
+		std::vector<RoomInfo> rooms;
+	};
 
 	// 사용: 클라 MainScene::RequestGameRoom() → 서버 RoomManager::CreateGameRoom() [선언]
 	struct CreateRoomRequest
@@ -90,6 +103,11 @@ namespace Net
 		static constexpr TcpType type = TcpType::CreateRoomRequest;
 	};
 
+	struct JoinRoomRequest
+	{
+		static constexpr TcpType type = TcpType::JoinRoomRequest;
+		RoomId roomId = 0;
+	};
 
 	// 사용: 서버 RoomManager::CreateGameRoom(), RoomManager::JoinGameRoom() → 클라 MainScene::JoinRoom() [선언]
 	struct RoomEnterResult
@@ -120,6 +138,13 @@ namespace Net
 	{
 		static constexpr TcpType type = TcpType::MapLoaded;
 		RoomId roomId = 0;
+	};
+
+	struct ReadyChangeRequest
+	{
+		static constexpr TcpType type = TcpType::ReadyChangeRequest;
+		RoomId roomId = 0;
+		std::uint8_t ready = 0;
 	};
 
 	struct StartGameRequest

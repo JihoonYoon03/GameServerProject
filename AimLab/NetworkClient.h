@@ -26,6 +26,8 @@ public:
     void CompleteConnection(const Net::UdpRegisterResult& result);
     bool StartNetwork();
     void NetworkLoop();
+    // 방 번호 0은 새 방 생성, 나머지는 해당 방 입장 요청이다.
+    bool RequestGameRoom(Net::RoomId roomId);
     bool SendPacket(const Net::PacketData& packet);
     // 메인 스레드에서 검증된 수신 큐를 이번 프레임의 묶음으로 옮긴다.
     void UpdateNetwork();
@@ -69,8 +71,6 @@ private:
     std::queue<Net::PacketData> m_qSendQueue;
     std::queue<Net::PacketData> m_qReceiveQueue;
     std::vector<Net::PacketData> m_ReceivedPackets;
-    // 방 자동 생성 여부와 다음 요청 번호는 메인 스레드만 바꾼다.
-    bool m_RoomRequested = false;
     std::uint32_t m_NextRequestId = 1;
     // 입장 응답을 대조할 요청 번호는 메인과 통신 스레드가 공유한다.
     std::atomic<std::uint32_t> m_PendingRoomRequestId{0};

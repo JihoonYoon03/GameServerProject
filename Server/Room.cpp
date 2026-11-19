@@ -16,7 +16,6 @@ Room::Room(Net::RoomId roomId, PacketSender sender)
 	: Room()
 {
 	m_state.version.context.roomId = roomId;
-	m_state.capacity = 1;
 	m_SendPacket = std::move(sender);
 }
 
@@ -94,7 +93,9 @@ void Room::EnterPlayer(const Net::RoomCommand& command, const Net::RoomEnterComm
 		result.result = Net::ErrorCode::UdpNotRegistered;
 	else if (!Net::IsValidSessionToken(command.sessionToken) || command.membershipId == 0)
 		result.result = Net::ErrorCode::InvalidSession;
-	else if (!m_vPlayers.empty())
+	else if (m_state.state != Net::GameState::Preparing)
+		result.result = Net::ErrorCode::RoomPlaying;
+	else if (m_vPlayers.size() >= m_state.capacity)
 		result.result = Net::ErrorCode::RoomFull;
 	else
 	{
@@ -104,16 +105,17 @@ void Room::EnterPlayer(const Net::RoomCommand& command, const Net::RoomEnterComm
 		targetRecipients_.push_back({command.sessionToken, command.membershipId});
 		AssignPlayerAreas();
 		++m_state.version.revision;
-		m_state.vPlayers = {m_vPlayers[0].m_PlayerData};
+		m_state.vPlayers.push_back(m_vPlayers.back().m_PlayerData);
 		result.membershipId = command.membershipId;
 		result.room = m_state;
-		PublishStateEvent(Net::RoomManagementEventType::SummaryChanged);
 	}
 	Net::SendRequest response;
 	response.recipientToken = command.sessionToken;
 	if (m_SendPacket && Net::PacketCodec::EncodeTcp(result, command.requestId, response.packet))
 		m_SendPacket(response);
-	if (m_vPlayers.empty())
+	if (result.result == Net::ErrorCode::Ok)
+		SendRoomState();
+	else if (m_vPlayers.empty())
 	{
 		PublishStateEvent(Net::RoomManagementEventType::RoomEmpty);
 		RequestStop();
@@ -164,7 +166,10 @@ void Room::RemovePlayerFromRoom(const Net::SessionToken& token)
 			RequestStop();
 		}
 		else
+		{
 			SendRoomState();
+			StartGameIfReady();
+		}
 		return;
 	}
 }
@@ -190,10 +195,60 @@ void Room::SetPlayerLoaded(const Net::SessionToken& token)
 	}
 }
 
-void Room::StartGameIfReady()
+void Room::SetPlayerReady(const Net::RoomCommand& command, bool ready)
 {
-	if (m_state.capacity != 1 || m_state.state != Net::GameState::Preparing
-		|| m_vPlayers.size() != 1 || m_vPlayers[0].m_PlayerData.mapLoaded == 0)
+	for (ClientPlayer& player : m_vPlayers)
+	{
+		Net::PlayerData& data = player.m_PlayerData;
+		if (data.m_sessionToken != command.sessionToken)
+			continue;
+		if (m_state.state != Net::GameState::Preparing || data.mapLoaded == 0)
+		{
+			Net::RequestRejected rejected;
+			rejected.reason = m_state.state != Net::GameState::Preparing
+				? Net::ErrorCode::RoomPlaying : Net::ErrorCode::MapNotLoaded;
+			rejected.context = m_state.version.context;
+			Net::SendRequest response;
+			response.recipientToken = command.sessionToken;
+			if (m_SendPacket && Net::PacketCodec::EncodeTcp(rejected, command.requestId, response.packet))
+				m_SendPacket(response);
+			return;
+		}
+
+		Net::ReadyState next = ready ? Net::ReadyState::Ready : Net::ReadyState::Waiting;
+		if (data.ready == next)
+			return;
+		data.ready = next;
+		++m_state.version.revision;
+		SendRoomState();
+		StartGameIfReady();
+		return;
+	}
+}
+
+bool Room::AreAllPlayersReady() const
+{
+	if (m_vPlayers.size() < Net::MinPlayersToStart || m_vPlayers.size() > Net::MaxPlayers)
+		return false;
+	for (const ClientPlayer& player : m_vPlayers)
+	{
+		const Net::PlayerData& data = player.m_PlayerData;
+		if (data.mapLoaded == 0 || data.ready != Net::ReadyState::Ready)
+			return false;
+	}
+	return true;
+}
+
+void Room::StartGameIfReady(bool singlePlayerTest)
+{
+	if (m_state.state != Net::GameState::Preparing)
+		return;
+	if (singlePlayerTest)
+	{
+		if (m_vPlayers.size() != 1 || m_vPlayers.front().m_PlayerData.mapLoaded == 0)
+			return;
+	}
+	else if (!AreAllPlayersReady())
 		return;
 
 	Net::ServerTimeMs nowMs = GetTickCount64();
@@ -202,10 +257,14 @@ void Room::StartGameIfReady()
 	++m_state.version.context.matchId;
 	++m_state.version.revision;
 	m_state.state = Net::GameState::Playing;
-	m_vPlayers[0].m_PlayerData.ready = Net::ReadyState::Playing;
-	m_vPlayers[0].m_PlayerData.stats = {};
-	m_vPlayers[0].m_nLastShotId = 0;
-	m_state.vPlayers = {m_vPlayers[0].m_PlayerData};
+	m_state.vPlayers.clear();
+	for (ClientPlayer& player : m_vPlayers)
+	{
+		player.m_PlayerData.ready = Net::ReadyState::Playing;
+		player.m_PlayerData.stats = {};
+		player.m_nLastShotId = 0;
+		m_state.vPlayers.push_back(player.m_PlayerData);
+	}
 
 	Net::GameStarted event;
 	event.version = m_state.version;
@@ -214,10 +273,12 @@ void Room::StartGameIfReady()
 	event.endsAtMs = nowMs + m_state.rules.durationMs;
 	event.rules = m_state.rules;
 	event.players = m_state.vPlayers;
-	Net::SendRequest response;
-	response.recipientToken = m_vPlayers[0].m_PlayerData.m_sessionToken;
-	if (m_SendPacket && Net::PacketCodec::EncodeTcp(event, 0, response.packet))
-		m_SendPacket(response);
+	Net::PacketData packet;
+	if (m_SendPacket && Net::PacketCodec::EncodeTcp(event, 0, packet))
+	{
+		for (const Net::PlayerData& player : m_state.vPlayers)
+			m_SendPacket(Net::SendRequest{player.m_sessionToken, packet});
+	}
 	PublishStateEvent(Net::RoomManagementEventType::SummaryChanged);
 }
 
@@ -378,8 +439,8 @@ void Room::ProcessCommand(const Net::RoomCommand& command)
 	const Net::RoomEnterCommand* enter = std::get_if<Net::RoomEnterCommand>(&command.body);
 	if (enter)
 	{
-		if (command.context.matchId == context.matchId)
-			EnterPlayer(command, *enter);
+		// 대기 중 보낸 요청이라도 처리할 때 경기가 시작됐으면 입장 거절을 돌려준다.
+		EnterPlayer(command, *enter);
 		return;
 	}
 
@@ -424,11 +485,18 @@ void Room::ProcessCommand(const Net::RoomCommand& command)
 			SetPlayerLoaded(command.sessionToken);
 		return;
 	}
+	const Net::ReadyChangeRequest* ready = std::get_if<Net::ReadyChangeRequest>(&command.body);
+	if (ready)
+	{
+		if (ready->roomId == context.roomId)
+			SetPlayerReady(command, ready->ready != 0);
+		return;
+	}
 	const Net::StartGameRequest* start = std::get_if<Net::StartGameRequest>(&command.body);
 	if (start)
 	{
 		if (start->roomId == context.roomId)
-			StartGameIfReady();
+			StartGameIfReady(true);
 		return;
 	}
 	const Net::FireRequest* shot = std::get_if<Net::FireRequest>(&command.body);

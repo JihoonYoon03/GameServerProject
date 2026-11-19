@@ -23,6 +23,7 @@ public:
 		pressed_.fill(false);
 		mouseDelta = glm::vec2(0.0f);
 		firePressed = false;
+		readyClicked = false;
 	}
 
 	void Reset()
@@ -33,6 +34,7 @@ public:
 
 	glm::vec2 mouseDelta{0.0f};
 	bool	  firePressed = false;
+	bool	  readyClicked = false;
 
 private:
 	std::array<bool, 256> keys_{};

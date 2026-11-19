@@ -137,7 +137,9 @@ void ShootingScene::Update(float deltaTime, const Input& input)
 
 	if (network_ != nullptr)
 	{
-		if (input.WasPressed('1') && roomState_.state == Net::GameState::Preparing
+		if (IsPreparing() && (input.readyClicked || input.WasPressed(' ')))
+			RequestReadyChange();
+		if (input.WasPressed('1') && roomState_.state == Net::GameState::Preparing && roomState_.vPlayers.size() == 1
 			&& mapLoadedSent_ && network_->IsConnected())
 		{
 			Net::StartGameRequest request{roomState_.version.context.roomId};
@@ -303,8 +305,63 @@ void ShootingScene::Shoot()
 	}
 }
 
+bool ShootingScene::IsPreparing() const
+{
+	return network_ && roomState_.state == Net::GameState::Preparing;
+}
+
+void ShootingScene::RequestReadyChange()
+{
+	for (const Net::PlayerData& player : roomState_.vPlayers)
+	{
+		if (player.m_sessionToken != sessionToken_)
+			continue;
+		if (!player.mapLoaded || !mapLoadedSent_ || !network_->IsConnected())
+			return;
+
+		Net::ReadyChangeRequest request;
+		request.roomId = roomState_.version.context.roomId;
+		request.ready = requestedReady_ ? 0 : 1;
+		Net::PacketData packet;
+		if (!Net::PacketCodec::EncodeTcp(request, network_->NextRequestId(), packet) || !network_->SendPacket(packet))
+			throw std::runtime_error("준비 상태 변경 요청을 보내지 못했습니다.");
+		requestedReady_ = request.ready != 0;
+		return;
+	}
+}
+
+Hud ShootingScene::ShowReadyUI() const
+{
+	Hud hud;
+	hud.crosshair = false;
+	hud.lines.push_back("Room " + std::to_string(roomState_.version.context.roomId) + "    "
+		+ std::to_string(roomState_.vPlayers.size()) + "/" + std::to_string(roomState_.capacity));
+	hud.readyButton = "Loading...";
+	for (const Net::PlayerData& player : roomState_.vPlayers)
+	{
+		bool isLocal = player.m_sessionToken == sessionToken_;
+		std::string label = "Area " + std::to_string(player.areaId + 1);
+		if (isLocal)
+			label += " (you)";
+		if (!player.mapLoaded)
+			label += " - Loading";
+		else if (player.ready == Net::ReadyState::Ready)
+			label += " - Ready";
+		else
+			label += " - Waiting";
+		hud.lines.push_back(label);
+		if (isLocal && player.mapLoaded)
+			hud.readyButton = requestedReady_ ? "Cancel ready [Space]" : "Ready [Space]";
+	}
+	hud.message = roomState_.vPlayers.size() == 1 ? "Solo test: press 1" : "Starts when everyone is ready";
+	return hud;
+}
+
 Hud ShootingScene::GetHud() const
 {
+	if (IsPreparing())
+		return ShowReadyUI();
+
 	std::ostringstream sensitivity;
 	sensitivity.precision(2);
 	sensitivity << std::fixed << "  sens H: " << player_->m_fHorizontalSensitivity
@@ -315,9 +372,7 @@ Hud ShootingScene::GetHud() const
 	{
 		hud.lines = {"point: " + std::to_string(networkStats_.score),
 			"shots: " + std::to_string(networkStats_.shotsFired) + sensitivityLabel};
-		if (roomState_.state == Net::GameState::Preparing)
-			hud.message = "Press 1 to start";
-		else if (roomState_.state == Net::GameState::Results)
+		if (roomState_.state == Net::GameState::Results)
 		{
 			hud.lines.push_back("timer: 0");
 			if (finalRank_ != 0)
@@ -378,6 +433,7 @@ bool ShootingScene::SetNetworkSession(NetworkClient& network, const Net::RoomEnt
 	sessionToken_ = token;
 	membershipId_ = result.membershipId;
 	roomState_ = result.room;
+	requestedReady_ = false;
 	mapLoadedSent_ = false;
 	startedMatchId_ = 0;
 	serverTimeMs_ = startsAtMs_ = endsAtMs_ = 0;
@@ -413,7 +469,6 @@ void ShootingScene::OnRoomStateChanged(const Net::RoomStateData& state)
 	roomState_ = state;
 	if (state.state == Net::GameState::Results)
 		ApplyTargetSnapshot({});
-	// 다인 참가자·구역 표시는 후속 방 확장 일정에서 연결한다.
 }
 
 void ShootingScene::OnGameStarted(const Net::GameStarted& event)
@@ -458,7 +513,8 @@ void ShootingScene::OnGameStarted(const Net::GameStarted& event)
 	startsAtMs_ = event.startsAtMs;
 	endsAtMs_ = event.endsAtMs;
 	matchTimeReceivedAtMs_ = GetTickCount64();
-	std::cout << "서버의 1인 경기 시작 응답을 반영했습니다.\n";
+	std::cout << "Room " << current.roomId << " match " << matchId << " started ("
+		<< event.players.size() << " players)." << std::endl;
 }
 
 void ShootingScene::ApplyTargetPositions(const Net::UdpHeader& header, const Net::TargetSnapshot& snapshot)

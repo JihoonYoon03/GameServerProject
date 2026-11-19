@@ -7,7 +7,7 @@
 namespace
 {
 	constexpr float TargetAreaHalfSize = ShootingRange::TargetHalfSize;
-	constexpr float TargetScale = 0.15f;
+	constexpr float TargetScale = 0.3f;
 }
 
 Object* ShootingScene::AddProp(const std::string& name, const std::shared_ptr<Mesh>& mesh, const std::shared_ptr<Material>& material, const glm::vec3& position, const glm::vec3& scale, bool solid)

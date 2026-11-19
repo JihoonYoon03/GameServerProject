@@ -6,7 +6,9 @@ Target::Target(std::shared_ptr<Mesh> mesh, std::shared_ptr<Material> material)
 {
 	static std::mt19937 random{std::random_device{}()};
 	std::uniform_int_distribution<int> horizontal(-1, 1);
-	moveDirection_ = glm::normalize(glm::vec3(static_cast<float>(horizontal(random)), 1.0f, 0.0f));
+	float directionX = static_cast<float>(horizontal(random));
+	float directionZ = static_cast<float>(horizontal(random));
+	moveDirection_ = glm::normalize(glm::vec3(directionX, 1.0f, directionZ));
 }
 
 void Target::Update(float deltaTime)

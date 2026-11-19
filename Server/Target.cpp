@@ -9,7 +9,7 @@
 namespace
 {
 	constexpr float TargetLifetimeSeconds = Net::TargetLifetimeMs / 1000.0f;
-	constexpr float TargetRadius = 0.15f;
+	constexpr float TargetRadius = 0.3f;
 }
 
 void Target::SpawnTargets(const Net::MatchRules& rules, Net::ServerTimeMs nowMs)
@@ -20,11 +20,12 @@ void Target::SpawnTargets(const Net::MatchRules& rules, Net::ServerTimeMs nowMs)
 	std::uniform_real_distribution<float> z(-5.0f, -0.5f);
 	std::uniform_int_distribution<int> horizontal(-1, 1);
 	float directionX = static_cast<float>(horizontal(random_));
-	float inverseLength = 1.0f / std::sqrt(directionX * directionX + 1.0f);
+	float directionZ = static_cast<float>(horizontal(random_));
+	float inverseLength = 1.0f / std::sqrt(directionX * directionX + 1.0f + directionZ * directionZ);
 
 	Net::TargetMotionData motion;
 	motion.position = {x(random_), y(random_), z(random_)};
-	motion.velocity = {directionX * inverseLength, inverseLength, 0.0f};
+	motion.velocity = {directionX * inverseLength, inverseLength, directionZ * inverseLength};
 	targets_.push_back({nextTargetId_++, motion, nowMs});
 }
 

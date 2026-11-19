@@ -5,8 +5,8 @@
 
 void Player::ApplyCommand(const PlayerCommand& command, float deltaTime, const Scene& scene)
 {
-	m_fYaw = std::fmod(m_fYaw - command.lookDelta.x * m_fSensitivity, 360.0f);
-	m_fPitch = std::clamp(m_fPitch - command.lookDelta.y * m_fSensitivity, -89.0f, 89.0f);
+	m_fYaw = std::fmod(m_fYaw - command.lookDelta.x * m_fHorizontalSensitivity, 360.0f);
+	m_fPitch = std::clamp(m_fPitch - command.lookDelta.y * m_fVerticalSensitivity, -89.0f, 89.0f);
 	glm::vec2 movement = command.movement;
 
 	if (glm::length(movement) > 1.0f)

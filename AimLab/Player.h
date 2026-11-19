@@ -31,7 +31,8 @@ public:
 	float	m_fPitch = 0.0f;
 
 	float	m_fMoveSpeed = Net::PlayerMoveSpeed;
-	float	m_fSensitivity = 0.2f;
+	float	m_fHorizontalSensitivity = 0.2f;
+	float	m_fVerticalSensitivity = 0.2f;
 
 	// 화면 객체 ID와 네트워크 세션 토큰은 서로 다른 식별자이다.
 	Net::SessionToken m_SessionToken{};

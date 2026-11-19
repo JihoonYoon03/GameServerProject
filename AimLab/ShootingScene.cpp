@@ -130,8 +130,10 @@ void ShootingScene::Initialize()
 
 void ShootingScene::Update(float deltaTime, const Input& input)
 {
-	float sensitivityChange = static_cast<float>(input.WasPressed(']')) - static_cast<float>(input.WasPressed('['));
-	player_->m_fSensitivity = std::clamp(player_->m_fSensitivity + sensitivityChange * 0.02f, 0.02f, 2.0f);
+	float horizontalChange = static_cast<float>(input.WasPressed(']')) - static_cast<float>(input.WasPressed('['));
+	float verticalChange = static_cast<float>(input.WasPressed('=')) - static_cast<float>(input.WasPressed('-'));
+	player_->m_fHorizontalSensitivity = std::clamp(player_->m_fHorizontalSensitivity + horizontalChange * 0.02f, 0.02f, 2.0f);
+	player_->m_fVerticalSensitivity = std::clamp(player_->m_fVerticalSensitivity + verticalChange * 0.02f, 0.02f, 2.0f);
 
 	if (network_ != nullptr)
 	{
@@ -305,8 +307,9 @@ Hud ShootingScene::GetHud() const
 {
 	std::ostringstream sensitivity;
 	sensitivity.precision(2);
-	sensitivity << std::fixed << player_->m_fSensitivity;
-	std::string sensitivityLabel = "  sensitivity: " + sensitivity.str() + " ([ / ])";
+	sensitivity << std::fixed << "  sens H: " << player_->m_fHorizontalSensitivity
+		<< " V: " << player_->m_fVerticalSensitivity;
+	std::string sensitivityLabel = sensitivity.str();
 	Hud hud;
 	if (network_ != nullptr)
 	{

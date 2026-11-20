@@ -11,6 +11,7 @@ public:
 
 	void Update(float deltaTime) override;
 
+	void ResetGame();
 	bool Fire();
 	bool TryFire();
 	void StartReload();

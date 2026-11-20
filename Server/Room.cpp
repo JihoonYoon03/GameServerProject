@@ -202,11 +202,12 @@ void Room::SetPlayerReady(const Net::RoomCommand& command, bool ready)
 		Net::PlayerData& data = player.m_PlayerData;
 		if (data.m_sessionToken != command.sessionToken)
 			continue;
-		if (m_state.state != Net::GameState::Preparing || data.mapLoaded == 0)
+		if ((m_state.state != Net::GameState::Preparing && m_state.state != Net::GameState::Results)
+			|| data.mapLoaded == 0)
 		{
 			Net::RequestRejected rejected;
-			rejected.reason = m_state.state != Net::GameState::Preparing
-				? Net::ErrorCode::RoomPlaying : Net::ErrorCode::MapNotLoaded;
+			rejected.reason = data.mapLoaded == 0
+				? Net::ErrorCode::MapNotLoaded : Net::ErrorCode::RoomPlaying;
 			rejected.context = m_state.version.context;
 			Net::SendRequest response;
 			response.recipientToken = command.sessionToken;
@@ -228,7 +229,9 @@ void Room::SetPlayerReady(const Net::RoomCommand& command, bool ready)
 
 bool Room::AreAllPlayersReady() const
 {
-	if (m_vPlayers.size() < Net::MinPlayersToStart || m_vPlayers.size() > Net::MaxPlayers)
+	// 결과 화면에서는 현재 방에 남아 있는 참가자가 모두 준비하면 재시작한다.
+	std::size_t minimumPlayers = m_state.state == Net::GameState::Results ? 1 : Net::MinPlayersToStart;
+	if (m_vPlayers.size() < minimumPlayers || m_vPlayers.size() > Net::MaxPlayers)
 		return false;
 	for (const ClientPlayer& player : m_vPlayers)
 	{
@@ -241,9 +244,9 @@ bool Room::AreAllPlayersReady() const
 
 void Room::StartGameIfReady(bool singlePlayerTest)
 {
-	if (m_state.state != Net::GameState::Preparing)
+	if (m_state.state != Net::GameState::Preparing && m_state.state != Net::GameState::Results)
 		return;
-	if (singlePlayerTest)
+	if (singlePlayerTest && m_state.state == Net::GameState::Preparing)
 	{
 		if (m_vPlayers.size() != 1 || m_vPlayers.front().m_PlayerData.mapLoaded == 0)
 			return;
@@ -263,6 +266,10 @@ void Room::StartGameIfReady(bool singlePlayerTest)
 		player.m_PlayerData.ready = Net::ReadyState::Playing;
 		player.m_PlayerData.stats = {};
 		player.m_nLastShotId = 0;
+		// 클라이언트도 새 경기에서 입력 순번을 0부터 시작한다.
+		player.m_nLastProcessedInput = 0;
+		player.m_nLastMovementTimeMs = 0;
+		player.m_bHasProcessedInput = false;
 		m_state.vPlayers.push_back(player.m_PlayerData);
 	}
 
@@ -523,6 +530,8 @@ void Room::Tick()
 		if (state != m_state.state)
 		{
 			m_state.state = state;
+			for (ClientPlayer& player : m_vPlayers)
+				player.m_PlayerData.ready = Net::ReadyState::Waiting;
 			++m_state.version.revision;
 			SendRoomState();
 			SendGameResults();
@@ -563,13 +572,7 @@ void Room::SendGameResults()
 	Net::GameResults result;
 	result.room = m_state;
 	result.endedAtMs = stageController_.GetEndsAtMs();
-	for (const Net::PlayerData& player : result.room.vPlayers)
-	{
-		Net::PlayerResult entry{player.m_sessionToken, player.stats};
-		if (result.room.vPlayers.size() == 1)
-			entry.rank = 1;
-		result.players.push_back(entry);
-	}
+	result.players = stageController_.JudgeWhoWins(result.room.vPlayers);
 
 	Net::PacketData packet;
 	if (!Net::PacketCodec::EncodeTcp(result, 0, packet)) return;
@@ -631,7 +634,7 @@ Net::ShotResolved Room::JudgeShoot(ClientPlayer& player, const Net::FireRequest&
 	++player.m_PlayerData.stats.shotsFired;
 
 	if (result.outcome == Net::ShotOutcome::HitTarget)
-		player.m_PlayerData.stats.score += m_state.rules.pointsPerHit;
+		++player.m_PlayerData.stats.score;
 
 	++m_state.version.revision;
 	result.version = m_state.version;

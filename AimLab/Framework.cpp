@@ -490,6 +490,21 @@ void Framework::DrawOverlay()
 
 	if (!hud.readyButton.empty())
 		DrawReadyPanel(hud);
+	else if (hud.showResults)
+	{
+		glColor3f(0.10f, 0.13f, 0.17f);
+		glRectf(-0.94f, -0.65f, 0.94f, 0.80f);
+		glLineWidth(1.7f);
+		glColor3f(0.94f, 0.96f, 0.98f);
+		DrawText(hud.message, -0.84f, 0.60f, 0.00065f);
+		float y = 0.35f;
+		for (const std::string& line : hud.lines)
+		{
+			float scale = std::min(0.00055f, 1.68f / std::max(1.0f, ReadyTextWidth(line)));
+			DrawText(line, -0.84f, y, scale);
+			y -= 0.18f;
+		}
+	}
 	else
 	{
 		if (hud.crosshair)

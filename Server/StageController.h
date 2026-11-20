@@ -9,6 +9,8 @@ public:
 	void StartGame(const Net::MatchRules& rules, Target& targets, Net::ServerTimeMs nowMs);
 	Net::GameState UpdateMatch(const Net::MatchRules& rules, Target& targets, Net::ServerTimeMs nowMs);
 
+	std::vector<Net::PlayerResult> JudgeWhoWins(const std::vector<Net::PlayerData>& players) const;
+
 	Net::ServerTimeMs GetEndsAtMs() const { return endsAtMs_; }
 
 private:

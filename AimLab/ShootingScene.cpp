@@ -139,6 +139,9 @@ void ShootingScene::Update(float deltaTime, const Input& input)
 	{
 		if (IsPreparing() && (input.readyClicked || input.WasPressed(' ')))
 			RequestReadyChange();
+		if (roomState_.state == Net::GameState::Results && !requestedReady_
+			&& (input.WasPressed('r') || input.WasPressed('R')))
+			RequestReadyChange();
 		if (input.WasPressed('1') && roomState_.state == Net::GameState::Preparing && roomState_.vPlayers.size() == 1
 			&& mapLoadedSent_ && network_->IsConnected())
 		{
@@ -362,6 +365,36 @@ Hud ShootingScene::GetHud() const
 	if (IsPreparing())
 		return ShowReadyUI();
 
+	if (network_ != nullptr && roomState_.state == Net::GameState::Results)
+	{
+		Hud hud;
+		hud.crosshair = false;
+		hud.showResults = true;
+		hud.message = "Match results (hits - shots / 2)";
+		for (const Net::PlayerResult& player : finalResults_)
+		{
+			std::string marker = player.sessionToken == sessionToken_ ? "-> " : "   ";
+			double score = static_cast<double>(player.stats.score) - player.stats.shotsFired / 2.0;
+			std::ostringstream total;
+			total.precision(1);
+			total << std::fixed << score;
+			hud.lines.push_back(marker + std::to_string(player.rank)
+				+ ". hits: " + std::to_string(player.stats.score)
+				+ " | shots: " + std::to_string(player.stats.shotsFired)
+				+ " | total: " + total.str());
+		}
+		if (finalResults_.empty())
+			hud.lines.push_back("Waiting for results...");
+		std::size_t readyCount = 0;
+		for (const Net::PlayerData& player : roomState_.vPlayers)
+			if (player.ready == Net::ReadyState::Ready)
+				++readyCount;
+		std::string readyStatus = std::to_string(readyCount) + "/" + std::to_string(roomState_.vPlayers.size());
+		hud.lines.push_back(requestedReady_ ? "Ready requested. Waiting for everyone (" + readyStatus + ")"
+			: "Press R to ready for next match (" + readyStatus + ")");
+		return hud;
+	}
+
 	std::ostringstream sensitivity;
 	sensitivity.precision(2);
 	sensitivity << std::fixed << "  sens H: " << player_->m_fHorizontalSensitivity
@@ -370,16 +403,9 @@ Hud ShootingScene::GetHud() const
 	Hud hud;
 	if (network_ != nullptr)
 	{
-		hud.lines = {"point: " + std::to_string(networkStats_.score),
+		hud.lines = {"hits: " + std::to_string(networkStats_.score),
 			"shots: " + std::to_string(networkStats_.shotsFired) + sensitivityLabel};
-		if (roomState_.state == Net::GameState::Results)
-		{
-			hud.lines.push_back("timer: 0");
-			if (finalRank_ != 0)
-				hud.lines.push_back("rank: " + std::to_string(finalRank_));
-			hud.message = "Match finished";
-		}
-		else if (lastResolvedShotId_ != 0)
+		if (lastResolvedShotId_ != 0)
 			hud.message = lastShotOutcome_ == Net::ShotOutcome::HitTarget ? "Hit"
 				: (lastShotOutcome_ == Net::ShotOutcome::BlockedByWorld ? "Blocked" : "Miss");
 		if (roomState_.state == Net::GameState::Playing)
@@ -437,6 +463,7 @@ bool ShootingScene::SetNetworkSession(NetworkClient& network, const Net::RoomEnt
 	mapLoadedSent_ = false;
 	startedMatchId_ = 0;
 	serverTimeMs_ = startsAtMs_ = endsAtMs_ = 0;
+	finalResults_.clear();
 	return true;
 }
 
@@ -488,6 +515,8 @@ void ShootingScene::OnGameStarted(const Net::GameStarted& event)
 	roomState_.rules = event.rules;
 	roomState_.vPlayers = event.players;
 	startedMatchId_ = matchId;
+	requestedReady_ = false;
+	gun_->ResetGame();
 	//경기가 바뀌면 이전 경기의 이동 순번과 보정 기준을 같이 초기화.
 	inputSequence_ = lastAppliedInput_ = 0;
 	sentPositions_ = {};
@@ -499,7 +528,7 @@ void ShootingScene::OnGameStarted(const Net::GameStarted& event)
 	hasShot_ = false;
 	ClearTargets();
 	ApplyTargetSnapshot({});
-	finalRank_ = 0;
+	finalResults_.clear();
 	for (const Net::PlayerData& entry : event.players)
 		if (entry.m_sessionToken == sessionToken_)
 		{
@@ -580,12 +609,12 @@ void ShootingScene::RecvGameResults(const Net::GameResults& result)
 
 	OnRoomStateChanged(result.room);
 	endsAtMs_ = result.endedAtMs;
-	for (const Net::PlayerResult& player : result.players)
+	finalResults_ = result.players;
+	for (const Net::PlayerResult& player : finalResults_)
 	{
 		if (player.sessionToken == sessionToken_)
 		{
 			networkStats_ = player.stats;
-			finalRank_ = player.rank;
 			break;
 		}
 	}

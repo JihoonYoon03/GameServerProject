@@ -1,6 +1,7 @@
 ﻿#include "pch.h"
 #include "StageController.h"
 #include "Target.h"
+#include <algorithm>
 
 namespace
 {
@@ -43,4 +44,33 @@ Net::GameState StageController::UpdateMatch(const Net::MatchRules& rules, Target
 	}
 
 	return state_;
+}
+
+std::vector<Net::PlayerResult> StageController::JudgeWhoWins(const std::vector<Net::PlayerData>& players) const
+{
+	std::vector<Net::PlayerResult> results;
+	results.reserve(players.size());
+	for (const Net::PlayerData& player : players)
+		results.push_back({player.m_sessionToken, player.stats});
+
+	// 사격 횟수가 홀수이면 0.5점 단위까지 반영한다.
+	std::stable_sort(results.begin(), results.end(), [](const Net::PlayerResult& left, const Net::PlayerResult& right)
+	{
+		double leftScore = static_cast<double>(left.stats.score) - left.stats.shotsFired / 2.0;
+		double rightScore = static_cast<double>(right.stats.score) - right.stats.shotsFired / 2.0;
+		return leftScore > rightScore;
+	});
+
+	// 동점자는 공동 순위를 부여한다. 예를 들어 1, 1, 3위로 표시한다.
+	double previousScore = 0.0;
+	std::uint8_t rank = 0;
+	for (std::size_t index = 0; index < results.size(); ++index)
+	{
+		double score = static_cast<double>(results[index].stats.score) - results[index].stats.shotsFired / 2.0;
+		if (index == 0 || score != previousScore)
+			rank = static_cast<std::uint8_t>(index + 1);
+		results[index].rank = rank;
+		previousScore = score;
+	}
+	return results;
 }

@@ -49,6 +49,18 @@ void Gun::Update(float deltaTime)
 	}
 }
 
+void Gun::ResetGame()
+{
+	// 이전 경기의 탄약, 재장전, 발사 대기 시간과 반동을 초기화한다.
+	m_fFireCooldown = 0.0f;
+	m_fReloadRemainingTime = 0.0f;
+	m_nAmmo = Net::MagazineCapacity;
+	m_bIsReloading = false;
+	m_fRecoilElapsedTime = 0.0f;
+	m_fRecoilProgress = 0.0f;
+	m_bIsRecoiling = false;
+}
+
 bool Gun::Fire()
 {
 	//현재는 Fire과 TryFire를 나눈 의미가 크게 없음. 추후에 기능 추가?

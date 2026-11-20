@@ -52,7 +52,7 @@ private:
 	Net::ServerTimeMs startsAtMs_ = 0;
 	Net::ServerTimeMs endsAtMs_ = 0;
 	Net::ServerTimeMs matchTimeReceivedAtMs_ = 0;
-	std::uint8_t finalRank_ = 0;
+	std::vector<Net::PlayerResult> finalResults_;
 
 	struct RemoteTarget
 	{

@@ -11,6 +11,7 @@ struct Hud
 	std::vector<std::string> lines;
 	std::string				 message;
 	bool					 crosshair = true;
+	bool showResults = false;
 	float					 messageScale = 0.0015f;
 	std::string              readyButton;
 };

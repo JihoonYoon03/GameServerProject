@@ -87,9 +87,10 @@ int Framework::Run(int argc, char** argv, std::unique_ptr<Scene> scene)
 		// Compatibility context required by the legacy drawing paths below.
 		//LegacyGL
 		glutInitContextProfile(GLUT_COMPATIBILITY_PROFILE);
-		glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGBA | GLUT_DEPTH);
+		glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGBA | GLUT_DEPTH | GLUT_MULTISAMPLE);
 		glutInitWindowSize(width_, height_);
 		glutInitWindowPosition(100, 100);
+		glutSetOption(GLUT_MULTISAMPLE, 4);
 		window_ = glutCreateWindow("Example1");
 
 		if (window_ <= 0)
@@ -116,6 +117,7 @@ int Framework::Run(int argc, char** argv, std::unique_ptr<Scene> scene)
 
 		glEnable(GL_DEPTH_TEST);
 		glEnable(GL_CULL_FACE);
+		glEnable(GL_MULTISAMPLE);
 		glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
 		scene_ = std::move(scene);
 		if (network_ == nullptr)

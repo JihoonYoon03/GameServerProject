@@ -8,6 +8,21 @@ namespace
 {
 	constexpr float TargetAreaHalfSize = ShootingRange::TargetHalfSize;
 	constexpr float TargetScale = 0.3f;
+
+	class PlayerHead : public Object
+	{
+	public:
+		PlayerHead(const Player& player, const std::shared_ptr<Mesh>& mesh, const std::shared_ptr<Material>& material)
+			: Object(mesh, material), player_(player) {}
+
+		glm::mat4 GetModelMatrix() const override
+		{
+			return glm::scale(player_.GetHeadTransform(), player_.transform.scale);
+		}
+
+	private:
+		const Player& player_;
+	};
 }
 
 Object* ShootingScene::AddProp(const std::string& name, const std::shared_ptr<Mesh>& mesh, const std::shared_ptr<Material>& material, const glm::vec3& position, const glm::vec3& scale, bool solid)
@@ -20,6 +35,37 @@ Object* ShootingScene::AddProp(const std::string& name, const std::shared_ptr<Me
 	object->collider = solid ? ColliderType::Box : ColliderType::None;
 
 	return AddObject(std::move(object));
+}
+
+ShootingScene::PlayerModel ShootingScene::AddPlayer(const Net::SessionToken& token,
+	const std::shared_ptr<Material>& bodyMaterial, bool local)
+{
+	const auto cube = assets_.LoadMesh("Resources/Meshes/Cube.obj");
+	auto body = std::make_unique<Player>(cube, bodyMaterial);
+	body->m_SessionToken = token;
+	body->name = local ? "Local player" : "Remote player";
+	body->transform.scale = glm::vec3(Net::PlayerHalfExtent);
+	body->collider = ColliderType::Box;
+	auto head = std::make_unique<PlayerHead>(*body, cube, bodyMaterial);
+	head->name = "Player head";
+	//1인칭 카메라에서 자기 몸통과 머리가 시야를 막지 않도록 함.
+	body->visible = head->visible = !local;
+
+	auto gun = std::make_unique<Gun>(*body, assets_.LoadMesh("Resources/Meshes/Pistol.obj"), gunMaterial_);
+	gun->name = "Pistol";
+
+	PlayerModel model{body.get(), head.get(), gun.get()};
+	AddObject(std::move(body));
+	AddObject(std::move(head));
+	AddObject(std::move(gun));
+	return model;
+}
+
+void ShootingScene::RemovePlayerModel(const PlayerModel& model)
+{
+	RemoveObject(model.gun->GetId());
+	RemoveObject(model.head->GetId());
+	RemoveObject(model.body->GetId());
 }
 
 void ShootingScene::Initialize()
@@ -97,29 +143,22 @@ void ShootingScene::Initialize()
 
 	std::shared_ptr<Material> playerMaterial = std::make_shared<Material>(shader);
 	playerMaterial->color = {0.8f, 0.8f, 0.2f};
+	if (network_ != nullptr)
+	{
+		remotePlayerMaterial_ = std::make_shared<Material>(shader);
+		remotePlayerMaterial_->color = {0.2f, 0.65f, 1.0f};
+	}
 
-	std::unique_ptr<Player> player = std::make_unique<Player>(cube, playerMaterial);
-	player_ = player.get();
-	player_->m_SessionToken = sessionToken_;
-	player->name = "Local player";
-	player->transform.position = southArea + glm::vec3(0, 1, 0);
-	player->transform.scale = glm::vec3(Net::PlayerHalfExtent);
-	player->collider = ColliderType::Box;
-	AddObject(std::move(player));
+	gunMaterial_ = std::make_shared<Material>(shader);
+	gunMaterial_->color = glm::vec3(0.2f);
+	const PlayerModel local = AddPlayer(sessionToken_, playerMaterial, true);
+	player_ = local.body;
+	gun_ = local.gun;
+	player_->transform.position = southArea + glm::vec3(0, 1, 0);
 	for (const Net::PlayerData& entry : roomState_.vPlayers)
 		if (entry.m_sessionToken == sessionToken_)
 			player_->ApplyNetworkPose(entry.pose);
 	player_->UpdateCamera(camera_);
-
-	std::shared_ptr<Material> gunMaterial = std::make_shared<Material>(shader);
-	gunMaterial->color = glm::vec3(0.2f);
-
-	std::unique_ptr<Gun> gun = std::make_unique<Gun>(assets_.LoadMesh("Resources/Meshes/Pistol.obj"), gunMaterial);
-	gun_ = gun.get();
-	gun->name = "Pistol";
-	gun->transform.scale = glm::vec3(0.025f);
-	gun->FollowCamera(camera_, player_->transform.position);
-	AddObject(std::move(gun));
 
 	targetMesh_ = sphere;
 	targetMaterial_ = std::make_shared<Material>(shader);
@@ -168,7 +207,6 @@ void ShootingScene::Update(float deltaTime, const Input& input)
 			Shoot();
 			AdvanceRemoteTargets(deltaTime);
 		}
-		gun_->FollowCamera(camera_, player_->transform.position);
 		return;
 	}
 
@@ -216,7 +254,6 @@ void ShootingScene::Update(float deltaTime, const Input& input)
 
 	Shoot();
 	RemoveDestroyedTargets();
-	gun_->FollowCamera(camera_, player_->transform.position);
 }
 
 void ShootingScene::ApplyPlayerCommand(const PlayerCommand& command, float deltaTime)
@@ -494,6 +531,7 @@ void ShootingScene::OnRoomStateChanged(const Net::RoomStateData& state)
 		return;
 
 	roomState_ = state;
+	RemoveDepartedRemotePlayers();
 	if (state.state == Net::GameState::Results)
 		ApplyTargetSnapshot({});
 }
@@ -529,13 +567,24 @@ void ShootingScene::OnGameStarted(const Net::GameStarted& event)
 	ClearTargets();
 	ApplyTargetSnapshot({});
 	finalResults_.clear();
+	for (const PlayerModel& remote : remotePlayers_)
+		RemovePlayerModel(remote);
+	remotePlayers_.clear();
+
 	for (const Net::PlayerData& entry : event.players)
+	{
 		if (entry.m_sessionToken == sessionToken_)
 		{
 			networkStats_ = entry.stats;
 			player_->ApplyNetworkPose(entry.pose);
 			player_->UpdateCamera(camera_);
+			continue;
 		}
+		//상대도 같은 몸통·머리·총기를 생성. 구역별 경기이므로 상대 몸체는 벽으로 취급하지 않음.
+		const PlayerModel remote = AddPlayer(entry.m_sessionToken, remotePlayerMaterial_, false);
+		remote.body->ApplyNetworkPose(entry.pose);
+		remotePlayers_.push_back(remote);
+	}
 	//첫 이동 요청 전에는 서버가 처리한 순번이 0이므로, 시작 위치도 비교 기준으로 저장.
 	sentPositions_[0] = {0, player_->transform.position, true};
 	serverTimeMs_ = event.serverTimeMs;
@@ -544,6 +593,27 @@ void ShootingScene::OnGameStarted(const Net::GameStarted& event)
 	matchTimeReceivedAtMs_ = GetTickCount64();
 	std::cout << "Room " << current.roomId << " match " << matchId << " started ("
 		<< event.players.size() << " players)." << std::endl;
+}
+
+void ShootingScene::RemoveDepartedRemotePlayers()
+{
+	//퇴장한 상대는 TCP 명단에서 빠진 시점에 제거. 늦은 UDP는 표시 객체를 다시 만들지 않음.
+	for (auto remote = remotePlayers_.begin(); remote != remotePlayers_.end();)
+	{
+		const auto& players = roomState_.vPlayers;
+		auto member = std::find_if(players.begin(), players.end(), [&](const Net::PlayerData& entry)
+		{
+			return entry.m_sessionToken == remote->body->m_SessionToken;
+		});
+		if (member != players.end())
+		{
+			++remote;
+			continue;
+		}
+
+		RemovePlayerModel(*remote);
+		remote = remotePlayers_.erase(remote);
+	}
 }
 
 void ShootingScene::ApplyTargetPositions(const Net::UdpHeader& header, const Net::TargetSnapshot& snapshot)
@@ -659,59 +729,75 @@ void ShootingScene::RecvTransformData(const Net::PlayerSnapshot& snapshot)
 	for (std::size_t index = 0; index < snapshot.playerCount; ++index)
 	{
 		const Net::PlayerTransformEntry& entry = snapshot.players[index];
-		if (entry.m_sessionToken != sessionToken_)
-			continue;
-		//보낸 적 없는 순번이거나 이미 적용한 응답이면 위치를 다시 보정하지 않음.
-		if (Net::IsNewerSequence(entry.lastProcessedInput, inputSequence_)
-			|| (hasAppliedInput_ && !Net::IsNewerSequence(entry.lastProcessedInput, lastAppliedInput_)))
-			return;
-		SentPosition& acknowledged = sentPositions_[entry.lastProcessedInput % sentPositions_.size()];
-		//같은 배열 칸이 더 최근 요청으로 덮였을 수 있으므로, 유효 여부와 실제 순번을 모두 확인.
-		if (!acknowledged.valid || acknowledged.sequence != entry.lastProcessedInput)
-			return;
-
-		//서버 확정 위치 - 해당 요청을 보낼 때의 위치 = 그 요청까지 발생한 위치 오차.
-		//이 차이만 현재 위치에 더해서, 응답을 기다리는 동안 이동한 거리와 현재 시선은 유지.
-		Net::PlayerPose previous = player_->GetNetworkPose();
-		Net::PlayerPose corrected = previous;
-		corrected.position = ClampToPlayerArea(previous.position + (entry.pose.position - acknowledged.position));
-		if (!player_->ApplyNetworkPose(corrected))
-			return;
-
-		Box playerBox = player_->GetWorldBox();
-		for (const std::unique_ptr<Object>& object : GetObjects())
+		if (entry.m_sessionToken == sessionToken_)
 		{
-			if (!object->active || !object->blocksMovement || object->collider != ColliderType::Box)
-				continue;
-			Box wall = object->GetWorldBox();
-			if (playerBox.min.x < wall.max.x && playerBox.max.x > wall.min.x
-				&& playerBox.min.z < wall.max.z && playerBox.max.z > wall.min.z)
+			CorrectLocalPlayerPosition(entry);
+			continue;
+		}
+
+		//상대는 서버 확정 위치와 시선을 그대로 표시. 내 이동 요청 순번과 비교하지 않음.
+		for (const PlayerModel& remote : remotePlayers_)
+		{
+			if (entry.m_sessionToken == remote.body->m_SessionToken)
 			{
-				//보정한 위치가 벽 안이면 서버가 확정한 위치로 이동. yaw, pitch는 현재 클라 값을 유지.
-				corrected.position = ClampToPlayerArea(entry.pose.position);
-				player_->ApplyNetworkPose(corrected);
+				remote.body->ApplyNetworkPose(entry.pose);
 				break;
 			}
 		}
-
-		//구역 제한과 벽 보정까지 끝난 뒤 실제로 이동한 보정량 계산.
-		glm::vec3 correction = player_->transform.position - previous.position;
-		for (SentPosition& sent : sentPositions_)
-		{
-			if (!sent.valid)
-				continue;
-			//서버가 처리했다고 확인된 요청은 비움. 아직 확인 못한 요청의 기준 위치도 같은 만큼 옮김.
-			//안 옮기면 다음 응답에서 이번에 반영한 오차를 다시 적용할 수 있음.
-			if (!Net::IsNewerSequence(sent.sequence, entry.lastProcessedInput))
-				sent.valid = false;
-			else
-				sent.position += correction;
-		}
-		lastAppliedInput_ = entry.lastProcessedInput;
-		hasAppliedInput_ = true;
-		player_->UpdateCamera(camera_);
-		return;
 	}
+}
+
+void ShootingScene::CorrectLocalPlayerPosition(const Net::PlayerTransformEntry& entry)
+{
+	//보낸 적 없는 순번이거나 이미 적용한 응답이면 위치를 다시 보정하지 않음.
+	if (Net::IsNewerSequence(entry.lastProcessedInput, inputSequence_)
+		|| (hasAppliedInput_ && !Net::IsNewerSequence(entry.lastProcessedInput, lastAppliedInput_)))
+		return;
+	SentPosition& acknowledged = sentPositions_[entry.lastProcessedInput % sentPositions_.size()];
+	//같은 배열 칸이 더 최근 요청으로 덮였을 수 있으므로, 유효 여부와 실제 순번을 모두 확인.
+	if (!acknowledged.valid || acknowledged.sequence != entry.lastProcessedInput)
+		return;
+
+	//서버 확정 위치 - 해당 요청을 보낼 때의 위치 = 그 요청까지 발생한 위치 오차.
+	//이 차이만 현재 위치에 더해서, 응답을 기다리는 동안 이동한 거리와 현재 시선은 유지.
+	Net::PlayerPose previous = player_->GetNetworkPose();
+	Net::PlayerPose corrected = previous;
+	corrected.position = ClampToPlayerArea(previous.position + (entry.pose.position - acknowledged.position));
+	if (!player_->ApplyNetworkPose(corrected))
+		return;
+
+	Box playerBox = player_->GetWorldBox();
+	for (const std::unique_ptr<Object>& object : GetObjects())
+	{
+		if (!object->active || !object->blocksMovement || object->collider != ColliderType::Box)
+			continue;
+		Box wall = object->GetWorldBox();
+		if (playerBox.min.x < wall.max.x && playerBox.max.x > wall.min.x
+			&& playerBox.min.z < wall.max.z && playerBox.max.z > wall.min.z)
+		{
+			//보정한 위치가 벽 안이면 서버가 확정한 위치로 이동. yaw, pitch는 현재 클라 값을 유지.
+			corrected.position = ClampToPlayerArea(entry.pose.position);
+			player_->ApplyNetworkPose(corrected);
+			break;
+		}
+	}
+
+	//구역 제한과 벽 보정까지 끝난 뒤 실제로 이동한 보정량 계산.
+	glm::vec3 correction = player_->transform.position - previous.position;
+	for (SentPosition& sent : sentPositions_)
+	{
+		if (!sent.valid)
+			continue;
+		//서버가 처리했다고 확인된 요청은 비움. 아직 확인 못한 요청의 기준 위치도 같은 만큼 옮김.
+		//안 옮기면 다음 응답에서 이번에 반영한 오차를 다시 적용할 수 있음.
+		if (!Net::IsNewerSequence(sent.sequence, entry.lastProcessedInput))
+			sent.valid = false;
+		else
+			sent.position += correction;
+	}
+	lastAppliedInput_ = entry.lastProcessedInput;
+	hasAppliedInput_ = true;
+	player_->UpdateCamera(camera_);
 }
 
 void ShootingScene::SendShoot()

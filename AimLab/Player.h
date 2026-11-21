@@ -23,6 +23,8 @@ public:
 	void ApplyCommand(const PlayerCommand& command, float deltaTime, const Scene& scene);
 	void UpdateCamera(Camera& camera) const;
 	glm::mat4 GetModelMatrix() const override;
+	Box GetWorldBox() const override;
+	glm::mat4 GetHeadTransform() const;
 
 	Net::PlayerPose GetNetworkPose() const;
 	bool ApplyNetworkPose(const Net::PlayerPose& pose);
@@ -38,6 +40,5 @@ public:
 	Net::SessionToken m_SessionToken{};
 
 private:
-	glm::vec3	m_vec3EyePosition{0.0f};
-	bool		m_bEyeInitialized = false;
+	glm::mat4 GetBodyTransform() const;
 };

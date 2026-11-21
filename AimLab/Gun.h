@@ -1,12 +1,12 @@
 #pragma once
 #include "pch.h"
 #include "Object.h"
-#include "Camera.h"
+class Player;
 
 class Gun : public Object
 {
 public:
-	Gun(std::shared_ptr<Mesh> mesh = nullptr, std::shared_ptr<Material> material = nullptr);
+	Gun(const Player& player, std::shared_ptr<Mesh> mesh, std::shared_ptr<Material> material);
 	~Gun();
 
 	void Update(float deltaTime) override;
@@ -17,8 +17,6 @@ public:
 	void StartReload();
 	void UpdateReload(float deltaTime);
 
-	void FollowCamera(const Camera& camera);
-	void FollowCamera(const Camera& camera, const glm::vec3& playerPosition);
 	glm::mat4 GetModelMatrix() const override;
 	void UpdateRecoil(float deltaTime);
 
@@ -36,5 +34,5 @@ private:
 	float		m_fRecoilProgress;
 	bool		m_bIsRecoiling;
 
-	glm::mat4	m_mtx4CameraPivot;
+	const Player& m_Player;
 };

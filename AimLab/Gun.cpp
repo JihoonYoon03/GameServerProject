@@ -1,7 +1,8 @@
 #include "pch.h"
 #include "Gun.h"
+#include "Player.h"
 
-Gun::Gun(std::shared_ptr<Mesh> mesh, std::shared_ptr<Material> material)
+Gun::Gun(const Player& player, std::shared_ptr<Mesh> mesh, std::shared_ptr<Material> material)
 	: Object(mesh, material),
 	m_fFireCooldown(0.0f),
 	m_fReloadRemainingTime(0.0f),
@@ -10,8 +11,12 @@ Gun::Gun(std::shared_ptr<Mesh> mesh, std::shared_ptr<Material> material)
 	m_fRecoilElapsedTime(0.0f),
 	m_fRecoilProgress(0.0f),
 	m_bIsRecoiling(false),
-	m_mtx4CameraPivot(glm::mat4x4{})
+	m_Player(player)
 {
+	//머리 중심을 기준으로 한 총기 위치. 내 총기와 상대 총기에 동일하게 적용.
+	transform.position = {0.2f, -0.4f, -0.4f};
+	transform.rotation = {0.0f, 180.0f, 0.0f};
+	transform.scale = glm::vec3(0.025f);
 }
 
 Gun::~Gun()
@@ -112,20 +117,6 @@ void Gun::UpdateReload(float deltaTime)
 	}
 }
 
-void Gun::FollowCamera(const Camera& camera)
-{
-	FollowCamera(camera, camera.position - glm::vec3(0.0f, 0.75f, -0.4f));
-}
-
-void Gun::FollowCamera(const Camera& camera, const glm::vec3& playerPosition)
-{
-	// 부모 이동과 카메라 중심 회전을 별도로 합성합니다. 충돌 직후에도 같은 값을 가정하지 않습니다.
-	transform.position = playerPosition + glm::vec3(0.2f, 0.35f, -0.8f);
-	transform.rotation = {0.0f, 180.0f, 0.0f};
-	m_mtx4CameraPivot = glm::translate(glm::mat4(1), camera.position) * camera.GetRotation() *
-				   glm::translate(glm::mat4(1), -camera.position);
-}
-
 glm::mat4 Gun::GetModelMatrix() const
 {
 	glm::vec3 localPosition = glm::vec3(0.0f, 0.1f, -0.2f) * m_fRecoilProgress / transform.scale;
@@ -133,5 +124,5 @@ glm::mat4 Gun::GetModelMatrix() const
 	glm::mat4 animation = glm::mat4_cast(pitchRotation);
 	animation = glm::translate(animation, localPosition);
 
-	return m_mtx4CameraPivot * transform.GetMatrix() * animation;
+	return m_Player.GetHeadTransform() * transform.GetMatrix() * animation;
 }

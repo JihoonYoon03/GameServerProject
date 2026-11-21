@@ -3,6 +3,11 @@
 #include "Scene.h"
 #include "../Shared/NetworkConversions.h"
 
+namespace
+{
+	constexpr float HeadHeight = Net::PlayerHalfExtent * 2.0f;
+}
+
 void Player::ApplyCommand(const PlayerCommand& command, float deltaTime, const Scene& scene)
 {
 	m_fYaw = std::fmod(m_fYaw - command.lookDelta.x * m_fHorizontalSensitivity, 360.0f);
@@ -14,41 +19,55 @@ void Player::ApplyCommand(const PlayerCommand& command, float deltaTime, const S
 		movement = glm::normalize(movement);
 	}
 
-	glm::mat4 rotation = glm::mat4_cast(glm::angleAxis(glm::radians(m_fYaw), glm::vec3(0, 1, 0)));
 	glm::vec3 displacement =
-		glm::vec3(rotation * glm::vec4(movement.x, 0, movement.y, 0)) * m_fMoveSpeed * deltaTime;
-	// 원본은 X/Z 중심 판정 후 이번 이동 전체를 취소합니다.
+		glm::vec3(GetBodyTransform() * glm::vec4(movement.x, 0, movement.y, 0)) * m_fMoveSpeed * deltaTime;
 
+	//몸통 중심을 이동한 뒤 벽과 겹치면 이전 위치로 복구.
 	glm::vec3 previousPosition = transform.position;
 	transform.position += displacement;
+	const Box bodyBox = GetWorldBox();
 	for (const std::unique_ptr<Object>& object : scene.GetObjects())
 	{
 		if (object.get() != this && object->active && object->blocksMovement
-			&& object->collider == ColliderType::Box && Collision::OverlapsXZ(GetWorldBox(), object->GetWorldBox()))
+			&& object->collider == ColliderType::Box && Collision::OverlapsXZ(bodyBox, object->GetWorldBox()))
 		{
 			transform.position = previousPosition;
 			break;
 		}
 	}
-	m_vec3EyePosition = transform.position + glm::vec3(0.0f, 0.75f, -0.4f);
-	m_bEyeInitialized = true;
 }
 
 void Player::UpdateCamera(Camera& camera) const
 {
-	// 원본은 이동 후 카메라를 갱신하고 충돌을 처리했습니다. 그 관찰 순서를 유지합니다.
-	camera.position = m_bEyeInitialized ? m_vec3EyePosition : transform.position + glm::vec3(0.0f, 0.75f, -0.4f);
+	camera.position = transform.position + glm::vec3(0.0f, HeadHeight, 0.0f);
 	camera.yaw = m_fYaw;
 	camera.pitch = m_fPitch;
 }
 
+glm::mat4 Player::GetBodyTransform() const
+{
+	//몸통 중심이 네트워크 위치이자 yaw 회전축.
+	const glm::mat4 center = glm::translate(glm::mat4(1.0f), transform.position);
+	return glm::rotate(center, glm::radians(m_fYaw), glm::vec3(0, 1, 0));
+}
+
 glm::mat4 Player::GetModelMatrix() const
 {
-	glm::vec3 eye = m_bEyeInitialized ? m_vec3EyePosition : transform.position + glm::vec3(0.0f, 0.75f, -0.4f);
-	glm::mat4 pivot = glm::translate(glm::mat4(1), eye);
-	pivot *= glm::mat4_cast(glm::angleAxis(glm::radians(m_fYaw), glm::vec3(0, 1, 0)));
+	return glm::scale(GetBodyTransform(), transform.scale);
+}
 
-	return glm::translate(pivot, -eye) * transform.GetMatrix();
+Box Player::GetWorldBox() const
+{
+	//서버와 동일하게 몸통 중심에서 고정 반폭으로 충돌 검사. 회전은 표시용에만 반영.
+	const glm::vec3 half(Net::PlayerHalfExtent);
+	return {transform.position - half, transform.position + half};
+}
+
+glm::mat4 Player::GetHeadTransform() const
+{
+	//몸통의 yaw를 따라간 뒤, 머리 중심에서 pitch 적용. 총기도 같은 축을 사용.
+	const glm::mat4 headCenter = glm::translate(GetBodyTransform(), glm::vec3(0.0f, HeadHeight, 0.0f));
+	return glm::rotate(headCenter, glm::radians(m_fPitch), glm::vec3(1, 0, 0));
 }
 
 Net::PlayerPose Player::GetNetworkPose() const
@@ -64,7 +83,5 @@ bool Player::ApplyNetworkPose(const Net::PlayerPose& pose)
 	transform.position = pose.position;
 	m_fYaw = pose.yaw;
 	m_fPitch = pose.pitch;
-	m_vec3EyePosition = transform.position + glm::vec3(0.0f, 0.75f, -0.4f);
-	m_bEyeInitialized = true;
 	return true;
 }

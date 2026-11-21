@@ -62,6 +62,20 @@ private:
 	std::vector<RemoteTarget> remoteTargets_;
 	void ApplyTargetSnapshot(const Net::TargetSnapshot& snapshot);
 	void AdvanceRemoteTargets(float deltaSeconds);
+	struct PlayerModel
+	{
+		Player* body;
+		Object* head;
+		Gun* gun;
+	};
+	std::vector<PlayerModel> remotePlayers_;
+	std::shared_ptr<Material> remotePlayerMaterial_;
+	std::shared_ptr<Material> gunMaterial_;
+	PlayerModel AddPlayer(const Net::SessionToken& token, const std::shared_ptr<Material>& bodyMaterial, bool local);
+	void RemovePlayerModel(const PlayerModel& model);
+	void RemoveDepartedRemotePlayers();
+	void CorrectLocalPlayerPosition(const Net::PlayerTransformEntry& entry);
+
 	//입력을 다시 실행하는 용도가 아니라, 서버 응답과 전송 당시 위치의 차이를 구하기 위한 기록.
 	struct SentPosition
 	{

@@ -18,7 +18,7 @@ public:
 	const std::shared_ptr<Material>& GetMaterial() const { return m_spMaterial; }
 	virtual glm::mat4 GetModelMatrix() const { return transform.GetMatrix(); }
 
-	Box GetWorldBox() const;
+	virtual Box GetWorldBox() const;
 	Sphere GetWorldSphere() const;
 
 	std::string	 name;

@@ -15,8 +15,11 @@ public:
     void UpdateRoomList(std::uint32_t requestId, const Net::RoomListResult& result);
     bool JoinRoom(const Net::RoomEnterResult& result);
     void ExitRoom();
-    void OnRoomExited(const Net::LeaveRoomResult& result);
-    void PickButton(int mouseX, int mouseY);
+    bool OnRoomExited(std::uint32_t requestId, const Net::LeaveRoomResult& result);
+    bool OnLeaveRejected(std::uint32_t requestId);
+    bool IsLeaving() const;
+    const char* LeaveButtonText() const;
+    void PickButton(float x, float y);
     void DrawText(const std::string& text, float x, float y);
 
 private:
@@ -25,6 +28,9 @@ private:
     NetworkClient* network_;
     std::vector<Net::RoomInfo> roomList_;
     std::uint32_t pendingListRequestId_ = 0;
+    Net::RoomId roomId_ = 0;
+    std::uint32_t pendingLeaveRequestId_ = 0;
+    bool leaveFailed_ = false;
     std::size_t selected_ = 0;
     bool firstList_ = true;
     bool entering_ = false;

@@ -6,6 +6,24 @@
 #include "Light.h"
 #include "Input.h"
 
+struct HudRect
+{
+    float left, bottom, right, top;
+
+    bool Contains(float x, float y) const
+    {
+        return x >= left && x <= right && y >= bottom && y <= top;
+    }
+};
+
+struct HudButton
+{
+    HudRect bounds;
+    std::string label;
+    bool enabled = true;
+    bool selected = false;
+};
+
 struct Hud
 {
 	std::vector<std::string> lines;
@@ -14,6 +32,7 @@ struct Hud
 	bool showResults = false;
 	float					 messageScale = 0.0015f;
 	std::string              readyButton;
+	std::vector<HudButton>   lobbyButtons;
 };
 
 class Scene

@@ -3,6 +3,22 @@
 #include "NetworkClient.h"
 #include "../Shared/PacketCodec.h"
 
+namespace
+{
+    constexpr std::size_t RoomsPerPage = 6;
+    constexpr HudRect JoinButton{-0.82f, -0.78f, -0.30f, -0.59f};
+    constexpr HudRect CreateButton{-0.26f, -0.78f, 0.26f, -0.59f};
+    constexpr HudRect RefreshButton{0.30f, -0.78f, 0.82f, -0.59f};
+    constexpr HudRect PrevButton{0.16f, 0.64f, 0.45f, 0.81f};
+    constexpr HudRect NextButton{0.49f, 0.64f, 0.82f, 0.81f};
+
+    HudRect RoomRow(std::size_t index)
+    {
+        float top = 0.54f - 0.158f * static_cast<float>(index % RoomsPerPage);
+        return {-0.82f, top - 0.14f, 0.82f, top};
+    }
+}
+
 MainScene::MainScene(NetworkClient& network) : network_(&network)
 {
 }
@@ -29,6 +45,8 @@ void MainScene::UpdateRoomList(std::uint32_t requestId, const Net::RoomListResul
     if (pendingListRequestId_ == 0 || requestId != pendingListRequestId_)
         return;
 
+    // 새로고침으로 행 순서가 바뀌어도 선택했던 방 번호를 유지한다.
+    Net::RoomId previousRoom = roomList_.empty() ? 0 : roomList_[selected_].roomId;
     pendingListRequestId_ = 0;
     roomList_ = result.rooms;
     std::sort(roomList_.begin(), roomList_.end(), [](const Net::RoomInfo& a, const Net::RoomInfo& b)
@@ -36,6 +54,14 @@ void MainScene::UpdateRoomList(std::uint32_t requestId, const Net::RoomListResul
         return a.roomId < b.roomId;
     });
     selected_ = 0;
+    for (std::size_t i = 0; i < roomList_.size(); ++i)
+    {
+        if (roomList_[i].roomId == previousRoom)
+        {
+            selected_ = i;
+            break;
+        }
+    }
     ShowRoomList();
     if (firstList_ && roomList_.empty())
         RequestEntry(0);
@@ -56,7 +82,11 @@ bool MainScene::JoinRoom(const Net::RoomEnterResult& result)
     entering_ = false;
     switch (result.result)
     {
-    case Net::ErrorCode::Ok:           return true;
+    case Net::ErrorCode::Ok:
+        roomId_ = result.room.version.context.roomId;
+        leaveFailed_ = false;
+        notice_.clear();
+        return true;
     case Net::ErrorCode::RoomNotFound: notice_ = "Room no longer exists"; break;
     case Net::ErrorCode::RoomFull:     notice_ = "Room is full"; break;
     case Net::ErrorCode::RoomPlaying:  notice_ = "Game already started"; break;
@@ -64,6 +94,56 @@ bool MainScene::JoinRoom(const Net::RoomEnterResult& result)
     }
     SearchRoomList();
     return false;
+}
+
+void MainScene::ExitRoom()
+{
+    if (roomId_ == 0 || IsLeaving())
+        return;
+
+    pendingLeaveRequestId_ = network_->RequestLeaveRoom(roomId_);
+    leaveFailed_ = !IsLeaving();
+}
+
+bool MainScene::OnRoomExited(std::uint32_t requestId, const Net::LeaveRoomResult& result)
+{
+    if (!IsLeaving() || requestId != pendingLeaveRequestId_ || result.roomId != roomId_)
+        return false;
+
+    if (result.result != Net::ErrorCode::Ok)
+    {
+        OnLeaveRejected(requestId);
+        return false;
+    }
+
+    pendingLeaveRequestId_ = 0;
+    roomId_ = 0;
+    SearchRoomList();
+    return true;
+}
+
+bool MainScene::OnLeaveRejected(std::uint32_t requestId)
+{
+    if (!IsLeaving() || requestId != pendingLeaveRequestId_)
+        return false;
+
+    pendingLeaveRequestId_ = 0;
+    leaveFailed_ = true;
+    return true;
+}
+
+bool MainScene::IsLeaving() const
+{
+    return pendingLeaveRequestId_ != 0;
+}
+
+const char* MainScene::LeaveButtonText() const
+{
+    if (IsLeaving())
+        return "Leaving...";
+    if (leaveFailed_)
+        return "Retry leave [L]";
+    return "Leave room [L]";
 }
 
 void MainScene::Update(float, const Input& input)
@@ -85,31 +165,72 @@ void MainScene::Update(float, const Input& input)
     }
 }
 
+void MainScene::PickButton(float x, float y)
+{
+    if (entering_ || pendingListRequestId_ != 0)
+        return;
+
+    const std::size_t first = selected_ / RoomsPerPage * RoomsPerPage;
+    if (CreateButton.Contains(x, y))
+        RequestEntry(0);
+    else if (RefreshButton.Contains(x, y))
+        SearchRoomList();
+    else if (JoinButton.Contains(x, y) && !roomList_.empty())
+        RequestEntry(roomList_[selected_].roomId);
+    else if (PrevButton.Contains(x, y) && first >= RoomsPerPage)
+        selected_ = first - RoomsPerPage;
+    else if (NextButton.Contains(x, y) && first + RoomsPerPage < roomList_.size())
+        selected_ = first + RoomsPerPage;
+    else
+    {
+        for (std::size_t i = first; i < std::min(first + RoomsPerPage, roomList_.size()); ++i)
+        {
+            if (RoomRow(i).Contains(x, y))
+            {
+                selected_ = i;
+                break;
+            }
+        }
+    }
+}
+
 Hud MainScene::GetHud() const
 {
     Hud hud;
     hud.crosshair = false;
-    hud.messageScale = 0.00075f;
     hud.message = notice_;
+    const bool available = !entering_ && pendingListRequestId_ == 0;
     if (entering_)
-        hud.lines.push_back("Entering room...");
+        hud.message = "Entering room...";
     else if (pendingListRequestId_ != 0)
-        hud.lines.push_back("Loading room list...");
-    else
+        hud.message = "Loading room list...";
+    else if (roomList_.empty() && notice_.empty())
+        hud.message = "No rooms available";
+
+    const std::size_t first = selected_ / RoomsPerPage * RoomsPerPage;
+    std::string title = "Rooms (" + std::to_string(roomList_.size()) + ")";
+    if (roomList_.size() > RoomsPerPage)
     {
-        if (roomList_.empty())
-            hud.lines.push_back("No rooms available");
-        else
-        {
-            const Net::RoomInfo& room = roomList_[selected_];
-            std::string state = "Waiting";
-            if (room.state == Net::GameState::Playing) state = "Playing";
-            else if (room.state == Net::GameState::Results) state = "Results";
-            hud.lines.push_back("Room " + std::to_string(room.roomId) + "    "
-                + std::to_string(room.playerCount) + "/" + std::to_string(room.capacity) + "    " + state);
-        }
-        hud.lines.push_back("W/S: select   Enter: join   N: new   R: refresh");
+        title += "    " + std::to_string(first / RoomsPerPage + 1) + "/"
+            + std::to_string((roomList_.size() + RoomsPerPage - 1) / RoomsPerPage);
+        hud.lobbyButtons.push_back({PrevButton, "Prev", available && first > 0});
+        hud.lobbyButtons.push_back({NextButton, "Next", available && first + RoomsPerPage < roomList_.size()});
     }
+    hud.lines.push_back(title);
+
+    for (std::size_t i = first; i < std::min(first + RoomsPerPage, roomList_.size()); ++i)
+    {
+        const Net::RoomInfo& room = roomList_[i];
+        std::string state = "Waiting";
+        if (room.state == Net::GameState::Playing) state = "Playing";
+        else if (room.state == Net::GameState::Results) state = "Results";
+        std::string label = "Room " + std::to_string(room.roomId) + "      "
+            + std::to_string(room.playerCount) + "/" + std::to_string(room.capacity) + "      " + state;
+        hud.lobbyButtons.push_back({RoomRow(i), label, available, i == selected_});
+    }
+    hud.lobbyButtons.push_back({JoinButton, "Join [Enter]", available && !roomList_.empty()});
+    hud.lobbyButtons.push_back({CreateButton, "New room [N]", available});
+    hud.lobbyButtons.push_back({RefreshButton, "Refresh [R]", available});
     return hud;
 }
 
@@ -132,7 +253,7 @@ void MainScene::ShowRoomList() const
             << L'/' << static_cast<int>(room.capacity) << L"명 | " << state << newline;
     }
     if (!firstList_ || !roomList_.empty())
-        list << L"게임 창에서 W/S로 방 선택, Enter로 입장, N으로 새 방 생성, R로 목록 갱신" << newline;
+        list << L"게임 창에서 방과 버튼을 클릭하세요. W/S로 방 선택, Enter로 입장, N으로 새 방 생성, R로 목록 갱신" << newline;
 
     std::wstring text = list.str();
     if (isConsole)

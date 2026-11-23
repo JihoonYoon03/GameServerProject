@@ -3,6 +3,7 @@
 #include "Scene.h"
 
 class NetworkClient;
+class MainScene;
 
 // 창, 입력 수집, 시간 루프, 렌더링을 담당합니다. 게임 규칙은 Scene로 전달합니다.
 class Framework
@@ -36,6 +37,8 @@ private:
 
 	std::unique_ptr<NetworkClient> network_;
 	bool sceneInitialized_ = false;
+	std::unique_ptr<MainScene> roomMenu_;
+	bool menuCursorActive_ = false;
 	bool readyPanelActive_ = false;
 	bool centerAimOnMotion_ = false;
 	std::unique_ptr<Scene>				  scene_;

@@ -60,9 +60,9 @@ int main(int argc, char** argv)
 		if (!ReadPort(portText, tcpPort))
 			throw std::runtime_error("TCP 포트는 1~65535 사이여야 합니다.");
 		std::unique_ptr<NetworkClient> network = std::make_unique<NetworkClient>();
+		std::cout << "서버 접속 및 최초 UDP 등록을 기다립니다." << std::endl;
 		if (!network->ConnectServer(address, tcpPort) || !network->StartNetwork())
 			throw std::runtime_error("서버 연결을 시작하지 못했습니다.");
-		std::cout << "서버 접속 및 최초 UDP 등록을 기다립니다.\n";
 		auto scene = std::make_unique<MainScene>(*network);
 		Framework framework(std::move(network));
 		// 접속 인자는 GLUT가 해석하지 않도록 실행 파일 이름만 전달한다.

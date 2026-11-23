@@ -21,6 +21,10 @@ namespace
 	constexpr float ReadyRight = 0.08f;
 	constexpr float ReadyBottom = -0.45f;
 	constexpr float ReadyTop = -0.25f;
+	constexpr float LeaveLeft = -0.90f;
+	constexpr float LeaveRight = -0.22f;
+	constexpr float LeaveBottom = -0.94f;
+	constexpr float LeaveTop = -0.76f;
 
 	//LegacyGL
 	void DrawText(const std::string& text, float x, float y, float scale)
@@ -47,6 +51,35 @@ namespace
 	{
 		return static_cast<float>(glutStrokeLength(GLUT_STROKE_ROMAN,
 			reinterpret_cast<const unsigned char*>(text.c_str())));
+	}
+
+	void DrawLobbyPanel(const Hud& hud)
+	{
+		glColor3f(0.10f, 0.13f, 0.17f);
+		glRectf(-0.93f, -0.89f, 0.93f, 0.90f);
+		glLineWidth(1.7f);
+		glColor3f(0.94f, 0.96f, 0.98f);
+		DrawText(hud.lines.front(), -0.82f, 0.68f, 0.00070f);
+		DrawText("W/S: select", -0.82f, 0.565f, 0.00039f);
+		for (const HudButton& button : hud.lobbyButtons)
+		{
+			const HudRect& bounds = button.bounds;
+			if (!button.enabled) glColor3f(0.17f, 0.19f, 0.22f);
+			else if (button.selected) glColor3f(0.53f, 0.86f, 0.76f);
+			else glColor3f(0.22f, 0.28f, 0.34f);
+			glRectf(bounds.left, bounds.bottom, bounds.right, bounds.top);
+
+			if (!button.enabled) glColor3f(0.66f, 0.69f, 0.72f);
+			else if (button.selected) glColor3f(0.04f, 0.12f, 0.11f);
+			else glColor3f(0.94f, 0.96f, 0.98f);
+			float scale = std::min(0.00055f, (bounds.right - bounds.left - 0.08f) / ReadyTextWidth(button.label));
+			DrawText(button.label, bounds.left + 0.04f, (bounds.top + bounds.bottom) * 0.5f - 0.025f, scale);
+		}
+		if (!hud.message.empty())
+		{
+			glColor3f(0.94f, 0.96f, 0.98f);
+			DrawText(hud.message, -0.82f, -0.52f, 0.00052f);
+		}
 	}
 
 	void DrawReadyPanel(const Hud& hud)
@@ -147,6 +180,7 @@ int Framework::Run(int argc, char** argv, std::unique_ptr<Scene> scene)
 
 	// OpenGL 컨텍스트가 살아 있을 때 GPU 자원을 먼저 해제합니다.
 	scene_.reset();
+	roomMenu_.reset();
 	sceneInitialized_ = false;
 
 	if (window_ > 0)
@@ -184,7 +218,10 @@ void Framework::Tick()
 		return;
 	}
 
-	scene_->Update(elapsed, input_);
+	if (roomMenu_ && (input_.leaveClicked || input_.WasPressed('l') || input_.WasPressed('L')))
+		roomMenu_->ExitRoom();
+	if (!roomMenu_ || !roomMenu_->IsLeaving())
+		scene_->Update(elapsed, input_);
 	input_.EndFrame();
 
 	if (elapsed > 0.0f)
@@ -259,7 +296,10 @@ void Framework::UpdateConnection()
 				break;
 			auto nextScene = std::make_unique<ShootingScene>();
 			shooting = nextScene.get();
+			// 입장에 사용한 로비를 보관해 퇴장 후 같은 목록 화면으로 돌아간다.
+			roomMenu_.reset(static_cast<MainScene*>(scene_.release()));
 			scene_ = std::move(nextScene);
+			input_.Reset();
 			lobby = nullptr;
 			if (!shooting->SetNetworkSession(*network_, result))
 				throw std::runtime_error("방 입장 정보가 올바르지 않습니다.");
@@ -272,6 +312,20 @@ void Framework::UpdateConnection()
 			std::cout << "Room " << result.room.version.context.roomId << " joined ("
 				<< result.room.vPlayers.size() << '/' << static_cast<int>(result.room.capacity)
 				<< "). Map loaded." << std::endl;
+			break;
+		}
+		case Net::TcpType::LeaveRoomResult:
+		{
+			Net::LeaveRoomResult result;
+			if (!Net::PacketCodec::ReadMessage(header.type, messageBytes, messageSize, result))
+				throw std::runtime_error("방 퇴장 응답을 읽지 못했습니다.");
+			if (roomMenu_ && roomMenu_->OnRoomExited(header.requestId, result))
+			{
+				lobby = roomMenu_.get();
+				shooting = nullptr;
+				scene_ = std::move(roomMenu_);
+				input_.Reset();
+			}
 			break;
 		}
 		case Net::TcpType::RoomState:
@@ -312,8 +366,11 @@ void Framework::UpdateConnection()
 		case Net::TcpType::RequestRejected:
 		{
 			Net::RequestRejected result;
-			if (Net::PacketCodec::ReadMessage(header.type, messageBytes, messageSize, result)
-				&& result.reason == Net::ErrorCode::RoomNotFound)
+			if (!Net::PacketCodec::ReadMessage(header.type, messageBytes, messageSize, result))
+				break;
+			if (roomMenu_ && roomMenu_->OnLeaveRejected(header.requestId))
+				break;
+			if (result.reason == Net::ErrorCode::RoomNotFound)
 				throw std::runtime_error("참가한 방이 종료되어 요청을 처리할 수 없습니다.");
 			break;
 		}
@@ -321,12 +378,13 @@ void Framework::UpdateConnection()
 			break;
 		}
 	}
-	bool preparing = shooting && shooting->IsPreparing();
-	if (readyPanelActive_ != preparing)
+	readyPanelActive_ = shooting && shooting->IsPreparing();
+	bool showCursor = lobby || (shooting && !shooting->IsPlaying());
+	if (menuCursorActive_ != showCursor)
 	{
-		readyPanelActive_ = preparing;
-		glutSetCursor(preparing ? GLUT_CURSOR_LEFT_ARROW : GLUT_CURSOR_NONE);
-		centerAimOnMotion_ = !preparing;
+		menuCursorActive_ = showCursor;
+		glutSetCursor(showCursor ? GLUT_CURSOR_LEFT_ARROW : GLUT_CURSOR_NONE);
+		centerAimOnMotion_ = !showCursor;
 		input_.EndFrame();
 	}
 }
@@ -490,7 +548,9 @@ void Framework::DrawOverlay()
 	//LegacyGL
 	glLoadIdentity();
 
-	if (!hud.readyButton.empty())
+	if (!hud.lobbyButtons.empty())
+		DrawLobbyPanel(hud);
+	else if (!hud.readyButton.empty())
 		DrawReadyPanel(hud);
 	else if (hud.showResults)
 	{
@@ -542,6 +602,15 @@ void Framework::DrawOverlay()
 		{
 			DrawText(hud.message, -0.6f, -0.15f, hud.messageScale);
 		}
+	}
+
+	if (roomMenu_)
+	{
+		glColor3f(0.14f, 0.18f, 0.22f);
+		glRectf(LeaveLeft, LeaveBottom, LeaveRight, LeaveTop);
+		glColor3f(0.94f, 0.96f, 0.98f);
+		glLineWidth(1.7f);
+		DrawText(roomMenu_->LeaveButtonText(), LeaveLeft + 0.04f, LeaveBottom + 0.055f, 0.00046f);
 	}
 
 	glEnable(GL_DEPTH_TEST);
@@ -617,7 +686,8 @@ void Framework::KeyDownCallback(unsigned char key, int, int)
 		return;
 	}
 
-	if (key == ' ' && current_->readyPanelActive_ && current_->input_.IsDown(key))
+	if (current_->input_.IsDown(key) &&
+		((key == ' ' && current_->readyPanelActive_) || key == 'l' || key == 'L'))
 		return;
 	current_->input_.SetKey(key, true);
 }
@@ -631,11 +701,26 @@ void Framework::MouseCallback(int button, int state, int x, int y)
 {
 	if (button != GLUT_LEFT_BUTTON || state != GLUT_DOWN) return;
 
-	if (current_->readyPanelActive_)
+	if (current_->menuCursorActive_)
 	{
 		float px = 2.0f * x / current_->width_ - 1.0f;
 		float py = 1.0f - 2.0f * y / current_->height_;
-		if (px >= ReadyLeft && px <= ReadyRight && py >= ReadyBottom && py <= ReadyTop)
+		if (MainScene* lobby = dynamic_cast<MainScene*>(current_->scene_.get()))
+		{
+			try
+			{
+				if (current_->sceneInitialized_)
+					lobby->PickButton(px, py);
+			}
+			catch (const std::exception& e)
+			{
+				current_->Fail(e);
+			}
+			return;
+		}
+		if (current_->roomMenu_ && px >= LeaveLeft && px <= LeaveRight && py >= LeaveBottom && py <= LeaveTop)
+			current_->input_.leaveClicked = true;
+		else if (current_->readyPanelActive_ && px >= ReadyLeft && px <= ReadyRight && py >= ReadyBottom && py <= ReadyTop)
 			current_->input_.readyClicked = true;
 		return;
 	}
@@ -644,7 +729,7 @@ void Framework::MouseCallback(int button, int state, int x, int y)
 
 void Framework::MotionCallback(int x, int y)
 {
-	if (current_->readyPanelActive_) return;
+	if (current_->menuCursorActive_) return;
 	int dx = x - current_->width_ / 2, dy = y - current_->height_ / 2;
 
 	// 대기 화면을 닫고 처음 움직일 때는 버튼과 조준점 사이의 거리를 시선에 적용하지 않는다.
@@ -661,6 +746,7 @@ void Framework::CloseCallback()
 {
 	// 창 X 버튼과 glutLeaveMainLoop 모두 컨텍스트 삭제 전에 이 콜백을 거칩니다.
 	current_->scene_.reset();
+	current_->roomMenu_.reset();
 	current_->sceneInitialized_ = false;
 	current_->window_ = 0;
 }

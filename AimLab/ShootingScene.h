@@ -21,6 +21,7 @@ public:
 	bool SetNetworkSession(NetworkClient& network, const Net::RoomEnterResult& result);
 	void SendMapLoaded();
 	bool IsPreparing() const;
+	bool IsPlaying() const { return network_ && roomState_.state == Net::GameState::Playing; }
 	PlayerCommand ReadPlayerInput(const Input& input) const;
 	void UpdatePlayer(const PlayerCommand& command, float deltaTime);
 	void UpdateCamera();

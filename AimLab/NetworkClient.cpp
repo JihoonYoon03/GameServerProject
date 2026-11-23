@@ -2,6 +2,11 @@
 #include "NetworkClient.h"
 #include "../Shared/PacketCodec.h"
 
+namespace
+{
+    constexpr ULONGLONG UdpRegistrationTimeoutMs = 5000;
+}
+
 NetworkClient::NetworkClient() : m_ControlThreadId(GetCurrentThreadId())
 {
     InitializeCriticalSection(&m_CSSendQueue);
@@ -109,9 +114,11 @@ void NetworkClient::RegisterUDP()
     Net::PacketData packet;
     if (!Net::PacketCodec::EncodeUdp(request, packet) || !SendPacket(packet))
     {
+        fputs("UDP 등록 요청을 보내지 못했습니다.\n", stderr);
         m_bStopRequested = true;
         return;
     }
+    m_RegistrationStartedAtMs = GetTickCount64();
     m_RegistrationSent = true;
 }
 
@@ -121,7 +128,10 @@ void NetworkClient::CompleteConnection(const Net::UdpRegisterResult& result)
         || result.registrationSequence != m_RegistrationSequence || m_UDPRegistered)
         return;
     if (result.result != Net::ErrorCode::Ok)
+    {
+        fputs("서버가 UDP 등록을 거부했습니다.\n", stderr);
         m_bStopRequested = true;
+    }
     else
         m_UDPRegistered = true;
 }
@@ -285,6 +295,8 @@ bool NetworkClient::ProcessTcpPacket(const Net::PacketData& packet)
         Net::RequestRejected result;
         if (!Net::PacketCodec::ReadMessage(header.type, messageBytes, size, result))
             return false;
+        if (header.requestId != 0 && header.requestId == m_PendingLeaveRequestId)
+            m_PendingLeaveRequestId = 0;
         break;
     }
     case Net::TcpType::RoomListResult:
@@ -307,7 +319,11 @@ bool NetworkClient::ProcessTcpPacket(const Net::PacketData& packet)
         Net::LeaveRoomResult result;
         if (!Net::PacketCodec::ReadMessage(header.type, messageBytes, size, result))
             return false;
-        if (result.result == Net::ErrorCode::Ok && result.roomId == m_ReceiveContext.roomId)
+        if (header.requestId == 0 || header.requestId != m_PendingLeaveRequestId
+            || result.roomId != m_ReceiveContext.roomId)
+            return true;
+        m_PendingLeaveRequestId = 0;
+        if (result.result == Net::ErrorCode::Ok)
             SetReceiveContext({}, 0);
         break;
     }
@@ -498,6 +514,14 @@ void NetworkClient::NetworkLoop()
             break;
         if (FD_ISSET(m_UDPSocket, &reads))
             ReceiveUdp();
+
+        // 도착한 응답을 먼저 처리하고, 최초 등록이 여전히 대기 중일 때만 시간을 확인한다.
+        if (!m_bStopRequested && m_RegistrationSent && !m_UDPRegistered
+            && GetTickCount64() - m_RegistrationStartedAtMs >= UdpRegistrationTimeoutMs)
+        {
+            fputs("UDP 등록 응답 시간이 초과되었습니다.\n", stderr);
+            break;
+        }
     }
 }
 
@@ -522,6 +546,24 @@ bool NetworkClient::RequestGameRoom(Net::RoomId roomId)
 
     m_PendingRoomRequestId = 0;
     return false;
+}
+
+std::uint32_t NetworkClient::RequestLeaveRoom(Net::RoomId roomId)
+{
+    if (GetCurrentThreadId() != m_ControlThreadId || !IsConnected() || roomId == 0 || m_PendingLeaveRequestId != 0)
+        return 0;
+
+    std::uint32_t requestId = NextRequestId();
+    Net::PacketData packet;
+    if (!Net::PacketCodec::EncodeTcp(Net::LeaveRoomRequest{roomId}, requestId, packet))
+        return 0;
+
+    m_PendingLeaveRequestId = requestId;
+    if (SendPacket(packet))
+        return requestId;
+
+    m_PendingLeaveRequestId = 0;
+    return 0;
 }
 
 void NetworkClient::UpdateNetwork()
@@ -553,6 +595,8 @@ std::uint32_t NetworkClient::NextRequestId()
 {
     if (GetCurrentThreadId() != m_ControlThreadId)
         return 0;
+    if (m_NextRequestId == 0)
+        m_NextRequestId = 1;
     return m_NextRequestId++;
 }
 
@@ -588,6 +632,7 @@ void NetworkClient::DisconnectServer()
     m_ReceivedPackets.clear();
     m_NextRequestId = 1;
     m_PendingRoomRequestId = 0;
+    m_PendingLeaveRequestId = 0;
     m_TcpReceiveBuffer.clear();
     m_CurrentSend.bytes.clear();
     m_HasCurrentSend = false;
@@ -597,6 +642,7 @@ void NetworkClient::DisconnectServer()
     m_TcpConnecting = false;
     m_HasConnectResult = false;
     m_RegistrationSent = false;
+    m_RegistrationStartedAtMs = 0;
     m_RegistrationSequence = 0;
     SetReceiveContext({}, 0);
     m_ServerTcpAddr = {};

@@ -28,6 +28,8 @@ public:
     void NetworkLoop();
     // 방 번호 0은 새 방 생성, 나머지는 해당 방 입장 요청이다.
     bool RequestGameRoom(Net::RoomId roomId);
+    // 퇴장 요청을 보냈으면 요청 번호를, 실패하면 0을 돌려준다.
+    std::uint32_t RequestLeaveRoom(Net::RoomId roomId);
     bool SendPacket(const Net::PacketData& packet);
     // 메인 스레드에서 검증된 수신 큐를 이번 프레임의 묶음으로 옮긴다.
     void UpdateNetwork();
@@ -64,6 +66,7 @@ private:
     bool m_TcpConnecting = false;
     bool m_HasConnectResult = false;
     bool m_RegistrationSent = false;
+    ULONGLONG m_RegistrationStartedAtMs = 0;
     Net::Sequence m_RegistrationSequence = 0;
 
     CRITICAL_SECTION m_CSSendQueue;
@@ -72,8 +75,9 @@ private:
     std::queue<Net::PacketData> m_qReceiveQueue;
     std::vector<Net::PacketData> m_ReceivedPackets;
     std::uint32_t m_NextRequestId = 1;
-    // 입장 응답을 대조할 요청 번호는 메인과 통신 스레드가 공유한다.
+    // 입장과 퇴장 응답을 대조할 요청 번호는 메인과 통신 스레드가 공유한다.
     std::atomic<std::uint32_t> m_PendingRoomRequestId{0};
+    std::atomic<std::uint32_t> m_PendingLeaveRequestId{0};
     std::vector<std::uint8_t> m_TcpReceiveBuffer;
     Net::PacketData m_CurrentSend;
     bool m_HasCurrentSend = false;

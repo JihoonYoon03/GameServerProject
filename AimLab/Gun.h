@@ -16,6 +16,8 @@ public:
 	bool TryFire();
 	void StartReload();
 	void UpdateReload(float deltaTime);
+	uint8_t GetAmmo() const { return m_nAmmo; }
+	bool IsReloading() const { return m_bIsReloading; }
 
 	glm::mat4 GetModelMatrix() const override;
 	void UpdateRecoil(float deltaTime);

@@ -51,8 +51,8 @@ ShootingScene::PlayerModel ShootingScene::AddPlayer(const Net::SessionToken& tok
 	//1인칭 카메라에서 자기 몸통과 머리가 시야를 막지 않도록 함.
 	body->visible = head->visible = !local;
 
-	auto gun = std::make_unique<Gun>(*body, assets_.LoadMesh("Resources/Meshes/Pistol.obj"), gunMaterial_);
-	gun->name = "Pistol";
+	auto gun = std::make_unique<Gun>(*body, assets_.LoadMesh("Resources/Meshes/Revolver.obj"), gunMaterial_);
+	gun->name = "Revolver";
 
 	PlayerModel model{body.get(), head.get(), gun.get()};
 	AddObject(std::move(body));
@@ -193,7 +193,11 @@ void ShootingScene::Update(float deltaTime, const Input& input)
 
 		bool playing = roomState_.state == Net::GameState::Playing;
 		if (playing)
+		{
+			if (input.WasPressed('r') || input.WasPressed('R'))
+				gun_->StartReload();
 			ApplyPlayerCommand(ReadPlayerInput(input), deltaTime);
+		}
 		Scene::Update(deltaTime, input);
 		if (playing)
 		{
@@ -230,6 +234,11 @@ void ShootingScene::Update(float deltaTime, const Input& input)
 	{
 		ClearTargets();
 		targetSpawnTime_ = 0.0f;
+	}
+
+	if (input.WasPressed('r') || input.WasPressed('R'))
+	{
+		gun_->StartReload();
 	}
 
 	ApplyPlayerCommand(ReadPlayerInput(input), deltaTime);
@@ -451,6 +460,12 @@ Hud ShootingScene::GetHud() const
 			Net::ServerTimeMs elapsedMs = GetTickCount64() - matchTimeReceivedAtMs_;
 			remainingMs = elapsedMs < remainingMs ? remainingMs - elapsedMs : 0;
 			hud.lines.push_back("timer: " + std::to_string((remainingMs + 999) / 1000));
+		}
+		if (gun_ != nullptr)
+		{
+			hud.lines.push_back(gun_->IsReloading()
+				? "reloading"
+				: "ammo: " + std::to_string(gun_->GetAmmo()) + "/" + std::to_string(Net::MagazineCapacity));
 		}
 		return hud;
 	}

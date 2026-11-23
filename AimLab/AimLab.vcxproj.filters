@@ -213,6 +213,9 @@
     <None Include="Shaders\Lit.vert">
       <Filter>Shaders</Filter>
     </None>
+    <None Include="..\Resources\Meshes\Revolver.obj">
+      <Filter>Resources\Meshes</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <Image Include="Resources\Textures\GroundTex.png">

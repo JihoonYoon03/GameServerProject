@@ -263,6 +263,7 @@
   <ItemGroup>
     <None Include="Shaders\Lit.frag" />
     <None Include="Shaders\Lit.vert" />
+    <None Include="..\Resources\Meshes\Revolver.obj" />
   </ItemGroup>
   <ItemGroup>
     <Image Include="Resources\Textures\GroundTex.png" />

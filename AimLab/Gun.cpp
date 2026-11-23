@@ -14,9 +14,9 @@ Gun::Gun(const Player& player, std::shared_ptr<Mesh> mesh, std::shared_ptr<Mater
 	m_Player(player)
 {
 	//머리 중심을 기준으로 한 총기 위치. 내 총기와 상대 총기에 동일하게 적용.
-	transform.position = {0.2f, -0.4f, -0.4f};
+	transform.position = {0.18f, -0.15f, -0.38f};
 	transform.rotation = {0.0f, 180.0f, 0.0f};
-	transform.scale = glm::vec3(0.025f);
+	transform.scale = glm::vec3(1.0f);
 }
 
 Gun::~Gun()
@@ -50,6 +50,7 @@ void Gun::Update(float deltaTime)
 		{
 			m_bIsRecoiling = false;
 			m_fRecoilElapsedTime = 0.0f;
+			m_fRecoilProgress = 0.0f;
 		}
 	}
 }
@@ -119,10 +120,13 @@ void Gun::UpdateReload(float deltaTime)
 
 glm::mat4 Gun::GetModelMatrix() const
 {
-	glm::vec3 localPosition = glm::vec3(0.0f, 0.1f, -0.2f) * m_fRecoilProgress / transform.scale;
-	glm::quat pitchRotation = glm::angleAxis(glm::radians(-15.0f * m_fRecoilProgress), glm::vec3(1, 0, 0));
-	glm::mat4 animation = glm::mat4_cast(pitchRotation);
-	animation = glm::translate(animation, localPosition);
+	// 손목·손잡이 상단 부근을 회전축으로 삼아 총구가 들리고 짧게 후퇴하도록 반동을 적용.
+	glm::vec3 recoilPivot{0.0f, -0.03f, -0.03f};
+	glm::vec3 recoilOffset = glm::vec3(0.0f, 0.015f, -0.04f) * m_fRecoilProgress / transform.scale;
+	glm::quat pitchRotation = glm::angleAxis(glm::radians(-16.0f * m_fRecoilProgress), glm::vec3(1, 0, 0));
+	glm::mat4 animation = glm::translate(glm::mat4(1.0f), recoilPivot + recoilOffset);
+	animation *= glm::mat4_cast(pitchRotation);
+	animation = glm::translate(animation, -recoilPivot);
 
 	return m_Player.GetHeadTransform() * transform.GetMatrix() * animation;
 }

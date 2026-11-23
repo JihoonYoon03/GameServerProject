@@ -200,6 +200,7 @@ void Framework::Tick()
 	std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
 	float elapsed = std::chrono::duration<float>(now - previousTime_).count();
 	previousTime_ = now;
+	const bool menuCursorWasActive = menuCursorActive_;
 
 	if (network_ != nullptr)
 	{
@@ -220,6 +221,9 @@ void Framework::Tick()
 
 	if (roomMenu_ && (input_.leaveClicked || input_.WasPressed('l') || input_.WasPressed('L')))
 		roomMenu_->ExitRoom();
+	// 같은 방의 화면 전환에서는 퇴장 입력을 처리한 뒤 나머지 프레임 입력을 비운다.
+	if (menuCursorWasActive != menuCursorActive_)
+		input_.EndFrame();
 	if (!roomMenu_ || !roomMenu_->IsLeaving())
 		scene_->Update(elapsed, input_);
 	input_.EndFrame();
@@ -370,6 +374,8 @@ void Framework::UpdateConnection()
 				break;
 			if (roomMenu_ && roomMenu_->OnLeaveRejected(header.requestId))
 				break;
+			if (shooting)
+				shooting->OnReadyRejected(header.requestId);
 			if (result.reason == Net::ErrorCode::RoomNotFound)
 				throw std::runtime_error("참가한 방이 종료되어 요청을 처리할 수 없습니다.");
 			break;
@@ -385,7 +391,6 @@ void Framework::UpdateConnection()
 		menuCursorActive_ = showCursor;
 		glutSetCursor(showCursor ? GLUT_CURSOR_LEFT_ARROW : GLUT_CURSOR_NONE);
 		centerAimOnMotion_ = !showCursor;
-		input_.EndFrame();
 	}
 }
 
@@ -689,6 +694,8 @@ void Framework::KeyDownCallback(unsigned char key, int, int)
 	if (current_->input_.IsDown(key) &&
 		((key == ' ' && current_->readyPanelActive_) || key == 'l' || key == 'L'))
 		return;
+	if (key == ' ' && current_->readyPanelActive_)
+		current_->input_.ToggleReady();
 	current_->input_.SetKey(key, true);
 }
 
@@ -721,7 +728,7 @@ void Framework::MouseCallback(int button, int state, int x, int y)
 		if (current_->roomMenu_ && px >= LeaveLeft && px <= LeaveRight && py >= LeaveBottom && py <= LeaveTop)
 			current_->input_.leaveClicked = true;
 		else if (current_->readyPanelActive_ && px >= ReadyLeft && px <= ReadyRight && py >= ReadyBottom && py <= ReadyTop)
-			current_->input_.readyClicked = true;
+			current_->input_.ToggleReady();
 		return;
 	}
 	current_->input_.firePressed = true;

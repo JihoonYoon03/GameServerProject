@@ -24,6 +24,8 @@ public:
 
 private:
     void ShowRoomList() const;
+    void SelectRoom(std::size_t index);
+    bool CanJoinSelectedRoom() const;
     void RequestEntry(Net::RoomId roomId);
     NetworkClient* network_;
     std::vector<Net::RoomInfo> roomList_;

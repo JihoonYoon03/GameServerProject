@@ -176,11 +176,8 @@ void ShootingScene::Update(float deltaTime, const Input& input)
 
 	if (network_ != nullptr)
 	{
-		if (IsPreparing() && (input.readyClicked || input.WasPressed(' ')))
-			RequestReadyChange();
-		if (roomState_.state == Net::GameState::Results && !requestedReady_
-			&& (input.WasPressed('r') || input.WasPressed('R')))
-			RequestReadyChange();
+		if (IsPreparing() || roomState_.state == Net::GameState::Results)
+			UpdateReadyInput(input);
 		if (input.WasPressed('1') && roomState_.state == Net::GameState::Preparing && roomState_.vPlayers.size() == 1
 			&& mapLoadedSent_ && network_->IsConnected())
 		{
@@ -359,24 +356,56 @@ bool ShootingScene::IsPreparing() const
 	return network_ && roomState_.state == Net::GameState::Preparing;
 }
 
-void ShootingScene::RequestReadyChange()
+const Net::PlayerData* ShootingScene::FindLocalRoomPlayer() const
 {
 	for (const Net::PlayerData& player : roomState_.vPlayers)
-	{
-		if (player.m_sessionToken != sessionToken_)
-			continue;
-		if (!player.mapLoaded || !mapLoadedSent_ || !network_->IsConnected())
-			return;
+		if (player.m_sessionToken == sessionToken_)
+			return &player;
+	return nullptr;
+}
 
-		Net::ReadyChangeRequest request;
-		request.roomId = roomState_.version.context.roomId;
-		request.ready = requestedReady_ ? 0 : 1;
-		Net::PacketData packet;
-		if (!Net::PacketCodec::EncodeTcp(request, network_->NextRequestId(), packet) || !network_->SendPacket(packet))
-			throw std::runtime_error("준비 상태 변경 요청을 보내지 못했습니다.");
-		requestedReady_ = request.ready != 0;
+void ShootingScene::UpdateReadyInput(const Input& input)
+{
+	bool toggle = IsPreparing() && input.readyToggled;
+	bool nextMatch = roomState_.state == Net::GameState::Results && (input.WasPressed('r') || input.WasPressed('R'));
+	if (!toggle && !nextMatch)
 		return;
-	}
+
+	const Net::PlayerData* player = FindLocalRoomPlayer();
+	if (!player || !player->mapLoaded || !mapLoadedSent_ || !network_->IsConnected())
+		return;
+
+	bool lastReady = pendingReadyChanges_.empty() ? player->ready == Net::ReadyState::Ready : pendingReadyChanges_.back().ready;
+	if (nextMatch && lastReady)
+		return;
+	Net::ReadyChangeRequest request;
+	request.roomId = roomState_.version.context.roomId;
+	request.ready = lastReady ? 0 : 1;
+	std::uint32_t requestId = network_->NextRequestId();
+	Net::PacketData packet;
+	if (!Net::PacketCodec::EncodeTcp(request, requestId, packet) || !network_->SendPacket(packet))
+		throw std::runtime_error("준비 상태 변경 요청을 보내지 못했습니다.");
+	pendingReadyChanges_.push({requestId, request.ready != 0});
+	readyChangeRejected_ = false;
+}
+
+void ShootingScene::ConfirmReadyChange()
+{
+	if (pendingReadyChanges_.empty())
+		return;
+	const Net::PlayerData* player = FindLocalRoomPlayer();
+	if (player && pendingReadyChanges_.front().ready == (player->ready == Net::ReadyState::Ready))
+		pendingReadyChanges_.pop();
+}
+
+void ShootingScene::OnReadyRejected(std::uint32_t requestId)
+{
+	if (pendingReadyChanges_.empty() || requestId != pendingReadyChanges_.front().requestId)
+		return;
+	pendingReadyChanges_.pop();
+	readyChangeRejected_ = pendingReadyChanges_.empty();
+	// 거절 뒤 다음 요청이 이미 서버 상태와 같으면 서버는 변경 방송을 보내지 않는다.
+	ConfirmReadyChange();
 }
 
 Hud ShootingScene::ShowReadyUI() const
@@ -400,9 +429,17 @@ Hud ShootingScene::ShowReadyUI() const
 			label += " - Waiting";
 		hud.lines.push_back(label);
 		if (isLocal && player.mapLoaded)
-			hud.readyButton = requestedReady_ ? "Cancel ready [Space]" : "Ready [Space]";
+			hud.readyButton = player.ready == Net::ReadyState::Ready ? "Cancel ready [Space]" : "Ready [Space]";
 	}
-	hud.message = roomState_.vPlayers.size() == 1 ? "Solo test: press 1" : "Starts when everyone is ready";
+	if (!pendingReadyChanges_.empty())
+	{
+		hud.readyButton = pendingReadyChanges_.back().ready ? "Requesting ready..." : "Cancelling ready...";
+		hud.message = "Click or press Space to change again";
+	}
+	else if (readyChangeRejected_)
+		hud.message = "Server declined the change. Try again.";
+	else
+		hud.message = roomState_.vPlayers.size() == 1 ? "Solo test: press 1" : "Starts when everyone is ready";
 	return hud;
 }
 
@@ -432,11 +469,18 @@ Hud ShootingScene::GetHud() const
 		if (finalResults_.empty())
 			hud.lines.push_back("Waiting for results...");
 		std::size_t readyCount = 0;
+		bool localReady = false;
 		for (const Net::PlayerData& player : roomState_.vPlayers)
+		{
 			if (player.ready == Net::ReadyState::Ready)
+			{
 				++readyCount;
+				if (player.m_sessionToken == sessionToken_)
+					localReady = true;
+			}
+		}
 		std::string readyStatus = std::to_string(readyCount) + "/" + std::to_string(roomState_.vPlayers.size());
-		hud.lines.push_back(requestedReady_ ? "Ready requested. Waiting for everyone (" + readyStatus + ")"
+		hud.lines.push_back((localReady || !pendingReadyChanges_.empty()) ? "Ready requested. Waiting for everyone (" + readyStatus + ")"
 			: "Press R to ready for next match (" + readyStatus + ")");
 		return hud;
 	}
@@ -511,7 +555,8 @@ bool ShootingScene::SetNetworkSession(NetworkClient& network, const Net::RoomEnt
 	sessionToken_ = token;
 	membershipId_ = result.membershipId;
 	roomState_ = result.room;
-	requestedReady_ = false;
+	pendingReadyChanges_ = {};
+	readyChangeRejected_ = false;
 	mapLoadedSent_ = false;
 	startedMatchId_ = 0;
 	serverTimeMs_ = startsAtMs_ = endsAtMs_ = 0;
@@ -546,6 +591,7 @@ void ShootingScene::OnRoomStateChanged(const Net::RoomStateData& state)
 		return;
 
 	roomState_ = state;
+	ConfirmReadyChange();
 	RemoveDepartedRemotePlayers();
 	if (state.state == Net::GameState::Results)
 		ApplyTargetSnapshot({});
@@ -568,7 +614,8 @@ void ShootingScene::OnGameStarted(const Net::GameStarted& event)
 	roomState_.rules = event.rules;
 	roomState_.vPlayers = event.players;
 	startedMatchId_ = matchId;
-	requestedReady_ = false;
+	pendingReadyChanges_ = {};
+	readyChangeRejected_ = false;
 	gun_->ResetGame();
 	//경기가 바뀌면 이전 경기의 이동 순번과 보정 기준을 같이 초기화.
 	inputSequence_ = lastAppliedInput_ = 0;

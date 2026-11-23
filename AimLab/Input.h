@@ -18,12 +18,17 @@ public:
 	bool IsDown(unsigned char key) const { return keys_[key]; }
 	bool WasPressed(unsigned char key) const { return pressed_[key]; }
 
+	void ToggleReady()
+	{
+		readyToggled = !readyToggled;
+	}
+
 	void EndFrame()
 	{
 		pressed_.fill(false);
 		mouseDelta = glm::vec2(0.0f);
 		firePressed = false;
-		readyClicked = false;
+		readyToggled = false;
 		leaveClicked = false;
 	}
 
@@ -35,7 +40,7 @@ public:
 
 	glm::vec2 mouseDelta{0.0f};
 	bool	  firePressed = false;
-	bool	  readyClicked = false;
+	bool	  readyToggled = false;
 	bool	  leaveClicked = false;
 
 private:

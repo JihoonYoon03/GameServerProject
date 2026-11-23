@@ -30,6 +30,7 @@ public:
 	void SendShoot();
 	void RecvShootResult(const Net::ShotResolved& result);
 	void OnRoomStateChanged(const Net::RoomStateData& state);
+	void OnReadyRejected(std::uint32_t requestId);
 	void OnGameStarted(const Net::GameStarted& event);
 	void DrawHUD();
 	void ApplyTargetPositions(const Net::UdpHeader& header,
@@ -43,9 +44,17 @@ private:
 	Net::SessionToken sessionToken_{};
 	Net::MembershipId membershipId_ = 0;
 	Net::RoomStateData roomState_{};
-	// 버튼은 마지막으로 보낸 선택을 토글하고 참가자 표시는 서버가 확정한 값을 쓴다.
-	bool requestedReady_ = false;
-	void RequestReadyChange();
+	struct ReadyChange
+	{
+		std::uint32_t requestId;
+		bool ready;
+	};
+	// 입력은 바로 보내고, 아직 서버가 확인하지 않은 요청을 TCP 전송 순서대로 보관한다.
+	std::queue<ReadyChange> pendingReadyChanges_;
+	bool readyChangeRejected_ = false;
+	const Net::PlayerData* FindLocalRoomPlayer() const;
+	void UpdateReadyInput(const Input& input);
+	void ConfirmReadyChange();
 	Hud ShowReadyUI() const;
 	bool mapLoadedSent_ = false;
 	Net::MatchId startedMatchId_ = 0;

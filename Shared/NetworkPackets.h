@@ -11,7 +11,7 @@ namespace Net
 	inline constexpr std::uint16_t UdpHeaderBytes = 40;
 	inline constexpr std::uint16_t MaxUdpPacketBytes = 1200;
 	inline constexpr std::uint16_t TargetSnapshotFixedBytes = UdpHeaderBytes + 2;
-	inline constexpr std::uint16_t TargetMotionBytes = 24;
+	inline constexpr std::uint16_t TargetMotionBytes = 25;
 	static_assert(TargetSnapshotFixedBytes + MaxTargets * TargetMotionBytes <= MaxUdpPacketBytes);
 
 	enum class TcpType : std::uint16_t

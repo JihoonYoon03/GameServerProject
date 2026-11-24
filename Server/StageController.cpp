@@ -11,6 +11,10 @@ namespace
 void StageController::StartGame(const Net::MatchRules& rules, Target& targets, Net::ServerTimeMs nowMs)
 {
 	targets.ClearTargets();
+	for (std::uint16_t index = 0; index < Net::OrbitTargetCount; ++index)
+		targets.SpawnTargets(rules, nowMs, Net::TargetKind::Orbiting);
+	for (std::uint16_t index = 0; index < Net::StationaryTargetCount; ++index)
+		targets.SpawnTargets(rules, nowMs, Net::TargetKind::Stationary);
 
 	startsAtMs_ = nowMs;
 	endsAtMs_ = nowMs + rules.durationMs;
@@ -33,7 +37,7 @@ Net::GameState StageController::UpdateMatch(const Net::MatchRules& rules, Target
 	if (nowMs > lastUpdateAtMs_)
 	{
 		const float deltaSeconds = static_cast<float>(nowMs - lastUpdateAtMs_) / 1000.0f;
-		targets.UpdateTargets(deltaSeconds, nowMs); // 타겟 갱신
+		targets.UpdateTargets(deltaSeconds, rules, nowMs); // 타겟 갱신
 		lastUpdateAtMs_ = nowMs; // 마지막 갱신 시간 업데이트
 	}
 

@@ -5,6 +5,10 @@
 namespace ShootingRange
 {
     inline constexpr float TargetHalfSize = 5.0f;
+    inline constexpr float TargetRadius = 0.3f;
+    inline constexpr float StationaryTargetRadius = 0.15f;
+    inline constexpr float OrbitRadius = 4.0f;
+    inline constexpr float OrbitAngularSpeed = 6.28318530718f * 1000.0f / Net::OrbitPeriodMs;
     inline constexpr float AreaInnerHalfSize = 2.0f;
     inline constexpr float WallHalfThickness = 0.1f;
     inline constexpr float WallHalfHeight = 0.375f;

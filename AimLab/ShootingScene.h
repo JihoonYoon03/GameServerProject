@@ -67,7 +67,7 @@ private:
 	struct RemoteTarget
 	{
 		Object* object;
-		glm::vec3 velocity;
+		Net::TargetMotionData motion;
 	};
 	std::vector<RemoteTarget> remoteTargets_;
 	void ApplyTargetSnapshot(const Net::TargetSnapshot& snapshot);
@@ -117,7 +117,7 @@ private:
 	Gun*				 gun_ = nullptr;
 	std::vector<Target*> targets_;
 	std::shared_ptr<Mesh> targetMesh_;
-	std::shared_ptr<Material> targetMaterial_;
+	std::array<std::shared_ptr<Material>, 3> targetMaterials_;
 	float targetSpawnTime_ = 0.0f;
 	StageController		 stages_;
 	Ray					 shot_;

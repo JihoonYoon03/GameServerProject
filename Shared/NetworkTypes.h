@@ -34,13 +34,18 @@ namespace Net
 	inline constexpr std::uint8_t MaxPlayers = 4;
 	inline constexpr std::uint8_t MinPlayersToStart = 2;
 	inline constexpr std::uint8_t UnassignedArea = 255;
-	inline constexpr std::uint16_t MaxTargets = 6;
+	inline constexpr std::uint16_t MovingTargetLimit = 6;
+	inline constexpr std::uint16_t OrbitTargetCount = 2;
+	inline constexpr std::uint16_t StationaryTargetCount = 2;
+	inline constexpr std::uint16_t MaxTargets = MovingTargetLimit + OrbitTargetCount + StationaryTargetCount;
 	inline constexpr std::uint16_t MaxRooms = 64;
 	inline constexpr std::uint32_t ServerTickRate = 30;
 	inline constexpr float PlayerMoveSpeed = 10.0f / 3.6f;
 	inline constexpr float PlayerHalfExtent = 0.25f;
 	inline constexpr std::uint32_t MatchDurationMs = 120000;
 	inline constexpr std::uint32_t TargetLifetimeMs = 3000;
+	inline constexpr std::uint32_t OrbitPeriodMs = 2000;
+	inline constexpr std::uint32_t OrbitLifetimeMs = OrbitPeriodMs * 3;
 	inline constexpr std::uint8_t MagazineCapacity = 6;
 	inline constexpr float FireIntervalSeconds = 0.2f;
 	inline constexpr float ReloadSeconds = 2.0f;
@@ -120,7 +125,8 @@ namespace Net
 	struct MatchRules
 	{
 		std::uint32_t durationMs = MatchDurationMs;
-		std::uint16_t activeTargetCount = MaxTargets;
+		// 빨간 이동 표적의 상한이며 파란색과 초록색은 각각 별도로 유지한다.
+		std::uint16_t activeTargetCount = MovingTargetLimit;
 		std::uint16_t pointsPerHit = 1;
 	};
 
@@ -140,7 +146,14 @@ namespace Net
 	};
 
 	// 표적 이동은 월드 좌표와 초당 이동 벡터로 전송한다.
-	struct TargetMotionData { glm::vec3 position{0.0f}; glm::vec3 velocity{0.0f}; };
+	enum class TargetKind : std::uint8_t { Moving, Orbiting, Stationary };
+
+	struct TargetMotionData
+	{
+		glm::vec3 position{0.0f};
+		glm::vec3 velocity{0.0f};
+		TargetKind kind = TargetKind::Moving;
+	};
 
 	// 사용: 서버 RoomManager::SendRoomList() / 클라 MainScene::UpdateRoomList(), MainScene::ShowRoomList() [선언]
 	struct RoomInfo

@@ -226,7 +226,7 @@ namespace Net
         {
             return Serialize(io, value.durationMs)
                 && Serialize(io, value.activeTargetCount)
-                && Serialize(io, value.pointsPerHit) && value.activeTargetCount <= MaxTargets;
+                && Serialize(io, value.pointsPerHit) && value.activeTargetCount <= MovingTargetLimit;
         }
         inline bool Serialize(PacketStream& io, PlayerStats& value)
         {
@@ -286,8 +286,12 @@ namespace Net
         }
         inline bool Serialize(PacketStream& io, TargetMotionData& value)
         {
-            return Serialize(io, value.position)
-                && Serialize(io, value.velocity);
+            std::uint8_t kind = static_cast<std::uint8_t>(value.kind);
+            if (!Serialize(io, value.position) || !Serialize(io, value.velocity)
+                || !Serialize(io, kind) || kind > static_cast<std::uint8_t>(TargetKind::Stationary))
+                return false;
+            value.kind = static_cast<TargetKind>(kind);
+            return true;
         }
         inline bool Serialize(PacketStream& io, TcpHeader& value)
         {

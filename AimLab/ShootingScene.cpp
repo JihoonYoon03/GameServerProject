@@ -7,7 +7,7 @@
 namespace
 {
 	constexpr float TargetAreaHalfSize = ShootingRange::TargetHalfSize;
-	constexpr float TargetScale = 0.3f;
+	constexpr float TargetScale = ShootingRange::TargetRadius;
 	constexpr Net::ServerTimeMs HitIndicatorDurationMs = 1000;
 
 	class PlayerHead : public Object
@@ -162,8 +162,14 @@ void ShootingScene::Initialize()
 	player_->UpdateCamera(camera_);
 
 	targetMesh_ = sphere;
-	targetMaterial_ = std::make_shared<Material>(shader);
-	targetMaterial_->color = {1.0f, 0.1f, 0.1f};
+	const std::array<glm::vec3, 3> targetColors{{
+		{1.0f, 0.1f, 0.1f}, {0.1f, 0.35f, 1.0f}, {0.1f, 1.0f, 0.1f}
+	}};
+	for (std::size_t index = 0; index < targetMaterials_.size(); ++index)
+	{
+		targetMaterials_[index] = std::make_shared<Material>(shader);
+		targetMaterials_[index]->color = targetColors[index];
+	}
 
 	lights_.push_back(Light::Point({100, 150, 110}, glm::vec3(1), 1.0f, 0.0f));
 }
@@ -290,7 +296,7 @@ void ShootingScene::SpawnTargets()
 	std::uniform_real_distribution<float> horizontal(-SpawnHalfSize, SpawnHalfSize);
 	std::uniform_real_distribution<float> height(0.5f, 2.0f);
 
-	std::unique_ptr<Target> target = std::make_unique<Target>(targetMesh_, targetMaterial_);
+	std::unique_ptr<Target> target = std::make_unique<Target>(targetMesh_, targetMaterials_.front());
 	target->transform.position = {horizontal(random_), height(random_), horizontal(random_)};
 	target->transform.scale = glm::vec3(TargetScale);
 	target->collider = ColliderType::Sphere;
@@ -705,23 +711,53 @@ void ShootingScene::ApplyTargetSnapshot(const Net::TargetSnapshot& snapshot)
 	for (std::size_t index = 0; index < snapshot.targetCount; ++index)
 	{
 		const Net::TargetMotionData& motion = snapshot.targets[index];
+		const std::shared_ptr<Material>& material = targetMaterials_[static_cast<std::size_t>(motion.kind)];
+		float radius = motion.kind == Net::TargetKind::Stationary
+			? ShootingRange::StationaryTargetRadius : ShootingRange::TargetRadius;
 		if (index == remoteTargets_.size())
 		{
-			Object* object = AddProp("Remote target", targetMesh_, targetMaterial_, motion.position, glm::vec3(TargetScale));
-			remoteTargets_.push_back({object, motion.velocity});
+			Object* object = AddProp("Remote target", targetMesh_, material, motion.position, glm::vec3(radius));
+			remoteTargets_.push_back({object, motion});
 		}
-		else
+
+		RemoteTarget& target = remoteTargets_[index];
+		if (target.motion.kind != motion.kind)
 		{
-			remoteTargets_[index].object->transform.position = motion.position;
-			remoteTargets_[index].velocity = motion.velocity;
+			// 표시 슬롯의 종류가 바뀌면 올바른 색상의 표시 객체로 교체한다.
+			Object* object = AddProp("Remote target", targetMesh_, material, motion.position, glm::vec3(radius));
+			RemoveObject(target.object->GetId());
+			target.object = object;
 		}
+		target.motion = motion;
+		target.object->transform.position = motion.position;
+		target.object->transform.scale = glm::vec3(radius);
 	}
 }
 
 void ShootingScene::AdvanceRemoteTargets(float deltaSeconds)
 {
-	for (const RemoteTarget& target : remoteTargets_)
-		target.object->transform.position += target.velocity * deltaSeconds;
+	if (deltaSeconds <= 0.0f) return;
+	float angle = ShootingRange::OrbitAngularSpeed * deltaSeconds;
+	float cosine = std::cos(angle);
+	float sine = std::sin(angle);
+	for (RemoteTarget& target : remoteTargets_)
+	{
+		Net::TargetMotionData& motion = target.motion;
+		if (motion.kind == Net::TargetKind::Orbiting)
+		{
+			// 접선 속도를 회전시켜 패킷 사이에도 같은 수평 원 궤도를 따라간다.
+			glm::vec3 previousVelocity = motion.velocity;
+			motion.velocity.x = previousVelocity.x * cosine - previousVelocity.z * sine;
+			motion.velocity.z = previousVelocity.x * sine + previousVelocity.z * cosine;
+			motion.position.x += (motion.velocity.z - previousVelocity.z) / ShootingRange::OrbitAngularSpeed;
+			motion.position.z -= (motion.velocity.x - previousVelocity.x) / ShootingRange::OrbitAngularSpeed;
+		}
+		else
+		{
+			motion.position += motion.velocity * deltaSeconds;
+		}
+		target.object->transform.position = motion.position;
+	}
 }
 
 void ShootingScene::UpdateMatchTime(const Net::MatchTime& time)

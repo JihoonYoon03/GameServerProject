@@ -8,8 +8,9 @@ class Target
 {
 public:
 	// 경기 진행 중 표적 생성 주기마다 한 번 호출한다.
-	void SpawnTargets(const Net::MatchRules& rules, Net::ServerTimeMs nowMs);
-	void UpdateTargets(float deltaTime, Net::ServerTimeMs nowMs);
+	void SpawnTargets(const Net::MatchRules& rules, Net::ServerTimeMs nowMs,
+		Net::TargetKind kind = Net::TargetKind::Moving);
+	void UpdateTargets(float deltaTime, const Net::MatchRules& rules, Net::ServerTimeMs nowMs);
 	Net::ShotOutcome TargetHits(const glm::vec3& shooterPosition, const glm::vec3& aimDirection,
 		const std::vector<Net::BoxData>& worldBoxes, const Net::MatchRules& rules, Net::ServerTimeMs nowMs);
 	void ClearTargets();
@@ -24,6 +25,8 @@ private:
 		Net::TargetMotionData motion;
 		Net::ServerTimeMs spawnedAtMs;
 		float elapsedSeconds = 0.0f;
+		glm::vec3 orbitCenter{0.0f};
+		float initialOrbitAngle = 0.0f;
 	};
 
 	std::vector<ActiveTarget> targets_;

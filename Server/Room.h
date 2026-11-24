@@ -16,7 +16,7 @@
 class Room
 {
 public:
-	// ¼ö½Å ´ë»óÀº ¸ğµÎ UDP µî·ÏÀ» ¿Ï·áÇÏ°í ÀÌ ¹æ¿¡ ¼ÓÇÑ Âü°¡ÀÚÀÌ´Ù.
+	// ìˆ˜ì‹  ëŒ€ìƒì€ ëª¨ë‘ UDP ë“±ë¡ì„ ì™„ë£Œí•˜ê³  ì´ ë°©ì— ì†í•œ ì°¸ê°€ìì´ë‹¤.
 	struct TargetRecipient
 	{
 		Net::SessionToken sessionToken{};
@@ -29,7 +29,7 @@ public:
 	Room(Net::MatchContext context, Target& targets,
 		std::vector<TargetRecipient> recipients, PacketSender sender);
 	~Room();
-	// ¹æÀÇ »óÅÂ¿Í Àá±İ ÀúÀå °ø°£Àº º¹»çÇÏ°Å³ª ÀÌµ¿ÇÏÁö ¾Ê´Â´Ù.
+	// ë°©ì˜ ìƒíƒœì™€ ì ê¸ˆ ì €ì¥ ê³µê°„ì€ ë³µì‚¬í•˜ê±°ë‚˜ ì´ë™í•˜ì§€ ì•ŠëŠ”ë‹¤.
 	Room(const Room&) = delete;
 	Room& operator=(const Room&) = delete;
 	Room(Room&&) = delete;
@@ -42,27 +42,27 @@ public:
 	void RemovePlayerFromRoom(const Net::SessionToken& player);
 
 	void SendRoomState();
-	void StartGameIfReady(bool singlePlayerTest = false);
+	void StartGameIfReady();
 
-	// ½ÃÀÛ, Á¾·á ´ë±â, Á¾·á È®ÀÎÀº ¸ŞÀÎ ½º·¹µå¿¡¼­¸¸ È£ÃâÇÑ´Ù.
+	// ì‹œì‘, ì¢…ë£Œ ëŒ€ê¸°, ì¢…ë£Œ í™•ì¸ì€ ë©”ì¸ ìŠ¤ë ˆë“œì—ì„œë§Œ í˜¸ì¶œí•œë‹¤.
 	bool StartRoomThread();
 	void StopRoom();
 	bool IsThreadFinished() const;
 	static DWORD WINAPI RoomProc(LPVOID parameter);
-	// ¹æ ½º·¹µå ¾È¿¡¼­´Â ´ë±âÇÏÁö ¾Ê°í Á¾·á¸¸ ¿äÃ»ÇÑ´Ù.
+	// ë°© ìŠ¤ë ˆë“œ ì•ˆì—ì„œëŠ” ëŒ€ê¸°í•˜ì§€ ì•Šê³  ì¢…ë£Œë§Œ ìš”ì²­í•œë‹¤.
 	void RequestStop();
 	bool AddCommand(const Net::RoomCommand& command);
 	std::queue<Net::RoomManagementEvent> TakeStateEvents();
 
 	bool UpdatePlayerTransform(const Net::SessionToken& player,
 		const Net::PlayerTransform& input, Net::ServerTimeMs receivedAtMs);
-	// ¹æ ½º·¹µå¿¡¼­ ÀüÃ¼ ÇÃ·¹ÀÌ¾îÀÇ ¼­¹ö È®Á¤ À§Ä¡¿Í ¸¶Áö¸· Ã³¸® ÀÔ·Â ¼ø¹øÀ» ¼Û½ÅÇÑ´Ù.
+	// ë°© ìŠ¤ë ˆë“œì—ì„œ ì „ì²´ í”Œë ˆì´ì–´ì˜ ì„œë²„ í™•ì • ìœ„ì¹˜ì™€ ë§ˆì§€ë§‰ ì²˜ë¦¬ ì…ë ¥ ìˆœë²ˆì„ ì†¡ì‹ í•œë‹¤.
 	void SendTransformData();
 	void RecvShoot(const Net::RoomCommand& command, const Net::FireRequest& request);
 	Net::ShotResolved JudgeShoot(ClientPlayer& player, const Net::FireRequest& request, Net::ServerTimeMs nowMs);
 	void SendShootResult(const Net::ShotResolved& result, std::uint32_t requestId);
 
-	// È°¼º Ç¥Àû ÀüÃ¼ ¸ñ·ÏÀ» µ¿ÀÏ ½ÃÁ¡ ±âÁØÀ¸·Î ³ª´² UDP Àü¼ÛÇÑ´Ù.
+	// í™œì„± í‘œì  ì „ì²´ ëª©ë¡ì„ ë™ì¼ ì‹œì  ê¸°ì¤€ìœ¼ë¡œ ë‚˜ëˆ  UDP ì „ì†¡í•œë‹¤.
 	void SendTargetPositions(Net::ServerTimeMs nowMs);
 private:
 	void Tick();
@@ -73,7 +73,7 @@ private:
 	void EnterPlayer(const Net::RoomCommand& command, const Net::RoomEnterCommand& enter);
 	void PublishStateEvent(Net::RoomManagementEventType type);
 
-	// °æ±â »óÅÂ´Â ¹æ ½º·¹µå¸¸ ¹Ù²Û´Ù.
+	// ê²½ê¸° ìƒíƒœëŠ” ë°© ìŠ¤ë ˆë“œë§Œ ë°”ê¾¼ë‹¤.
 	Net::RoomStateData m_state{};
 	std::vector<ClientPlayer> m_vPlayers;
 	Target targetController_;
@@ -83,16 +83,16 @@ private:
 
 	HANDLE roomThread_ = nullptr;
 	std::atomic<bool> stopRequested_{false};
-	//¹æ¸¶´Ù ÀÓ°è ¿µ¿ªÀÌ ÇÊ¿äÇÑ ÀÌÀ¯: ¼­¹ö ¸ŞÀÎ ¾²·¹µå°¡ ÆĞÅ¶À» ¹Ş¾Æ ¹æÀÇ Å¥¿¡ ³Ö¾îÁÖ°í,
-	//¹æ ¾²·¹µå´Â ProcessCommands¿¡¼­ ÇØ´ç Å¥¸¦ »ç¿ëÇÏ±â ¶§¹®
-	CRITICAL_SECTION commandCS_{}; // »ç¿ë Àü ÃÊ±âÈ­ÇÏ°í ½º·¹µå Á¾·á ´ë±â ÈÄ ÇØÁ¦ÇÑ´Ù.
+	//ë°©ë§ˆë‹¤ ì„ê³„ ì˜ì—­ì´ í•„ìš”í•œ ì´ìœ : ì„œë²„ ë©”ì¸ ì“°ë ˆë“œê°€ íŒ¨í‚·ì„ ë°›ì•„ ë°©ì˜ íì— ë„£ì–´ì£¼ê³ ,
+	//ë°© ì“°ë ˆë“œëŠ” ProcessCommandsì—ì„œ í•´ë‹¹ íë¥¼ ì‚¬ìš©í•˜ê¸° ë•Œë¬¸
+	CRITICAL_SECTION commandCS_{}; // ì‚¬ìš© ì „ ì´ˆê¸°í™”í•˜ê³  ìŠ¤ë ˆë“œ ì¢…ë£Œ ëŒ€ê¸° í›„ í•´ì œí•œë‹¤.
 	std::queue<Net::RoomCommand> commandQueue_;
 	std::queue<Net::RoomManagementEvent> m_qStateEvents;
 
-	Target* targets_ = &targetController_; // ÁÖÀÔµÈ Ç¥Àû °ü¸®ÀÚ´Â ¹æº¸´Ù ¿À·¡ À¯ÁöµÇ¾î¾ß ÇÑ´Ù.
+	Target* targets_ = &targetController_; // ì£¼ì…ëœ í‘œì  ê´€ë¦¬ìëŠ” ë°©ë³´ë‹¤ ì˜¤ë˜ ìœ ì§€ë˜ì–´ì•¼ í•œë‹¤.
 	std::vector<TargetRecipient> targetRecipients_;
 	PacketSender m_SendPacket;
-	//ÇÃ·¹ÀÌ¾î¡¤Ç¥Àû ½º³À¼¦Àº °°Àº UDP ¼ø¹øÀ» »ç¿ëÇÑ´Ù.
+	//í”Œë ˆì´ì–´Â·í‘œì  ìŠ¤ëƒ…ìƒ·ì€ ê°™ì€ UDP ìˆœë²ˆì„ ì‚¬ìš©í•œë‹¤.
 	Net::Sequence m_nSnapshotSequence = 0;
 };
 

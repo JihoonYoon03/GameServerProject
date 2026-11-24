@@ -39,7 +39,7 @@ void Room::AssignPlayerAreas()
 {
 	if (m_state.vAreas.empty())
 	{
-		//1ÀÎ ¹æÀº ¿ø·¡´ë·Î ³²ÂÊ ±¸¿ªÀ» »ç¿ëÇÏ°í, ´ÙÀÎ ¹æÀº Á¤¿ø¸¸Å­ ±¸¿ªÀ» ÁØºñÇÑ´Ù.
+		//1ì¸ ë°©ì€ ì›ë˜ëŒ€ë¡œ ë‚¨ìª½ êµ¬ì—­ì„ ì‚¬ìš©í•˜ê³ , ë‹¤ì¸ ë°©ì€ ì •ì›ë§Œí¼ êµ¬ì—­ì„ ì¤€ë¹„í•œë‹¤.
 		std::size_t areaCount = (std::min)(static_cast<std::size_t>(m_state.capacity),
 			ShootingRange::AreaCenters.size());
 		for (std::size_t index = 0; index < areaCount; ++index)
@@ -55,7 +55,7 @@ void Room::AssignPlayerAreas()
 		}
 		m_vWorldBoxes.clear();
 
-		//½ºÅ×ÀÌÁö ÁöÇü Á¤º¸ ÀúÀå
+		//ìŠ¤í…Œì´ì§€ ì§€í˜• ì •ë³´ ì €ì¥
 		for (const glm::vec3& areaCenter : ShootingRange::AreaCenters)
 			for (const ShootingRange::AreaPart& part : ShootingRange::AreaParts)
 				if (part.solid)
@@ -70,7 +70,7 @@ void Room::AssignPlayerAreas()
 		if (player.m_PlayerData.areaId != Net::UnassignedArea)
 			continue;
 
-		// »õ Âü°¡ÀÚ¸¸ ºó ±¸¿ª¿¡ ¹èÁ¤ÇÑ´Ù. ±âÁ¸ Âü°¡ÀÚÀÇ ±¸¿ª°ú À§Ä¡´Â À¯ÁöÇÑ´Ù.
+		// ìƒˆ ì°¸ê°€ìë§Œ ë¹ˆ êµ¬ì—­ì— ë°°ì •í•œë‹¤. ê¸°ì¡´ ì°¸ê°€ìì˜ êµ¬ì—­ê³¼ ìœ„ì¹˜ëŠ” ìœ ì§€í•œë‹¤.
 		const auto area = std::find_if(m_state.vAreas.begin(), m_state.vAreas.end(), [&](const Net::AreaData& candidate)
 		{
 			return std::none_of(m_vPlayers.begin(), m_vPlayers.end(), [&](const ClientPlayer& occupant)
@@ -229,7 +229,7 @@ void Room::SetPlayerReady(const Net::RoomCommand& command, bool ready)
 
 bool Room::AreAllPlayersReady() const
 {
-	// °á°ú È­¸é¿¡¼­´Â ÇöÀç ¹æ¿¡ ³²¾Æ ÀÖ´Â Âü°¡ÀÚ°¡ ¸ğµÎ ÁØºñÇÏ¸é Àç½ÃÀÛÇÑ´Ù.
+	// ê²°ê³¼ í™”ë©´ì—ì„œëŠ” í˜„ì¬ ë°©ì— ë‚¨ì•„ ìˆëŠ” ì°¸ê°€ìê°€ ëª¨ë‘ ì¤€ë¹„í•˜ë©´ ì¬ì‹œì‘í•œë‹¤.
 	std::size_t minimumPlayers = m_state.state == Net::GameState::Results ? 1 : Net::MinPlayersToStart;
 	if (m_vPlayers.size() < minimumPlayers || m_vPlayers.size() > Net::MaxPlayers)
 		return false;
@@ -242,16 +242,11 @@ bool Room::AreAllPlayersReady() const
 	return true;
 }
 
-void Room::StartGameIfReady(bool singlePlayerTest)
+void Room::StartGameIfReady()
 {
 	if (m_state.state != Net::GameState::Preparing && m_state.state != Net::GameState::Results)
 		return;
-	if (singlePlayerTest && m_state.state == Net::GameState::Preparing)
-	{
-		if (m_vPlayers.size() != 1 || m_vPlayers.front().m_PlayerData.mapLoaded == 0)
-			return;
-	}
-	else if (!AreAllPlayersReady())
+	if (!AreAllPlayersReady())
 		return;
 
 	Net::ServerTimeMs nowMs = GetTickCount64();
@@ -266,7 +261,7 @@ void Room::StartGameIfReady(bool singlePlayerTest)
 		player.m_PlayerData.ready = Net::ReadyState::Playing;
 		player.m_PlayerData.stats = {};
 		player.m_nLastShotId = 0;
-		// Å¬¶óÀÌ¾ğÆ®µµ »õ °æ±â¿¡¼­ ÀÔ·Â ¼ø¹øÀ» 0ºÎÅÍ ½ÃÀÛÇÑ´Ù.
+		// í´ë¼ì´ì–¸íŠ¸ë„ ìƒˆ ê²½ê¸°ì—ì„œ ì…ë ¥ ìˆœë²ˆì„ 0ë¶€í„° ì‹œì‘í•œë‹¤.
 		player.m_nLastProcessedInput = 0;
 		player.m_nLastMovementTimeMs = 0;
 		player.m_bHasProcessedInput = false;
@@ -291,7 +286,7 @@ void Room::StartGameIfReady(bool singlePlayerTest)
 
 void Room::SendRoomState()
 {
-	// Âü°¡ÀÚ Á¤º¸´Â ¹æÀÌ ¼ÒÀ¯ÇÑ ÇöÀç »óÅÂ¿¡¼­ º¹»çÇÑ´Ù.
+	// ì°¸ê°€ì ì •ë³´ëŠ” ë°©ì´ ì†Œìœ í•œ í˜„ì¬ ìƒíƒœì—ì„œ ë³µì‚¬í•œë‹¤.
 	m_state.vPlayers.clear();
 	for (const ClientPlayer& player : m_vPlayers)
 		m_state.vPlayers.push_back(player.m_PlayerData);
@@ -364,12 +359,12 @@ DWORD WINAPI Room::RoomProc(LPVOID parameter)
 		catch (...)
 		{
 			room->RequestStop();
-			fputs("¹æ °»½Å Áß ¿¹¿Ü°¡ ¹ß»ıÇÏ¿© ¹æ ½º·¹µå¸¦ Á¾·áÇÕ´Ï´Ù.\n", stderr);
+			fputs("ë°© ê°±ì‹  ì¤‘ ì˜ˆì™¸ê°€ ë°œìƒí•˜ì—¬ ë°© ìŠ¤ë ˆë“œë¥¼ ì¢…ë£Œí•©ë‹ˆë‹¤.\n", stderr);
 			result = 1;
 			break;
 		}
 
-		// ³ª´°¼ÀÀÇ ³ª¸ÓÁö¸¦ ½×¾Æ ÃÊ´ç °»½Å È½¼ö°¡ ¾î±ß³ªÁö ¾Ê°Ô ÇÑ´Ù.
+		// ë‚˜ëˆ—ì…ˆì˜ ë‚˜ë¨¸ì§€ë¥¼ ìŒ“ì•„ ì´ˆë‹¹ ê°±ì‹  íšŸìˆ˜ê°€ ì–´ê¸‹ë‚˜ì§€ ì•Šê²Œ í•œë‹¤.
 		nextTick += intervalMs;
 		accumulatedRemainder += remainderMs;
 		if (accumulatedRemainder >= Net::ServerTickRate)
@@ -382,7 +377,7 @@ DWORD WINAPI Room::RoomProc(LPVOID parameter)
 		if (now < nextTick && !room->stopRequested_)
 			Sleep(static_cast<DWORD>(nextTick - now));
 		else if (now > nextTick + intervalMs)
-			nextTick = now; // ´Ê¾îÁø °»½ÅÀ» ÇÑ²¨¹ø¿¡ ¹İº¹ÇÏÁö ¾Ê´Â´Ù.
+			nextTick = now; // ëŠ¦ì–´ì§„ ê°±ì‹ ì„ í•œêº¼ë²ˆì— ë°˜ë³µí•˜ì§€ ì•ŠëŠ”ë‹¤.
 	}
 	return result;
 }
@@ -424,7 +419,7 @@ std::queue<Net::RoomManagementEvent> Room::TakeStateEvents()
 
 void Room::ProcessCommands()
 {
-	// ¸í·É¸¸ ¿Å±ä µÚ Àá±İÀ» Ç®¾î ¼­¹ö ¸ŞÀÎÀÌ ´ÙÀ½ ¸í·ÉÀ» ³ÖÀ» ¼ö ÀÖ°Ô ÇÑ´Ù.
+	// ëª…ë ¹ë§Œ ì˜®ê¸´ ë’¤ ì ê¸ˆì„ í’€ì–´ ì„œë²„ ë©”ì¸ì´ ë‹¤ìŒ ëª…ë ¹ì„ ë„£ì„ ìˆ˜ ìˆê²Œ í•œë‹¤.
 	std::queue<Net::RoomCommand> commands;
 	EnterCriticalSection(&commandCS_);
 	commands.swap(commandQueue_);
@@ -446,7 +441,7 @@ void Room::ProcessCommand(const Net::RoomCommand& command)
 	const Net::RoomEnterCommand* enter = std::get_if<Net::RoomEnterCommand>(&command.body);
 	if (enter)
 	{
-		// ´ë±â Áß º¸³½ ¿äÃ»ÀÌ¶óµµ Ã³¸®ÇÒ ¶§ °æ±â°¡ ½ÃÀÛµÆÀ¸¸é ÀÔÀå °ÅÀıÀ» µ¹·ÁÁØ´Ù.
+		// ëŒ€ê¸° ì¤‘ ë³´ë‚¸ ìš”ì²­ì´ë¼ë„ ì²˜ë¦¬í•  ë•Œ ê²½ê¸°ê°€ ì‹œì‘ëìœ¼ë©´ ì…ì¥ ê±°ì ˆì„ ëŒë ¤ì¤€ë‹¤.
 		EnterPlayer(command, *enter);
 		return;
 	}
@@ -463,7 +458,7 @@ void Room::ProcessCommand(const Net::RoomCommand& command)
 	if (!member)
 		return;
 
-	// Á¾·á´Â °æ±â ½ÃÀÛ °øÁö°¡ ¼Û½ÅµÇ±â ÀüÀÇ °æ±â ¹øÈ£·Îµµ µµÂøÇÒ ¼ö ÀÖ´Ù.
+	// ì¢…ë£ŒëŠ” ê²½ê¸° ì‹œì‘ ê³µì§€ê°€ ì†¡ì‹ ë˜ê¸° ì „ì˜ ê²½ê¸° ë²ˆí˜¸ë¡œë„ ë„ì°©í•  ìˆ˜ ìˆë‹¤.
 	if (std::get_if<Net::ClientDisconnected>(&command.body))
 	{
 		RemovePlayerFromRoom(command.sessionToken);
@@ -497,13 +492,6 @@ void Room::ProcessCommand(const Net::RoomCommand& command)
 	{
 		if (ready->roomId == context.roomId)
 			SetPlayerReady(command, ready->ready != 0);
-		return;
-	}
-	const Net::StartGameRequest* start = std::get_if<Net::StartGameRequest>(&command.body);
-	if (start)
-	{
-		if (start->roomId == context.roomId)
-			StartGameIfReady(true);
 		return;
 	}
 	const Net::FireRequest* shot = std::get_if<Net::FireRequest>(&command.body);
@@ -663,11 +651,11 @@ void Room::SendShootResult(const Net::ShotResolved& result, std::uint32_t reques
 bool Room::UpdatePlayerTransform(const Net::SessionToken& token,
 	const Net::PlayerTransform& input, Net::ServerTimeMs receivedAtMs)
 {
-	//¹æÀÌ ÇÃ·¹ÀÌ ÁßÀÎ°¡
+	//ë°©ì´ í”Œë ˆì´ ì¤‘ì¸ê°€
 	if (m_state.state != Net::GameState::Playing)
 		return false;
 
-	//ÅäÅ«°ú ÀÏÄ¡ÇÏ´Â ÇÃ·¹ÀÌ¾î Ã£±â
+	//í† í°ê³¼ ì¼ì¹˜í•˜ëŠ” í”Œë ˆì´ì–´ ì°¾ê¸°
 	const auto player = std::find_if(m_vPlayers.begin(), m_vPlayers.end(), [&](const ClientPlayer& entry)
 	{
 		return entry.m_PlayerData.m_sessionToken == token;
@@ -675,13 +663,13 @@ bool Room::UpdatePlayerTransform(const Net::SessionToken& token,
 	if (player == m_vPlayers.end())
 		return false;
 
-	//Ã£Àº ÇÃ·¹ÀÌ¾î°¡ ¹èÁ¤¹ŞÀº ±¸¿ª°ú ÀÏÄ¡ÇÏ´Â ±¸¿ª Å½»ö(ÀÌµ¿ ±¸¿ª °æ°è Á¦ÇÑÀ» À§ÇØ)
+	//ì°¾ì€ í”Œë ˆì´ì–´ê°€ ë°°ì •ë°›ì€ êµ¬ì—­ê³¼ ì¼ì¹˜í•˜ëŠ” êµ¬ì—­ íƒìƒ‰(ì´ë™ êµ¬ì—­ ê²½ê³„ ì œí•œì„ ìœ„í•´)
 	const auto area = std::find_if(m_state.vAreas.begin(), m_state.vAreas.end(), [&](const Net::AreaData& entry)
 	{
 		return entry.areaId == player->m_PlayerData.areaId;
 	});
 
-	//±¸¿ª Å½»ö ¼º°øÇÑ °æ¿ì ÀÌµ¿ °è»ê ÈÄ ¸®ÅÏ
+	//êµ¬ì—­ íƒìƒ‰ ì„±ê³µí•œ ê²½ìš° ì´ë™ ê³„ì‚° í›„ ë¦¬í„´
 	return area != m_state.vAreas.end() && player->ApplyMovement(input, *area, m_vWorldBoxes, receivedAtMs);
 }
 
@@ -693,46 +681,46 @@ void Room::SendTransformData()
 		m_vPlayers.size() > Net::MaxPlayers)
 		return;
 
-	//½º³À¼¦(¼ø°£ÀûÀÎ ¹æÀÇ »óÅÂ)À» »ı¼ºÇÑ ¼­¹ö½Ã°¢
+	//ìŠ¤ëƒ…ìƒ·(ìˆœê°„ì ì¸ ë°©ì˜ ìƒíƒœ)ì„ ìƒì„±í•œ ì„œë²„ì‹œê°
 	Net::ServerTimeMs nowMs = GetTickCount64();
 	Net::UdpPacket<Net::PlayerSnapshot> snapshot;
 
-	//data´Â ÆĞÅ¶ÀÇ ½ÇÁ¦ µ¥ÀÌÅÍ ºÎºĞÀ» ·¹ÆÛ·±½º·Î °®´Â º¯¼öÀÓ.
+	//dataëŠ” íŒ¨í‚·ì˜ ì‹¤ì œ ë°ì´í„° ë¶€ë¶„ì„ ë ˆí¼ëŸ°ìŠ¤ë¡œ ê°–ëŠ” ë³€ìˆ˜ì„.
 	Net::PlayerSnapshot& data = snapshot.packetData;
 	data.serverTimeMs = nowMs;
-	//¸®ºñÀü = ¹æ »óÅÂ °»½Å ¼ø¹ø
-	//Å¬¶ó ÀÔÀå¿¡¼­ ÆĞÅ¶ µ¥ÀÌÅÍ¸¦ ¹Ş¾Æ º¯È¯ÇÑ µÚ, ¸®ºñÀüÀ» ¸ÕÀú Ã¼Å©ÇØ¼­
-	//Å¬¶ó°¡ ±â·ÏÇÑ ¸¶Áö¸· ¹æ »óÅÂ ¼ø¹øº¸´Ù ÀÌÀü ¼ø¹øÀÎ °æ¿ì => ÀÌÈÄ Ã³¸®´Â ÇÏÁö ¾ÊÀ½
+	//ë¦¬ë¹„ì „ = ë°© ìƒíƒœ ê°±ì‹  ìˆœë²ˆ
+	//í´ë¼ ì…ì¥ì—ì„œ íŒ¨í‚· ë°ì´í„°ë¥¼ ë°›ì•„ ë³€í™˜í•œ ë’¤, ë¦¬ë¹„ì „ì„ ë¨¼ì € ì²´í¬í•´ì„œ
+	//í´ë¼ê°€ ê¸°ë¡í•œ ë§ˆì§€ë§‰ ë°© ìƒíƒœ ìˆœë²ˆë³´ë‹¤ ì´ì „ ìˆœë²ˆì¸ ê²½ìš° => ì´í›„ ì²˜ë¦¬ëŠ” í•˜ì§€ ì•ŠìŒ
 	data.requiredRevision = m_state.version.revision;
 	data.playerCount = static_cast<std::uint8_t>(m_vPlayers.size());
 
-	//¼­¹ö ÀÌµ¿¡¤Ãæµ¹ Ã³¸®°¡ ³¡³­ ½ÇÁ¦ ÇÃ·¹ÀÌ¾î µ¥ÀÌÅÍ¸¦ ±â·Ï
+	//ì„œë²„ ì´ë™Â·ì¶©ëŒ ì²˜ë¦¬ê°€ ëë‚œ ì‹¤ì œ í”Œë ˆì´ì–´ ë°ì´í„°ë¥¼ ê¸°ë¡
 	for (size_t index = 0; index < m_vPlayers.size(); ++index)
 	{
-		//ÅäÅ«
+		//í† í°
 		data.players[index].m_sessionToken = m_vPlayers[index].m_PlayerData.m_sessionToken;
-		//ÇöÀç º¯È¯ »óÅÂ
+		//í˜„ì¬ ë³€í™˜ ìƒíƒœ
 		data.players[index].pose = m_vPlayers[index].m_PlayerData.pose;
-		//¸¶Áö¸·À¸·Î Ã³¸®ÇÑ ÀÌµ¿ ¿äÃ» ¼ø¹ø
+		//ë§ˆì§€ë§‰ìœ¼ë¡œ ì²˜ë¦¬í•œ ì´ë™ ìš”ì²­ ìˆœë²ˆ
 		data.players[index].lastProcessedInput = m_vPlayers[index].m_nLastProcessedInput;
 	}
 
-	//Çì´õ ¼³Á¤
+	//í—¤ë” ì„¤ì •
 	snapshot.header.type = Net::UdpType::PlayerSnapshot;
 	snapshot.header.context = context;
 	snapshot.header.sequence = ++m_nSnapshotSequence;
 	snapshot.header.serverTick = static_cast<std::uint32_t>(nowMs * Net::ServerTickRate / 1000);
 
-	// º»¹®Àº µ¿ÀÏÇÏ°í, Çì´õÀÇ ¼ö½ÅÀÚ ÅäÅ«°ú ÀçÀÔÀå ½Äº°ÀÚ¸¸ °¢ Á¢¼ÓÀÚ¿¡ ¸ÂÃá´Ù.
+	// ë³¸ë¬¸ì€ ë™ì¼í•˜ê³ , í—¤ë”ì˜ ìˆ˜ì‹ ì í† í°ê³¼ ì¬ì…ì¥ ì‹ë³„ìë§Œ ê° ì ‘ì†ìì— ë§ì¶˜ë‹¤.
 	for (const TargetRecipient& recipient : targetRecipients_)
 	{
 		snapshot.header.m_sessionToken = recipient.sessionToken;
 		snapshot.header.membershipId = recipient.membershipId;
 		Net::SendRequest request{recipient.sessionToken, {}};
 
-		//µ¥ÀÌÅÍ ³×Æ®¿öÅ© ¹ÙÀÌÆ®·Î º¯È¯ÇÏ¿© ÀúÀå
+		//ë°ì´í„° ë„¤íŠ¸ì›Œí¬ ë°”ì´íŠ¸ë¡œ ë³€í™˜í•˜ì—¬ ì €ì¥
 		if (Net::PacketCodec::EncodeUdp(snapshot, request.packet))
-			//Àü¼Û
+			//ì „ì†¡
 			m_SendPacket(request);
 	}
 }

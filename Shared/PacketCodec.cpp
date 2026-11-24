@@ -23,7 +23,6 @@ namespace Net
         case TcpType::LeaveRoomResult:
         case TcpType::MapLoaded:
         case TcpType::ReadyChangeRequest:
-        case TcpType::StartGameRequest:
         case TcpType::RoomState:
         case TcpType::FireRequest:
         case TcpType::ShotResolved:

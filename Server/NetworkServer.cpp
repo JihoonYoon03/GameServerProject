@@ -5,7 +5,7 @@
 
 #pragma comment(lib, "bcrypt.lib")
 
-//UDP ÁÖ¼Ò 2°³°¡ °°ÀºÁö ¿©ºÎ
+//UDP ì£¼ì†Œ 2ê°œê°€ ê°™ì€ì§€ ì—¬ë¶€
 bool SameEndpoint(const sockaddr_in& first, const sockaddr_in& second)
 {
 	return first.sin_family == AF_INET && second.sin_family == AF_INET &&
@@ -15,10 +15,10 @@ bool SameEndpoint(const sockaddr_in& first, const sockaddr_in& second)
 
 void NetworkServer::RegisterPlayerUDP(const Net::UdpHeader& header, const sockaddr_in& sourceAddress)
 {
-	//¼­¹ö Á¾·á ¿äÃ» »óÅÂÀÎÁö || Çì´õ°¡ Á¤»óÀÌ ¾Æ´ÑÁö ||
-	//Çì´õ Å¸ÀÔÀÌ µî·Ï ¿äÃ»ÀÌ ¾Æ´ÑÁö || Çì´õ ¿Ü¿¡ ´Ù¸¥ µ¥ÀÌÅÍ°¡ ÀÖ´ÂÁö ||
-	//Çì´õ º¯¼ö Áß, µî·Ï ¿äÃ»°ú »ó°ü¾ø´Â °ªÀÌ ±âº»°ªÀÌ ¾Æ´ÑÁö ||
-	//Á¢¼Ó ¿äÃ»ÇÑ Å¬¶ó ÁÖ¼Ò°¡ IPv4°¡ ¾Æ´ÑÁö || Æ÷Æ®°¡ 0À¸·Î µÇ¾îÀÖ´ÂÁö
+	//ì„œë²„ ì¢…ë£Œ ìš”ì²­ ìƒíƒœì¸ì§€ || í—¤ë”ê°€ ì •ìƒì´ ì•„ë‹Œì§€ ||
+	//í—¤ë” íƒ€ì…ì´ ë“±ë¡ ìš”ì²­ì´ ì•„ë‹Œì§€ || í—¤ë” ì™¸ì— ë‹¤ë¥¸ ë°ì´í„°ê°€ ìˆëŠ”ì§€ ||
+	//í—¤ë” ë³€ìˆ˜ ì¤‘, ë“±ë¡ ìš”ì²­ê³¼ ìƒê´€ì—†ëŠ” ê°’ì´ ê¸°ë³¸ê°’ì´ ì•„ë‹Œì§€ ||
+	//ì ‘ì† ìš”ì²­í•œ í´ë¼ ì£¼ì†Œê°€ IPv4ê°€ ì•„ë‹Œì§€ || í¬íŠ¸ê°€ 0ìœ¼ë¡œ ë˜ì–´ìˆëŠ”ì§€
 	if (m_bStopRequested || !Net::PacketCodec::ValidateHeader(header) ||
 		header.type != Net::UdpType::RegisterRequest ||
 		header.context.roomId != 0 || header.context.matchId != 0 ||
@@ -26,40 +26,40 @@ void NetworkServer::RegisterPlayerUDP(const Net::UdpHeader& header, const sockad
 		sourceAddress.sin_family != AF_INET || sourceAddress.sin_port == 0)
 		return;
 
-	//TCP·Î Á¢¼ÓÇÑ Å¬¶óÀÌ¾ğÆ® ¸ñ·Ï ¼øÈ¸
+	//TCPë¡œ ì ‘ì†í•œ í´ë¼ì´ì–¸íŠ¸ ëª©ë¡ ìˆœíšŒ
 	for (Client& client : m_vClients)
 	{
-		//¼ÒÄÏ ¾ø°Å³ª ÅäÅ« ºÒÀÏÄ¡ ½Ã ½ºÅµ
+		//ì†Œì¼“ ì—†ê±°ë‚˜ í† í° ë¶ˆì¼ì¹˜ ì‹œ ìŠ¤í‚µ
 		if (client.GetTCPSocket() == INVALID_SOCKET || client.GetSessionToken() != header.m_sessionToken)
 			continue;
 
-		//TCP ¼ÒÄÏ¿¡¼­ ÁÖ¼Ò °¡Á®¿À°í
-		//ÇØ´ç ÁÖ¼Ò¿Í UDP Á¢¼Ó ¿äÃ»ÇÑ Å¬¶óÀÌ¾ğÆ® ÁÖ¼Ò¸¦ ºñ±³
+		//TCP ì†Œì¼“ì—ì„œ ì£¼ì†Œ ê°€ì ¸ì˜¤ê³ 
+		//í•´ë‹¹ ì£¼ì†Œì™€ UDP ì ‘ì† ìš”ì²­í•œ í´ë¼ì´ì–¸íŠ¸ ì£¼ì†Œë¥¼ ë¹„êµ
 		sockaddr_in tcpPeer{};
 		int length = sizeof(tcpPeer);
 		if (getpeername(client.GetTCPSocket(), (sockaddr*)(&tcpPeer), &length) == SOCKET_ERROR ||
 			tcpPeer.sin_family != AF_INET || tcpPeer.sin_addr.s_addr != sourceAddress.sin_addr.s_addr)
 			return;
 
-		// UDP ÁÖ¼Ò´Â ÀÌ TCP ¿¬°á¿¡¼­ ÇÑ ¹ø¸¸ µî·ÏÇÑ´Ù.
+		// UDP ì£¼ì†ŒëŠ” ì´ TCP ì—°ê²°ì—ì„œ í•œ ë²ˆë§Œ ë“±ë¡í•œë‹¤.
 		if (client.m_bUDPRegistered)
 			return;
 
-		//µî·Ï¿¡ ´ëÇÑ ÀÀ´ä µ¥ÀÌÅÍ »ı¼º
+		//ë“±ë¡ì— ëŒ€í•œ ì‘ë‹µ ë°ì´í„° ìƒì„±
 		Net::UdpPacket<Net::UdpRegisterResult> response;
 		response.header.type = Net::UdpType::RegisterResult;
 		response.header.m_sessionToken = client.GetSessionToken();
-		//UDP Åë½Å ¼ø¹ø
+		//UDP í†µì‹  ìˆœë²ˆ
 		response.header.sequence = header.sequence;
-		//µî·Ï ¿äÃ» ¼ø¹ø
+		//ë“±ë¡ ìš”ì²­ ìˆœë²ˆ
 		response.packetData.registrationSequence = header.sequence;
 		Net::SendRequest send;
 		send.recipientToken = client.GetSessionToken();
-		//Á÷·ÄÈ­(ºò ¿£µğ¾ğÀ¸·Î ¿¬¼ÓµÈ ¹ÙÀÌÆ® °ø°£¿¡ Á¤·Ä)
+		//ì§ë ¬í™”(ë¹… ì—”ë””ì–¸ìœ¼ë¡œ ì—°ì†ëœ ë°”ì´íŠ¸ ê³µê°„ì— ì •ë ¬)
 		if (!Net::PacketCodec::EncodeUdp(response, send.packet))
 			return;
 		
-		//Å¬¶óÀÌ¾ğÆ® °´Ã¼¿¡ Á¤º¸ µî·Ï ÈÄ Å¥¿¡ ÆĞÅ¶ Çª½¬ÇÏ±â
+		//í´ë¼ì´ì–¸íŠ¸ ê°ì²´ì— ì •ë³´ ë“±ë¡ í›„ íì— íŒ¨í‚· í‘¸ì‰¬í•˜ê¸°
 		client.m_UDPAddress = sourceAddress;
 		client.m_bUDPRegistered = true;
 		SendPacket(send);
@@ -91,19 +91,19 @@ bool NetworkServer::ValidateSender(const Net::UdpHeader& header, const sockaddr_
 		return false;
 	for (Client& client : m_vClients)
 	{
-		//UDP Sender¿Í µ¿ÀÏÇÑ Å¬¶óÀÌ¾ğÆ®ÀÎÁö È®ÀÎ
+		//UDP Senderì™€ ë™ì¼í•œ í´ë¼ì´ì–¸íŠ¸ì¸ì§€ í™•ì¸
 		if (client.GetTCPSocket() == INVALID_SOCKET || client.GetSessionToken() != header.m_sessionToken ||
 			!client.m_bUDPRegistered || !SameEndpoint(client.m_UDPAddress, sourceAddress))
 			continue;
 
-		//Sender°¡ º¸³½ Çì´õÀÇ Á¤º¸¿Í ÇöÀç Å¬¶óÀÌ¾ğÆ®ÀÇ Á¤º¸°¡ ¸ÅÄªµÇ´ÂÁö È®ÀÎ
+		//Senderê°€ ë³´ë‚¸ í—¤ë”ì˜ ì •ë³´ì™€ í˜„ì¬ í´ë¼ì´ì–¸íŠ¸ì˜ ì •ë³´ê°€ ë§¤ì¹­ë˜ëŠ”ì§€ í™•ì¸
 		if (client.m_nRoomId == 0 || client.m_nMatchId == 0 || client.m_nMembershipId == 0 ||
 			header.context.roomId != client.m_nRoomId || header.context.matchId != client.m_nMatchId ||
 			header.membershipId != client.m_nMembershipId ||
 			(client.m_HasUdpSequence && !Net::IsNewerSequence(header.sequence, client.m_LastUdpSequence)))
 			return false;
 
-		//¸¶Áö¸· ¼ø¹ø ±â¾ïÇÏ°í, Ã¹ UDP Åë½Å ¿Ï·áÇßÀ½À» ¼³Á¤ÇÔ
+		//ë§ˆì§€ë§‰ ìˆœë²ˆ ê¸°ì–µí•˜ê³ , ì²« UDP í†µì‹  ì™„ë£Œí–ˆìŒì„ ì„¤ì •í•¨
 		client.m_LastUdpSequence = header.sequence;
 		client.m_HasUdpSequence = true;
 		verifiedSender = client.GetSessionToken();
@@ -134,7 +134,7 @@ bool NetworkServer::SendPacket(const Net::SendRequest& request)
 		LeaveCriticalSection(&m_CSSendQueue);
 		return false;
 	}
-	// ¿äÃ»À» º¹»çÇÏ´Ù ¿¹¿Ü°¡ ¹ß»ıÇØµµ ´Ù¸¥ ½º·¹µå°¡ Å¥¸¦ »ç¿ëÇÒ ¼ö ÀÖ¾î¾ß ÇÑ´Ù.
+	// ìš”ì²­ì„ ë³µì‚¬í•˜ë‹¤ ì˜ˆì™¸ê°€ ë°œìƒí•´ë„ ë‹¤ë¥¸ ìŠ¤ë ˆë“œê°€ íë¥¼ ì‚¬ìš©í•  ìˆ˜ ìˆì–´ì•¼ í•œë‹¤.
 	try
 	{
 		m_qSendQueue.push(request);
@@ -156,7 +156,7 @@ bool NetworkServer::ApplyRoomResponse(Client& client, const Net::PacketData& pac
 		return false;
 	const std::uint8_t* messageBytes = packet.bytes.data() + Net::TcpHeaderBytes;
 	std::size_t messageSize = packet.bytes.size() - Net::TcpHeaderBytes;
-	// ¼ÒÄÏ ¼Û½Å°ú ºĞ¸®ÇÏµÇ, Á¢¼ÓÀÇ °æ±â Á¤º¸´Â °è¼Ó ¼­¹ö ¸ŞÀÎ¿¡¼­¸¸ ¹Ù²Û´Ù.
+	// ì†Œì¼“ ì†¡ì‹ ê³¼ ë¶„ë¦¬í•˜ë˜, ì ‘ì†ì˜ ê²½ê¸° ì •ë³´ëŠ” ê³„ì† ì„œë²„ ë©”ì¸ì—ì„œë§Œ ë°”ê¾¼ë‹¤.
 	switch (header.type)
 	{
 	case Net::TcpType::RoomEnterResult:
@@ -206,7 +206,7 @@ bool NetworkServer::ApplyRoomResponse(Client& client, const Net::PacketData& pac
 
 void NetworkServer::FlushSendQueue()
 {
-	// Àá±İ ¾È¿¡¼­´Â ¿äÃ»¸¸ ¿Å±â°í ¼ÒÄÏ ¼Û½ÅÀº Åë½Å ½º·¹µå¿¡¼­ Ã³¸®ÇÑ´Ù.
+	// ì ê¸ˆ ì•ˆì—ì„œëŠ” ìš”ì²­ë§Œ ì˜®ê¸°ê³  ì†Œì¼“ ì†¡ì‹ ì€ í†µì‹  ìŠ¤ë ˆë“œì—ì„œ ì²˜ë¦¬í•œë‹¤.
 	std::queue<Net::SendRequest> requests;
 	EnterCriticalSection(&m_CSSendQueue);
 	requests.swap(m_qSendQueue);
@@ -228,7 +228,7 @@ void NetworkServer::FlushSendQueue()
 					client.QueueSend(request.packet);
 				break;
 			case Net::PacketTransport::Udp:
-				// UDP µî·ÏÀ» ¸¶Ä£ ¼ö½ÅÀÚ¿¡°Ô¸¸ ¿Ï¼ºµÈ µ¥ÀÌÅÍ±×·¥À» º¸³½´Ù.
+				// UDP ë“±ë¡ì„ ë§ˆì¹œ ìˆ˜ì‹ ìì—ê²Œë§Œ ì™„ì„±ëœ ë°ì´í„°ê·¸ë¨ì„ ë³´ë‚¸ë‹¤.
 				if (client.IsUDPRegistered())
 				{
 					const sockaddr_in& address = client.GetUDPAddress();
@@ -249,8 +249,8 @@ void NetworkServer::FlushSendQueue()
 
 void NetworkServer::SendTcpPending(Client& client)
 {
-	// À±ÁöÈÆ ¼öÁ¤ ÇÊ¿ä: Client::FlushSendÀÇ ¿¬°á ¿À·ù¿¡¼­ ¼Û½Å À§Ä¡¿¡ -1À» ´õÇÏÁö ¾Êµµ·Ï Ã³¸®ÇÑ´Ù.
-	// Client°¡ º¸°üÇÑ ºÎºĞ ¼Û½Å À§Ä¡ºÎÅÍ ÀÌ¾î¼­ Àü¼ÛÇÑ´Ù.
+	// ìœ¤ì§€í›ˆ ìˆ˜ì • í•„ìš”: Client::FlushSendì˜ ì—°ê²° ì˜¤ë¥˜ì—ì„œ ì†¡ì‹  ìœ„ì¹˜ì— -1ì„ ë”í•˜ì§€ ì•Šë„ë¡ ì²˜ë¦¬í•œë‹¤.
+	// Clientê°€ ë³´ê´€í•œ ë¶€ë¶„ ì†¡ì‹  ìœ„ì¹˜ë¶€í„° ì´ì–´ì„œ ì „ì†¡í•œë‹¤.
 	if (client.GetTCPSocket() != INVALID_SOCKET && client.HasPendingSend())
 		client.FlushSend();
 }
@@ -326,7 +326,7 @@ bool NetworkServer::NotifyCommand(const Net::RoomCommand& command)
 		return false;
 	bool accepted = false;
 
-	// ¹æ ¸í·É Ã³¸® Áß¿¡´Â °°Àº ¼­¹öÀÇ ºĞ¹è¿Í ¿¬°á Á¤¸®¸¦ ´Ù½Ã È£ÃâÇÏÁö ¾Ê´Â´Ù.
+	// ë°© ëª…ë ¹ ì²˜ë¦¬ ì¤‘ì—ëŠ” ê°™ì€ ì„œë²„ì˜ ë¶„ë°°ì™€ ì—°ê²° ì •ë¦¬ë¥¼ ë‹¤ì‹œ í˜¸ì¶œí•˜ì§€ ì•ŠëŠ”ë‹¤.
 	m_bInvokingCommandSink = true;
 	try
 	{
@@ -334,7 +334,7 @@ bool NetworkServer::NotifyCommand(const Net::RoomCommand& command)
 	}
 	catch (...)
 	{
-		fprintf(stderr, "¹æ ¸í·É Äİ¹é Ã³¸® Áß ¿À·ù°¡ ¹ß»ıÇß½À´Ï´Ù.\n");
+		fprintf(stderr, "ë°© ëª…ë ¹ ì½œë°± ì²˜ë¦¬ ì¤‘ ì˜¤ë¥˜ê°€ ë°œìƒí–ˆìŠµë‹ˆë‹¤.\n");
 	}
 	m_bInvokingCommandSink = false;
 	return accepted;
@@ -377,7 +377,7 @@ bool NetworkServer::ReceiveTcp(Client& client)
 		DispatchPacket(sender, packet);
 		offset += header.size;
 	}
-	// Ã³¸®ÇÑ ÇÁ·¹ÀÓ¸¸ Áö¿ì°í µÚ¿¡ ÀÌ¾îÁö´Â ¹Ì¿Ï¼º µ¥ÀÌÅÍ´Â º¸°üÇÑ´Ù.
+	// ì²˜ë¦¬í•œ í”„ë ˆì„ë§Œ ì§€ìš°ê³  ë’¤ì— ì´ì–´ì§€ëŠ” ë¯¸ì™„ì„± ë°ì´í„°ëŠ” ë³´ê´€í•œë‹¤.
 	buffer.erase(buffer.begin(), buffer.begin() + static_cast<std::ptrdiff_t>(offset));
 	return true;
 }
@@ -453,7 +453,7 @@ void NetworkServer::RequestRoomEntry(Client& client, const Net::TcpHeader& heade
 		}
 		if (error == Net::ErrorCode::Ok)
 		{
-			// ÀÔÀå Ã³¸® Áß¿¡µµ °°Àº Á¢¼ÓÀÇ Áßº¹ ÀÔÀå°ú Á¢¼Ó Á¾·á¸¦ ±¸ºĞÇÑ´Ù.
+			// ì…ì¥ ì²˜ë¦¬ ì¤‘ì—ë„ ê°™ì€ ì ‘ì†ì˜ ì¤‘ë³µ ì…ì¥ê³¼ ì ‘ì† ì¢…ë£Œë¥¼ êµ¬ë¶„í•œë‹¤.
 			client.SetMatchContext({roomId, 0}, membership);
 			client.m_pendingEnterRequestId = header.requestId;
 			++client.m_nNextMembershipId;
@@ -563,15 +563,6 @@ void NetworkServer::DispatchPacket(const Net::SessionToken& verifiedSender, cons
 			command.body = request;
 			break;
 		}
-		case Net::TcpType::StartGameRequest:
-		{
-			Net::StartGameRequest request;
-			if (!Net::PacketCodec::ReadMessage(header.type, messageBytes, messageSize, request) ||
-				request.roomId != command.context.roomId)
-				return;
-			command.body = request;
-			break;
-		}
 		default:
 			return;
 		}
@@ -599,7 +590,7 @@ void NetworkServer::DispatchPacket(const Net::SessionToken& verifiedSender, cons
 
 	if (!NotifyCommand(command) && packet.transport == Net::PacketTransport::Tcp)
 	{
-		// »ç¶óÁö°Å³ª Á¾·á ÁßÀÎ ¹æÀÌ ¸í·ÉÀ» ¹ŞÁö ¸øÇÑ °æ¿ì ¿äÃ»À» ¹«ÀÀ´äÀ¸·Î µÎÁö ¾Ê´Â´Ù.
+		// ì‚¬ë¼ì§€ê±°ë‚˜ ì¢…ë£Œ ì¤‘ì¸ ë°©ì´ ëª…ë ¹ì„ ë°›ì§€ ëª»í•œ ê²½ìš° ìš”ì²­ì„ ë¬´ì‘ë‹µìœ¼ë¡œ ë‘ì§€ ì•ŠëŠ”ë‹¤.
 		Net::RequestRejected rejected;
 		rejected.reason = Net::ErrorCode::RoomNotFound;
 		rejected.context = command.context;
@@ -664,7 +655,7 @@ void NetworkServer::NetworkLoop(const std::function<bool()>& shouldStop)
 		FD_SET(m_SockListen, &readSet);
 		FD_SET(m_SockUDP, &readSet);
 
-		// Âª°Ô ´ë±âÇØ ¼Û½Å Å¥¿Í Á¾·á ¿äÃ»À» °è¼Ó È®ÀÎÇÑ´Ù.
+		// ì§§ê²Œ ëŒ€ê¸°í•´ ì†¡ì‹  íì™€ ì¢…ë£Œ ìš”ì²­ì„ ê³„ì† í™•ì¸í•œë‹¤.
 		timeval timeout{};
 		timeout.tv_usec = 10000;
 		int ready = select(0, &readSet, nullptr, nullptr, &timeout);
@@ -681,17 +672,17 @@ void NetworkServer::NetworkLoop(const std::function<bool()>& shouldStop)
 		if (FD_ISSET(m_SockUDP, &readSet))
 			ReceiveUdp();
 
-		// ¿¬°áµÈ ¼ÒÄÏÀº ºñÂ÷´ÜÀ¸·Î ÀĞÀ¸¹Ç·Î ¿¬°á ¼ö°¡ selectÀÇ ÁıÇÕ ÇÑµµ¸¦ ³Ñ´õ¶óµµ ÀĞÀ» ¼ö ÀÖ´Ù.
+		// ì—°ê²°ëœ ì†Œì¼“ì€ ë¹„ì°¨ë‹¨ìœ¼ë¡œ ì½ìœ¼ë¯€ë¡œ ì—°ê²° ìˆ˜ê°€ selectì˜ ì§‘í•© í•œë„ë¥¼ ë„˜ë”ë¼ë„ ì½ì„ ìˆ˜ ìˆë‹¤.
 		for (std::size_t i = 0; i < m_vClients.size() && !m_bStopRequested;)
 		{
 			Client& client = m_vClients[i];
-			// Á¤»ó ÅğÀå ÀÀ´äÀ» ¸ÕÀú ¼ÒºñÇÑ µÚ ºñÁ¤»ó Á¾·á·Î »ç¶óÁø ¹æÀÇ Á¢¼ÓÀ» Á¤¸®ÇÑ´Ù.
+			// ì •ìƒ í‡´ì¥ ì‘ë‹µì„ ë¨¼ì € ì†Œë¹„í•œ ë’¤ ë¹„ì •ìƒ ì¢…ë£Œë¡œ ì‚¬ë¼ì§„ ë°©ì˜ ì ‘ì†ì„ ì •ë¦¬í•œë‹¤.
 			if (m_pRoomManager != nullptr && client.GetRoomId() != 0
 				&& !m_pRoomManager->HasRoom(client.GetRoomId()))
 			{
 				if (client.m_pendingEnterRequestId)
 				{
-					// ¸¶Áö¸· Âü°¡ÀÚ°¡ ¸ÕÀú ³ª°¡ ¹æÀÌ ´İÇûÀ¸¸é ·Îºñ¿¡¼­ ´Ù½Ã ¼±ÅÃÇÒ ¼ö ÀÖ´Ù.
+					// ë§ˆì§€ë§‰ ì°¸ê°€ìê°€ ë¨¼ì € ë‚˜ê°€ ë°©ì´ ë‹«í˜”ìœ¼ë©´ ë¡œë¹„ì—ì„œ ë‹¤ì‹œ ì„ íƒí•  ìˆ˜ ìˆë‹¤.
 					RejectRoomEntry(client, *client.m_pendingEnterRequestId, Net::ErrorCode::RoomNotFound);
 					client.m_pendingEnterRequestId.reset();
 					client.SetMatchContext({}, 0);
@@ -723,7 +714,7 @@ void NetworkServer::StopNetwork()
 	m_bStopRequested = true;
 	LeaveCriticalSection(&m_CSSendQueue);
 
-	// ¼ÒÀ¯ÀÚ°¡ ·çÇÁ¿¡¼­ µ¹¾Æ¿Â µÚ¿¡¸¸ ¼ÒÄÏÀ» ÇØÁ¦ÇÑ´Ù.
+	// ì†Œìœ ìê°€ ë£¨í”„ì—ì„œ ëŒì•„ì˜¨ ë’¤ì—ë§Œ ì†Œì¼“ì„ í•´ì œí•œë‹¤.
 	if (GetCurrentThreadId() != m_ControlThreadId || m_bLoopRunning || m_bCleanupInProgress)
 		return;
 	m_bCleanupInProgress = true;
@@ -777,7 +768,7 @@ void NetworkServer::AcceptPlayer()
 		return;
 	}
 
-	// ¿î¿µÃ¼Á¦ ³­¼ö·Î °°Àº ÁÖ¼ÒÀÇ ´Ù¸¥ Á¢¼Óµµ ÃßÃøÇÒ ¼ö ¾ø´Â ÅäÅ«À» ¸¸µç´Ù.
+	// ìš´ì˜ì²´ì œ ë‚œìˆ˜ë¡œ ê°™ì€ ì£¼ì†Œì˜ ë‹¤ë¥¸ ì ‘ì†ë„ ì¶”ì¸¡í•  ìˆ˜ ì—†ëŠ” í† í°ì„ ë§Œë“ ë‹¤.
 	Net::SessionToken token{};
 	const NTSTATUS result = BCryptGenRandom(nullptr, token.data(), static_cast<ULONG>(token.size()),
 		BCRYPT_USE_SYSTEM_PREFERRED_RNG);

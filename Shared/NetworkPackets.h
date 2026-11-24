@@ -28,7 +28,6 @@ namespace Net
 		MapLoaded = 0x0201,
 		ReadyChangeRequest = 0x0202,
 		RoomState = 0x0203,
-		StartGameRequest = 0x0204,
 		GameStarted = 0x0301,
 		FireRequest = 0x0302,
 		ShotResolved = 0x0303,
@@ -45,7 +44,7 @@ namespace Net
 		TargetSnapshot = 0x1103
 	};
 
-	// »ç¿ë: ¼­¹ö NetworkServer::NetworkLoop(), DispatchPacket() / Å¬¶ó NetworkClient::NetworkLoop(), UpdateNetwork() [¼±¾ğ]
+	// ì‚¬ìš©: ì„œë²„ NetworkServer::NetworkLoop(), DispatchPacket() / í´ë¼ NetworkClient::NetworkLoop(), UpdateNetwork() [ì„ ì–¸]
 	struct TcpHeader
 	{
 		std::uint32_t size = TcpHeaderBytes;
@@ -53,7 +52,7 @@ namespace Net
 		std::uint32_t requestId = 0;
 	};
 
-	// »ç¿ë: ¼­¹ö NetworkServer::RegisterPlayerUDP(), DispatchPacket() / Å¬¶ó NetworkClient::NetworkLoop() [¼±¾ğ]
+	// ì‚¬ìš©: ì„œë²„ NetworkServer::RegisterPlayerUDP(), DispatchPacket() / í´ë¼ NetworkClient::NetworkLoop() [ì„ ì–¸]
 	struct UdpHeader
 	{
 		std::uint16_t magic = UdpMagic;
@@ -66,7 +65,7 @@ namespace Net
 		std::uint32_t serverTick = 0;
 	};
 
-	// »ç¿ë: ¼­¹ö NetworkServer::AcceptPlayer() ¡æ Å¬¶ó NetworkClient::ConnectServer() [¼±¾ğ]
+	// ì‚¬ìš©: ì„œë²„ NetworkServer::AcceptPlayer() â†’ í´ë¼ NetworkClient::ConnectServer() [ì„ ì–¸]
 	struct ConnectResult
 	{
 		static constexpr TcpType type = TcpType::ConnectResult;
@@ -77,8 +76,8 @@ namespace Net
 		std::uint16_t tickRate = static_cast<std::uint16_t>(ServerTickRate);
 	};
 
-	// »ç¿ë: ¼­¹ö NetworkServer::DispatchPacket(), RoomManager::JoinGameRoom(), Room::RecvShoot() ¡æ Å¬¶ó
-	//       NetworkClient::UpdateNetwork() [¼±¾ğ]
+	// ì‚¬ìš©: ì„œë²„ NetworkServer::DispatchPacket(), RoomManager::JoinGameRoom(), Room::RecvShoot() â†’ í´ë¼
+	//       NetworkClient::UpdateNetwork() [ì„ ì–¸]
 	struct RequestRejected
 	{
 		static constexpr TcpType type = TcpType::RequestRejected;
@@ -97,7 +96,7 @@ namespace Net
 		std::vector<RoomInfo> rooms;
 	};
 
-	// »ç¿ë: Å¬¶ó MainScene::RequestGameRoom() ¡æ ¼­¹ö RoomManager::CreateGameRoom() [¼±¾ğ]
+	// ì‚¬ìš©: í´ë¼ MainScene::RequestGameRoom() â†’ ì„œë²„ RoomManager::CreateGameRoom() [ì„ ì–¸]
 	struct CreateRoomRequest
 	{
 		static constexpr TcpType type = TcpType::CreateRoomRequest;
@@ -109,7 +108,7 @@ namespace Net
 		RoomId roomId = 0;
 	};
 
-	// »ç¿ë: ¼­¹ö RoomManager::CreateGameRoom(), RoomManager::JoinGameRoom() ¡æ Å¬¶ó MainScene::JoinRoom() [¼±¾ğ]
+	// ì‚¬ìš©: ì„œë²„ RoomManager::CreateGameRoom(), RoomManager::JoinGameRoom() â†’ í´ë¼ MainScene::JoinRoom() [ì„ ì–¸]
 	struct RoomEnterResult
 	{
 		static constexpr TcpType type = TcpType::RoomEnterResult;
@@ -118,14 +117,14 @@ namespace Net
 		RoomStateData room;
 	};
 
-	// »ç¿ë: Å¬¶ó MainScene::ExitRoom() ¡æ ¼­¹ö Room::RemovePlayerFromRoom() [¼±¾ğ]
+	// ì‚¬ìš©: í´ë¼ MainScene::ExitRoom() â†’ ì„œë²„ Room::RemovePlayerFromRoom() [ì„ ì–¸]
 	struct LeaveRoomRequest
 	{
 		static constexpr TcpType type = TcpType::LeaveRoomRequest;
 		RoomId roomId = 0;
 	};
 
-	// »ç¿ë: ¼­¹ö Room::RemovePlayerFromRoom() ¡æ Å¬¶ó MainScene::OnRoomExited() [¼±¾ğ]
+	// ì‚¬ìš©: ì„œë²„ Room::RemovePlayerFromRoom() â†’ í´ë¼ MainScene::OnRoomExited() [ì„ ì–¸]
 	struct LeaveRoomResult
 	{
 		static constexpr TcpType type = TcpType::LeaveRoomResult;
@@ -133,7 +132,7 @@ namespace Net
 		RoomId roomId = 0;
 	};
 
-	// »ç¿ë: Å¬¶ó ShootingScene::SendMapLoaded() ¡æ ¼­¹ö Room::SetPlayerLoaded() [¼±¾ğ]
+	// ì‚¬ìš©: í´ë¼ ShootingScene::SendMapLoaded() â†’ ì„œë²„ Room::SetPlayerLoaded() [ì„ ì–¸]
 	struct MapLoaded
 	{
 		static constexpr TcpType type = TcpType::MapLoaded;
@@ -147,21 +146,14 @@ namespace Net
 		std::uint8_t ready = 0;
 	};
 
-	struct StartGameRequest
-	{
-		static constexpr TcpType type = TcpType::StartGameRequest;
-		RoomId roomId = 0;
-	};
-
-
-	// »ç¿ë: ¼­¹ö Room::SendRoomState() ¡æ Å¬¶ó ShootingScene::OnRoomStateChanged() [¼±¾ğ] / ¹­À½: Âü°¡ÀÚ¡¤ÁØºñ¡¤±¸¿ª
+	// ì‚¬ìš©: ì„œë²„ Room::SendRoomState() â†’ í´ë¼ ShootingScene::OnRoomStateChanged() [ì„ ì–¸] / ë¬¶ìŒ: ì°¸ê°€ìÂ·ì¤€ë¹„Â·êµ¬ì—­
 	struct RoomState
 	{
 		static constexpr TcpType type = TcpType::RoomState;
 		RoomStateData room;
 	};
 
-	// »ç¿ë: ¼­¹ö Room::StartGameIfReady() ¡æ Å¬¶ó ShootingScene::OnGameStarted() [¼±¾ğ] / ¹­À½: ½Ã°£¡¤±ÔÄ¢¡¤ÇÃ·¹ÀÌ¾î, Ç¥Àû ¸ñ·ÏÀº UDP·Î¸¸ Àü´Ş
+	// ì‚¬ìš©: ì„œë²„ Room::StartGameIfReady() â†’ í´ë¼ ShootingScene::OnGameStarted() [ì„ ì–¸] / ë¬¶ìŒ: ì‹œê°„Â·ê·œì¹™Â·í”Œë ˆì´ì–´, í‘œì  ëª©ë¡ì€ UDPë¡œë§Œ ì „ë‹¬
 	struct GameStarted
 	{
 		static constexpr TcpType type = TcpType::GameStarted;
@@ -215,13 +207,13 @@ namespace Net
 		std::vector<PlayerResult> players;
 	};
 
-	// »ç¿ë: Å¬¶ó NetworkClient::RegisterUDP() ¡æ ¼­¹ö NetworkServer::RegisterPlayerUDP() [¼±¾ğ]
+	// ì‚¬ìš©: í´ë¼ NetworkClient::RegisterUDP() â†’ ì„œë²„ NetworkServer::RegisterPlayerUDP() [ì„ ì–¸]
 	struct UdpRegisterRequest
 	{
 		static constexpr UdpType type = UdpType::RegisterRequest;
 	};
 
-	// »ç¿ë: ¼­¹ö NetworkServer::RegisterPlayerUDP() ¡æ Å¬¶ó NetworkClient::CompleteConnection() [¼±¾ğ]
+	// ì‚¬ìš©: ì„œë²„ NetworkServer::RegisterPlayerUDP() â†’ í´ë¼ NetworkClient::CompleteConnection() [ì„ ì–¸]
 	struct UdpRegisterResult
 	{
 		static constexpr UdpType type = UdpType::RegisterResult;
@@ -229,8 +221,8 @@ namespace Net
 		Sequence registrationSequence = 0;
 	};
 
-	// »ç¿ë: Å¬¶ó ShootingScene::SendPlayerTransform() ¡æ ¼­¹ö NetworkServer::ReceiveUdp(), Room::UpdatePlayerTransform() [¼±¾ğ] / °³º°
-	//       ÇÃ·¹ÀÌ¾îÀÇ ÃÖ½Å º¯È¯ Çà·Ä
+	// ì‚¬ìš©: í´ë¼ ShootingScene::SendPlayerTransform() â†’ ì„œë²„ NetworkServer::ReceiveUdp(), Room::UpdatePlayerTransform() [ì„ ì–¸] / ê°œë³„
+	//       í”Œë ˆì´ì–´ì˜ ìµœì‹  ë³€í™˜ í–‰ë ¬
 	struct PlayerTransform
 	{
 		static constexpr UdpType type = UdpType::PlayerTransform;
@@ -238,7 +230,7 @@ namespace Net
 		PlayerPose pose;
 	};
 
-	// »ç¿ë: ¼­¹ö Room::SendTransformData() ¡æ Å¬¶ó ShootingScene::RecvTransformData() [¼±¾ğ] / ¹­À½: ÀüÃ¼ ÇÃ·¹ÀÌ¾î¡¤º»ÀÎ º¸Á¤
+	// ì‚¬ìš©: ì„œë²„ Room::SendTransformData() â†’ í´ë¼ ShootingScene::RecvTransformData() [ì„ ì–¸] / ë¬¶ìŒ: ì „ì²´ í”Œë ˆì´ì–´Â·ë³¸ì¸ ë³´ì •
 	struct PlayerSnapshot
 	{
 		static constexpr UdpType type = UdpType::PlayerSnapshot;
@@ -248,7 +240,7 @@ namespace Net
 		std::array<PlayerTransformEntry, MaxPlayers> players{};
 	};
 
-	// ÇÑ UDP µ¥ÀÌÅÍ±×·¥¿¡ »ıÁ¸ Ç¥Àû ÀüÃ¼¸¦ ´ã´Â´Ù.
+	// í•œ UDP ë°ì´í„°ê·¸ë¨ì— ìƒì¡´ í‘œì  ì „ì²´ë¥¼ ë‹´ëŠ”ë‹¤.
 	struct TargetSnapshot
 	{
 		static constexpr UdpType type = UdpType::TargetSnapshot;

@@ -362,10 +362,6 @@ namespace Net
         {
             return Serialize(io, value.roomId) && Serialize(io, value.ready) && value.ready <= 1;
         }
-        inline bool Serialize(PacketStream& io, StartGameRequest& value)
-        {
-            return Serialize(io, value.roomId) && value.roomId != 0;
-        }
         inline bool Serialize(PacketStream& io, RoomState& value)
         {
             return Serialize(io, value.room);

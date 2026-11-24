@@ -49,7 +49,7 @@ ShootingScene::PlayerModel ShootingScene::AddPlayer(const Net::SessionToken& tok
 	body->collider = ColliderType::Box;
 	auto head = std::make_unique<PlayerHead>(*body, cube, bodyMaterial);
 	head->name = "Player head";
-	//1ÀÎÄª Ä«¸Ş¶ó¿¡¼­ ÀÚ±â ¸öÅë°ú ¸Ó¸®°¡ ½Ã¾ß¸¦ ¸·Áö ¾Êµµ·Ï ÇÔ.
+	//1ì¸ì¹­ ì¹´ë©”ë¼ì—ì„œ ìê¸° ëª¸í†µê³¼ ë¨¸ë¦¬ê°€ ì‹œì•¼ë¥¼ ë§‰ì§€ ì•Šë„ë¡ í•¨.
 	body->visible = head->visible = !local;
 
 	auto gun = std::make_unique<Gun>(*body, assets_.LoadMesh("Resources/Meshes/Revolver.obj"), gunMaterial_);
@@ -85,9 +85,9 @@ void ShootingScene::Initialize()
 	std::shared_ptr<Material> ground = std::make_shared<Material>(shader);
 	ground->texture = assets_.LoadTexture("Resources/Textures/GroundTex.png");
 	ground->color = {0.55f, 0.37f, 0.17f};
-	// ¿øº» draw.h´Â ¹Ù´Ú ÅØ½ºÃ³¸¦ È°¼ºÈ­ÇÏÁö ¾Ê°í ±âº»»öÀ¸·Î ±×·È½À´Ï´Ù.
+	// ì›ë³¸ draw.hëŠ” ë°”ë‹¥ í…ìŠ¤ì²˜ë¥¼ í™œì„±í™”í•˜ì§€ ì•Šê³  ê¸°ë³¸ìƒ‰ìœ¼ë¡œ ê·¸ë ¸ìŠµë‹ˆë‹¤.
 	ground->useTexture = false;
-	// ¿øº» 0 ½ºÄÉÀÏ ¹Ù´ÚÀÇ È¯°æ±¤ ¿ÜÇüÀ» À¯ÁöÇÏ¸é¼­ Æ¯ÀÌ ³ë¸Ö Çà·ÄÀº Á¦°ÅÇÕ´Ï´Ù.
+	// ì›ë³¸ 0 ìŠ¤ì¼€ì¼ ë°”ë‹¥ì˜ í™˜ê²½ê´‘ ì™¸í˜•ì„ ìœ ì§€í•˜ë©´ì„œ íŠ¹ì´ ë…¸ë©€ í–‰ë ¬ì€ ì œê±°í•©ë‹ˆë‹¤.
 	ground->ambientOnly = true;
 
 	std::vector<Vertex> floorVertices;
@@ -185,15 +185,6 @@ void ShootingScene::Update(float deltaTime, const Input& input)
 	{
 		if (IsPreparing() || roomState_.state == Net::GameState::Results)
 			UpdateReadyInput(input);
-		if (input.WasPressed('1') && roomState_.state == Net::GameState::Preparing && roomState_.vPlayers.size() == 1
-			&& mapLoadedSent_ && network_->IsConnected())
-		{
-			Net::StartGameRequest request{roomState_.version.context.roomId};
-			Net::PacketData packet;
-			if (!Net::PacketCodec::EncodeTcp(request, network_->NextRequestId(), packet)
-				|| !network_->SendPacket(packet))
-				throw std::runtime_error("Failed to send match start request");
-		}
 
 		bool playing = roomState_.state == Net::GameState::Playing;
 		if (playing)
@@ -247,7 +238,7 @@ void ShootingScene::Update(float deltaTime, const Input& input)
 	}
 
 	ApplyPlayerCommand(ReadPlayerInput(input), deltaTime);
-	// ±âÁ¸ Ç¥ÀûÀÇ ¼ö¸íºÎÅÍ °»½ÅÇÕ´Ï´Ù. ÀÌ¹ø ÇÁ·¹ÀÓ¿¡ »ı¼ºÇÒ Ç¥ÀûÀº ¾ÆÁ÷ ³ªÀÌ¸¦ ¼¼Áö ¾Ê½À´Ï´Ù.
+	// ê¸°ì¡´ í‘œì ì˜ ìˆ˜ëª…ë¶€í„° ê°±ì‹ í•©ë‹ˆë‹¤. ì´ë²ˆ í”„ë ˆì„ì— ìƒì„±í•  í‘œì ì€ ì•„ì§ ë‚˜ì´ë¥¼ ì„¸ì§€ ì•ŠìŠµë‹ˆë‹¤.
 	Scene::Update(deltaTime, input);
 	RemoveDestroyedTargets();
 
@@ -276,7 +267,7 @@ void ShootingScene::ApplyPlayerCommand(const PlayerCommand& command, float delta
 	if (network_ != nullptr)
 	{
 		Net::PlayerPose pose = player_->GetNetworkPose();
-		//Å¬¶ó¿¡¼­ ¸ÕÀú °è»êÇÑ ÀÌµ¿µµ ¼­¹ö°¡ ¹èÁ¤ÇÑ ±¸¿ª ¾ÈÀ¸·Î Á¦ÇÑ. Ä«¸Ş¶ó¿Í ¹ß»ç ¿øÁ¡Àº ÀÌ À§Ä¡¸¦ »ç¿ë.
+		//í´ë¼ì—ì„œ ë¨¼ì € ê³„ì‚°í•œ ì´ë™ë„ ì„œë²„ê°€ ë°°ì •í•œ êµ¬ì—­ ì•ˆìœ¼ë¡œ ì œí•œ. ì¹´ë©”ë¼ì™€ ë°œì‚¬ ì›ì ì€ ì´ ìœ„ì¹˜ë¥¼ ì‚¬ìš©.
 		pose.position = ClampToPlayerArea(pose.position);
 		player_->ApplyNetworkPose(pose);
 	}
@@ -309,7 +300,7 @@ void ShootingScene::SpawnTargets()
 
 void ShootingScene::RemoveDestroyedTargets()
 {
-	// Object ¼øÈ¸°¡ ³¡³­ µÚ °üÂû Æ÷ÀÎÅÍ¸¦ ¸ÕÀú Áö¿ì°í ½ÇÁ¦ ¼ÒÀ¯ °´Ã¼¸¦ Á¦°ÅÇÕ´Ï´Ù.
+	// Object ìˆœíšŒê°€ ëë‚œ ë’¤ ê´€ì°° í¬ì¸í„°ë¥¼ ë¨¼ì € ì§€ìš°ê³  ì‹¤ì œ ì†Œìœ  ê°ì²´ë¥¼ ì œê±°í•©ë‹ˆë‹¤.
 	for (auto it = targets_.begin(); it != targets_.end();)
 	{
 		if ((*it)->IsPendingDestroy())
@@ -345,7 +336,7 @@ void ShootingScene::Shoot()
 		return;
 	}
 
-	// ¿øº»Àº ¸¶Áö¸· ±¤¼±À» À¯ÁöÇÏ°í ¸Å ¾÷µ¥ÀÌÆ®¸¶´Ù µî·Ï ¼ø¼­ÀÇ Ã¹ Ç¥ÀûÀ» °Ë»çÇÕ´Ï´Ù.
+	// ì›ë³¸ì€ ë§ˆì§€ë§‰ ê´‘ì„ ì„ ìœ ì§€í•˜ê³  ë§¤ ì—…ë°ì´íŠ¸ë§ˆë‹¤ ë“±ë¡ ìˆœì„œì˜ ì²« í‘œì ì„ ê²€ì‚¬í•©ë‹ˆë‹¤.
 
 	for (Target* target : targets_)
 	{
@@ -393,7 +384,7 @@ void ShootingScene::UpdateReadyInput(const Input& input)
 	std::uint32_t requestId = network_->NextRequestId();
 	Net::PacketData packet;
 	if (!Net::PacketCodec::EncodeTcp(request, requestId, packet) || !network_->SendPacket(packet))
-		throw std::runtime_error("ÁØºñ »óÅÂ º¯°æ ¿äÃ»À» º¸³»Áö ¸øÇß½À´Ï´Ù.");
+		throw std::runtime_error("ì¤€ë¹„ ìƒíƒœ ë³€ê²½ ìš”ì²­ì„ ë³´ë‚´ì§€ ëª»í–ˆìŠµë‹ˆë‹¤.");
 	pendingReadyChanges_.push({requestId, request.ready != 0});
 	readyChangeRejected_ = false;
 }
@@ -413,7 +404,7 @@ void ShootingScene::OnReadyRejected(std::uint32_t requestId)
 		return;
 	pendingReadyChanges_.pop();
 	readyChangeRejected_ = pendingReadyChanges_.empty();
-	// °ÅÀı µÚ ´ÙÀ½ ¿äÃ»ÀÌ ÀÌ¹Ì ¼­¹ö »óÅÂ¿Í °°À¸¸é ¼­¹ö´Â º¯°æ ¹æ¼ÛÀ» º¸³»Áö ¾Ê´Â´Ù.
+	// ê±°ì ˆ ë’¤ ë‹¤ìŒ ìš”ì²­ì´ ì´ë¯¸ ì„œë²„ ìƒíƒœì™€ ê°™ìœ¼ë©´ ì„œë²„ëŠ” ë³€ê²½ ë°©ì†¡ì„ ë³´ë‚´ì§€ ì•ŠëŠ”ë‹¤.
 	ConfirmReadyChange();
 }
 
@@ -448,7 +439,7 @@ Hud ShootingScene::ShowReadyUI() const
 	else if (readyChangeRejected_)
 		hud.message = "Server declined the change. Try again.";
 	else
-		hud.message = roomState_.vPlayers.size() == 1 ? "Solo test: press 1" : "Starts when everyone is ready";
+		hud.message = "Starts when everyone is ready";
 	return hud;
 }
 
@@ -580,15 +571,15 @@ void ShootingScene::SendMapLoaded()
 		return;
 	if (network_ == nullptr || !network_->IsConnected()
 		|| roomState_.version.context.roomId == 0 || membershipId_ == 0)
-		throw std::runtime_error("¸Ê ·Îµù ¿Ï·á¸¦ º¸³¾ Á¢¼Ó Á¤º¸°¡ ¾ø½À´Ï´Ù.");
+		throw std::runtime_error("ë§µ ë¡œë”© ì™„ë£Œë¥¼ ë³´ë‚¼ ì ‘ì† ì •ë³´ê°€ ì—†ìŠµë‹ˆë‹¤.");
 
-	// Àå¸é ÃÊ±âÈ­°¡ ³¡³­ ¸ŞÀÎ ½º·¹µå¿¡¼­ ÇÑ ¹ø¸¸ º¸³½´Ù.
+	// ì¥ë©´ ì´ˆê¸°í™”ê°€ ëë‚œ ë©”ì¸ ìŠ¤ë ˆë“œì—ì„œ í•œ ë²ˆë§Œ ë³´ë‚¸ë‹¤.
 	Net::MapLoaded loaded;
 	loaded.roomId = roomState_.version.context.roomId;
 	Net::PacketData packet;
 	if (!Net::PacketCodec::EncodeTcp(loaded, network_->NextRequestId(), packet)
 		|| !network_->SendPacket(packet))
-		throw std::runtime_error("¸Ê ·Îµù ¿Ï·á¸¦ º¸³»Áö ¸øÇß½À´Ï´Ù.");
+		throw std::runtime_error("ë§µ ë¡œë”© ì™„ë£Œë¥¼ ë³´ë‚´ì§€ ëª»í–ˆìŠµë‹ˆë‹¤.");
 	mapLoadedSent_ = true;
 }
 
@@ -627,7 +618,7 @@ void ShootingScene::OnGameStarted(const Net::GameStarted& event)
 	pendingReadyChanges_ = {};
 	readyChangeRejected_ = false;
 	gun_->ResetGame();
-	//°æ±â°¡ ¹Ù²î¸é ÀÌÀü °æ±âÀÇ ÀÌµ¿ ¼ø¹ø°ú º¸Á¤ ±âÁØÀ» °°ÀÌ ÃÊ±âÈ­.
+	//ê²½ê¸°ê°€ ë°”ë€Œë©´ ì´ì „ ê²½ê¸°ì˜ ì´ë™ ìˆœë²ˆê³¼ ë³´ì • ê¸°ì¤€ì„ ê°™ì´ ì´ˆê¸°í™”.
 	inputSequence_ = lastAppliedInput_ = 0;
 	sentPositions_ = {};
 	hasAppliedInput_ = false;
@@ -653,12 +644,12 @@ void ShootingScene::OnGameStarted(const Net::GameStarted& event)
 			player_->UpdateCamera(camera_);
 			continue;
 		}
-		//»ó´ëµµ °°Àº ¸öÅë¡¤¸Ó¸®¡¤ÃÑ±â¸¦ »ı¼º. ±¸¿ªº° °æ±âÀÌ¹Ç·Î »ó´ë ¸öÃ¼´Â º®À¸·Î Ãë±ŞÇÏÁö ¾ÊÀ½.
+		//ìƒëŒ€ë„ ê°™ì€ ëª¸í†µÂ·ë¨¸ë¦¬Â·ì´ê¸°ë¥¼ ìƒì„±. êµ¬ì—­ë³„ ê²½ê¸°ì´ë¯€ë¡œ ìƒëŒ€ ëª¸ì²´ëŠ” ë²½ìœ¼ë¡œ ì·¨ê¸‰í•˜ì§€ ì•ŠìŒ.
 		const PlayerModel remote = AddPlayer(entry.m_sessionToken, remotePlayerMaterial_, false);
 		remote.body->ApplyNetworkPose(entry.pose);
 		remotePlayers_.push_back(remote);
 	}
-	//Ã¹ ÀÌµ¿ ¿äÃ» Àü¿¡´Â ¼­¹ö°¡ Ã³¸®ÇÑ ¼ø¹øÀÌ 0ÀÌ¹Ç·Î, ½ÃÀÛ À§Ä¡µµ ºñ±³ ±âÁØÀ¸·Î ÀúÀå.
+	//ì²« ì´ë™ ìš”ì²­ ì „ì—ëŠ” ì„œë²„ê°€ ì²˜ë¦¬í•œ ìˆœë²ˆì´ 0ì´ë¯€ë¡œ, ì‹œì‘ ìœ„ì¹˜ë„ ë¹„êµ ê¸°ì¤€ìœ¼ë¡œ ì €ì¥.
 	sentPositions_[0] = {0, player_->transform.position, true};
 	serverTimeMs_ = event.serverTimeMs;
 	startsAtMs_ = event.startsAtMs;
@@ -670,7 +661,7 @@ void ShootingScene::OnGameStarted(const Net::GameStarted& event)
 
 void ShootingScene::RemoveDepartedRemotePlayers()
 {
-	//ÅğÀåÇÑ »ó´ë´Â TCP ¸í´Ü¿¡¼­ ºüÁø ½ÃÁ¡¿¡ Á¦°Å. ´ÊÀº UDP´Â Ç¥½Ã °´Ã¼¸¦ ´Ù½Ã ¸¸µéÁö ¾ÊÀ½.
+	//í‡´ì¥í•œ ìƒëŒ€ëŠ” TCP ëª…ë‹¨ì—ì„œ ë¹ ì§„ ì‹œì ì— ì œê±°. ëŠ¦ì€ UDPëŠ” í‘œì‹œ ê°ì²´ë¥¼ ë‹¤ì‹œ ë§Œë“¤ì§€ ì•ŠìŒ.
 	for (auto remote = remotePlayers_.begin(); remote != remotePlayers_.end();)
 	{
 		const auto& players = roomState_.vPlayers;
@@ -818,14 +809,14 @@ void ShootingScene::SendPlayerTransform()
 	Net::PacketData packet;
 	if (!Net::PacketCodec::EncodeUdp(request, packet) || !network_->SendPacket(packet))
 		throw std::runtime_error("Failed to send player pose");
-	//¼­¹ö°¡ µ¹·ÁÁØ ¼ø¹øÀ¸·Î Àü¼Û ´ç½Ã À§Ä¡¸¦ Ã£±â À§ÇØ ÀúÀå. ³ª¸ÓÁö ¿¬»êÀ¸·Î ÃÖ±Ù 64Ä­À» Àç»ç¿ë.
+	//ì„œë²„ê°€ ëŒë ¤ì¤€ ìˆœë²ˆìœ¼ë¡œ ì „ì†¡ ë‹¹ì‹œ ìœ„ì¹˜ë¥¼ ì°¾ê¸° ìœ„í•´ ì €ì¥. ë‚˜ë¨¸ì§€ ì—°ì‚°ìœ¼ë¡œ ìµœê·¼ 64ì¹¸ì„ ì¬ì‚¬ìš©.
 	SentPosition& sent = sentPositions_[inputSequence_ % sentPositions_.size()];
 	sent = {inputSequence_, request.packetData.pose.position, true};
 }
 
 void ShootingScene::RecvTransformData(const Net::PlayerSnapshot& snapshot)
 {
-	//ÇØ´ç À§Ä¡¿¡ ÇÊ¿äÇÑ TCP »óÅÂ¸¦ ¾ÆÁ÷ ¸ø ¹Ş¾Ò´Ù¸é Àû¿ëÇÏÁö ¾ÊÀ½.
+	//í•´ë‹¹ ìœ„ì¹˜ì— í•„ìš”í•œ TCP ìƒíƒœë¥¼ ì•„ì§ ëª» ë°›ì•˜ë‹¤ë©´ ì ìš©í•˜ì§€ ì•ŠìŒ.
 	if (network_ == nullptr || roomState_.state != Net::GameState::Playing
 		|| Net::IsNewerSequence(snapshot.requiredRevision, roomState_.version.revision))
 		return;
@@ -838,7 +829,7 @@ void ShootingScene::RecvTransformData(const Net::PlayerSnapshot& snapshot)
 			continue;
 		}
 
-		//»ó´ë´Â ¼­¹ö È®Á¤ À§Ä¡¿Í ½Ã¼±À» ±×´ë·Î Ç¥½Ã. ³» ÀÌµ¿ ¿äÃ» ¼ø¹ø°ú ºñ±³ÇÏÁö ¾ÊÀ½.
+		//ìƒëŒ€ëŠ” ì„œë²„ í™•ì • ìœ„ì¹˜ì™€ ì‹œì„ ì„ ê·¸ëŒ€ë¡œ í‘œì‹œ. ë‚´ ì´ë™ ìš”ì²­ ìˆœë²ˆê³¼ ë¹„êµí•˜ì§€ ì•ŠìŒ.
 		for (const PlayerModel& remote : remotePlayers_)
 		{
 			if (entry.m_sessionToken == remote.body->m_SessionToken)
@@ -852,17 +843,17 @@ void ShootingScene::RecvTransformData(const Net::PlayerSnapshot& snapshot)
 
 void ShootingScene::CorrectLocalPlayerPosition(const Net::PlayerTransformEntry& entry)
 {
-	//º¸³½ Àû ¾ø´Â ¼ø¹øÀÌ°Å³ª ÀÌ¹Ì Àû¿ëÇÑ ÀÀ´äÀÌ¸é À§Ä¡¸¦ ´Ù½Ã º¸Á¤ÇÏÁö ¾ÊÀ½.
+	//ë³´ë‚¸ ì  ì—†ëŠ” ìˆœë²ˆì´ê±°ë‚˜ ì´ë¯¸ ì ìš©í•œ ì‘ë‹µì´ë©´ ìœ„ì¹˜ë¥¼ ë‹¤ì‹œ ë³´ì •í•˜ì§€ ì•ŠìŒ.
 	if (Net::IsNewerSequence(entry.lastProcessedInput, inputSequence_)
 		|| (hasAppliedInput_ && !Net::IsNewerSequence(entry.lastProcessedInput, lastAppliedInput_)))
 		return;
 	SentPosition& acknowledged = sentPositions_[entry.lastProcessedInput % sentPositions_.size()];
-	//°°Àº ¹è¿­ Ä­ÀÌ ´õ ÃÖ±Ù ¿äÃ»À¸·Î µ¤¿´À» ¼ö ÀÖÀ¸¹Ç·Î, À¯È¿ ¿©ºÎ¿Í ½ÇÁ¦ ¼ø¹øÀ» ¸ğµÎ È®ÀÎ.
+	//ê°™ì€ ë°°ì—´ ì¹¸ì´ ë” ìµœê·¼ ìš”ì²­ìœ¼ë¡œ ë®ì˜€ì„ ìˆ˜ ìˆìœ¼ë¯€ë¡œ, ìœ íš¨ ì—¬ë¶€ì™€ ì‹¤ì œ ìˆœë²ˆì„ ëª¨ë‘ í™•ì¸.
 	if (!acknowledged.valid || acknowledged.sequence != entry.lastProcessedInput)
 		return;
 
-	//¼­¹ö È®Á¤ À§Ä¡ - ÇØ´ç ¿äÃ»À» º¸³¾ ¶§ÀÇ À§Ä¡ = ±× ¿äÃ»±îÁö ¹ß»ıÇÑ À§Ä¡ ¿ÀÂ÷.
-	//ÀÌ Â÷ÀÌ¸¸ ÇöÀç À§Ä¡¿¡ ´õÇØ¼­, ÀÀ´äÀ» ±â´Ù¸®´Â µ¿¾È ÀÌµ¿ÇÑ °Å¸®¿Í ÇöÀç ½Ã¼±Àº À¯Áö.
+	//ì„œë²„ í™•ì • ìœ„ì¹˜ - í•´ë‹¹ ìš”ì²­ì„ ë³´ë‚¼ ë•Œì˜ ìœ„ì¹˜ = ê·¸ ìš”ì²­ê¹Œì§€ ë°œìƒí•œ ìœ„ì¹˜ ì˜¤ì°¨.
+	//ì´ ì°¨ì´ë§Œ í˜„ì¬ ìœ„ì¹˜ì— ë”í•´ì„œ, ì‘ë‹µì„ ê¸°ë‹¤ë¦¬ëŠ” ë™ì•ˆ ì´ë™í•œ ê±°ë¦¬ì™€ í˜„ì¬ ì‹œì„ ì€ ìœ ì§€.
 	Net::PlayerPose previous = player_->GetNetworkPose();
 	Net::PlayerPose corrected = previous;
 	corrected.position = ClampToPlayerArea(previous.position + (entry.pose.position - acknowledged.position));
@@ -878,21 +869,21 @@ void ShootingScene::CorrectLocalPlayerPosition(const Net::PlayerTransformEntry& 
 		if (playerBox.min.x < wall.max.x && playerBox.max.x > wall.min.x
 			&& playerBox.min.z < wall.max.z && playerBox.max.z > wall.min.z)
 		{
-			//º¸Á¤ÇÑ À§Ä¡°¡ º® ¾ÈÀÌ¸é ¼­¹ö°¡ È®Á¤ÇÑ À§Ä¡·Î ÀÌµ¿. yaw, pitch´Â ÇöÀç Å¬¶ó °ªÀ» À¯Áö.
+			//ë³´ì •í•œ ìœ„ì¹˜ê°€ ë²½ ì•ˆì´ë©´ ì„œë²„ê°€ í™•ì •í•œ ìœ„ì¹˜ë¡œ ì´ë™. yaw, pitchëŠ” í˜„ì¬ í´ë¼ ê°’ì„ ìœ ì§€.
 			corrected.position = ClampToPlayerArea(entry.pose.position);
 			player_->ApplyNetworkPose(corrected);
 			break;
 		}
 	}
 
-	//±¸¿ª Á¦ÇÑ°ú º® º¸Á¤±îÁö ³¡³­ µÚ ½ÇÁ¦·Î ÀÌµ¿ÇÑ º¸Á¤·® °è»ê.
+	//êµ¬ì—­ ì œí•œê³¼ ë²½ ë³´ì •ê¹Œì§€ ëë‚œ ë’¤ ì‹¤ì œë¡œ ì´ë™í•œ ë³´ì •ëŸ‰ ê³„ì‚°.
 	glm::vec3 correction = player_->transform.position - previous.position;
 	for (SentPosition& sent : sentPositions_)
 	{
 		if (!sent.valid)
 			continue;
-		//¼­¹ö°¡ Ã³¸®Çß´Ù°í È®ÀÎµÈ ¿äÃ»Àº ºñ¿ò. ¾ÆÁ÷ È®ÀÎ ¸øÇÑ ¿äÃ»ÀÇ ±âÁØ À§Ä¡µµ °°Àº ¸¸Å­ ¿Å±è.
-		//¾È ¿Å±â¸é ´ÙÀ½ ÀÀ´ä¿¡¼­ ÀÌ¹ø¿¡ ¹İ¿µÇÑ ¿ÀÂ÷¸¦ ´Ù½Ã Àû¿ëÇÒ ¼ö ÀÖÀ½.
+		//ì„œë²„ê°€ ì²˜ë¦¬í–ˆë‹¤ê³  í™•ì¸ëœ ìš”ì²­ì€ ë¹„ì›€. ì•„ì§ í™•ì¸ ëª»í•œ ìš”ì²­ì˜ ê¸°ì¤€ ìœ„ì¹˜ë„ ê°™ì€ ë§Œí¼ ì˜®ê¹€.
+		//ì•ˆ ì˜®ê¸°ë©´ ë‹¤ìŒ ì‘ë‹µì—ì„œ ì´ë²ˆì— ë°˜ì˜í•œ ì˜¤ì°¨ë¥¼ ë‹¤ì‹œ ì ìš©í•  ìˆ˜ ìˆìŒ.
 		if (!Net::IsNewerSequence(sent.sequence, entry.lastProcessedInput))
 			sent.valid = false;
 		else
@@ -926,7 +917,7 @@ void ShootingScene::RecvShootResult(const Net::ShotResolved& result)
 		|| (result.version.revision != roomState_.version.revision
 			&& !Net::IsNewerSequence(result.version.revision, roomState_.version.revision)))
 		return;
-	//ÀÌ¹Ì ¹ŞÀº ¹ß»ç °á°ú´Â ¹æÀÇ Á¡¼ö¿Í HUD¸¦ ¹Ù²Ù±â Àü¿¡ °É·¯¼­ °ú°Å Á¡¼ö·Î µ¹¾Æ°¡Áö ¾Ê°Ô ÇÔ.
+	//ì´ë¯¸ ë°›ì€ ë°œì‚¬ ê²°ê³¼ëŠ” ë°©ì˜ ì ìˆ˜ì™€ HUDë¥¼ ë°”ê¾¸ê¸° ì „ì— ê±¸ëŸ¬ì„œ ê³¼ê±° ì ìˆ˜ë¡œ ëŒì•„ê°€ì§€ ì•Šê²Œ í•¨.
 	if (result.shooterToken == sessionToken_ && (result.shotId == 0
 		|| (lastResolvedShotId_ != 0 && !Net::IsNewerSequence(result.shotId, lastResolvedShotId_))))
 		return;
@@ -942,16 +933,16 @@ void ShootingScene::RecvShootResult(const Net::ShotResolved& result)
 	lastResolvedShotId_ = result.shotId;
 }
 
-//ÇÃ·¹ÀÌ¾î ÀÌµ¿ ±¸¿ª¿¡ µû¶ó ÀÌµ¿ ¹üÀ§¸¦ clampÇØÁÖ´Â ÇÔ¼ö
+//í”Œë ˆì´ì–´ ì´ë™ êµ¬ì—­ì— ë”°ë¼ ì´ë™ ë²”ìœ„ë¥¼ clampí•´ì£¼ëŠ” í•¨ìˆ˜
 glm::vec3 ShootingScene::ClampToPlayerArea(glm::vec3 position) const
 {
-	//º»ÀÎ ÅäÅ«À¸·Î ¹èÁ¤µÈ ±¸¿ªÀ» Ã£À½. Ç¥Àû ±¸¿ªÀÌ³ª ´Ù¸¥ ÇÃ·¹ÀÌ¾î ±¸¿ªÀ¸·Î Á¦ÇÑÇÏ¸é ¾È µÊ.
+	//ë³¸ì¸ í† í°ìœ¼ë¡œ ë°°ì •ëœ êµ¬ì—­ì„ ì°¾ìŒ. í‘œì  êµ¬ì—­ì´ë‚˜ ë‹¤ë¥¸ í”Œë ˆì´ì–´ êµ¬ì—­ìœ¼ë¡œ ì œí•œí•˜ë©´ ì•ˆ ë¨.
 	for (const Net::PlayerData& player : roomState_.vPlayers)
 		if (player.m_sessionToken == sessionToken_)
 			for (const Net::AreaData& area : roomState_.vAreas)
 				if (area.areaId == player.areaId)
 				{
-					//À§Ä¡´Â ÇÃ·¹ÀÌ¾î Áß½ÉÀÌ¹Ç·Î min¿¡´Â ¸öÃ¼ Àı¹İÀ» ´õÇÏ°í max¿¡¼­´Â »©¼­ ¸öÀÌ °æ°è¸¦ ³ÑÁö ¾Ê°Ô ÇÔ.
+					//ìœ„ì¹˜ëŠ” í”Œë ˆì´ì–´ ì¤‘ì‹¬ì´ë¯€ë¡œ minì—ëŠ” ëª¸ì²´ ì ˆë°˜ì„ ë”í•˜ê³  maxì—ì„œëŠ” ë¹¼ì„œ ëª¸ì´ ê²½ê³„ë¥¼ ë„˜ì§€ ì•Šê²Œ í•¨.
 					position.x = std::clamp(position.x, area.movementBounds.min.x + Net::PlayerHalfExtent,
 						area.movementBounds.max.x - Net::PlayerHalfExtent);
 					position.z = std::clamp(position.z, area.movementBounds.min.z + Net::PlayerHalfExtent,

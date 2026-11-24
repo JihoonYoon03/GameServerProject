@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include "NetworkTypes.h"
 
 // TCP uses its frame length. UDP uses the received datagram length and message counts.

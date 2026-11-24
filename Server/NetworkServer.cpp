@@ -1,4 +1,4 @@
-#include "pch.h"
+﻿#include "pch.h"
 #include "NetworkServer.h"
 #include "../Shared/PacketCodec.h"
 #include <bcrypt.h>

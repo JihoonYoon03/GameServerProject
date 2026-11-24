@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include "NetworkPackets.h"
 #include <variant>
 #include <functional>

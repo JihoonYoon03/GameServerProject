@@ -1,4 +1,4 @@
-#include "pch.h"
+ï»¿#include "pch.h"
 #include "ShootingScene.h"
 #include "NetworkClient.h"
 #include "../Shared/PacketCodec.h"
@@ -714,7 +714,7 @@ void ShootingScene::ApplyTargetSnapshot(const Net::TargetSnapshot& snapshot)
 		RemoteTarget& target = remoteTargets_[index];
 		if (target.motion.kind != motion.kind)
 		{
-			// Ç¥½Ã ½½·ÔÀÇ Á¾·ù°¡ ¹Ù²î¸é ¿Ã¹Ù¸¥ »ö»óÀÇ Ç¥½Ã °´Ã¼·Î ±³Ã¼ÇÑ´Ù.
+			// í‘œì‹œ ìŠ¬ë¡¯ì˜ ì¢…ë¥˜ê°€ ë°”ë€Œë©´ ì˜¬ë°”ë¥¸ ìƒ‰ìƒì˜ í‘œì‹œ ê°ì²´ë¡œ êµì²´í•œë‹¤.
 			Object* object = AddProp("Remote target", targetMesh_, material, motion.position, glm::vec3(radius));
 			RemoveObject(target.object->GetId());
 			target.object = object;
@@ -736,7 +736,7 @@ void ShootingScene::AdvanceRemoteTargets(float deltaSeconds)
 		Net::TargetMotionData& motion = target.motion;
 		if (motion.kind == Net::TargetKind::Orbiting)
 		{
-			// Á¢¼± ¼Óµµ¸¦ È¸Àü½ÃÄÑ ÆĞÅ¶ »çÀÌ¿¡µµ °°Àº ¼öÆò ¿ø ±Ëµµ¸¦ µû¶ó°£´Ù.
+			// ì ‘ì„  ì†ë„ë¥¼ íšŒì „ì‹œì¼œ íŒ¨í‚· ì‚¬ì´ì—ë„ ê°™ì€ ìˆ˜í‰ ì› ê¶¤ë„ë¥¼ ë”°ë¼ê°„ë‹¤.
 			glm::vec3 previousVelocity = motion.velocity;
 			motion.velocity.x = previousVelocity.x * cosine - previousVelocity.z * sine;
 			motion.velocity.z = previousVelocity.x * sine + previousVelocity.z * cosine;

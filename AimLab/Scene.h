@@ -30,6 +30,7 @@ struct Hud
 	std::string				 message;
 	bool					 crosshair = true;
 	bool showResults = false;
+	float hitIndicatorAlpha = 0.0f;
 	float					 messageScale = 0.0015f;
 	std::string              readyButton;
 	std::vector<HudButton>   lobbyButtons;

@@ -8,6 +8,7 @@ namespace
 {
 	constexpr float TargetAreaHalfSize = ShootingRange::TargetHalfSize;
 	constexpr float TargetScale = 0.3f;
+	constexpr Net::ServerTimeMs HitIndicatorDurationMs = 1000;
 
 	class PlayerHead : public Object
 	{
@@ -231,6 +232,7 @@ void ShootingScene::Update(float deltaTime, const Input& input)
 	{
 		ClearTargets();
 		targetSpawnTime_ = 0.0f;
+		hitIndicatorUntilMs_ = 0;
 	}
 
 	if (input.WasPressed('r') || input.WasPressed('R'))
@@ -346,6 +348,7 @@ void ShootingScene::Shoot()
 		if (target->active && Collision::Raycast(shot_, target->GetWorldSphere(), distance) && target->Hit())
 		{
 			stages_.AddScore();
+			hitIndicatorUntilMs_ = GetTickCount64() + HitIndicatorDurationMs;
 			break;
 		}
 	}
@@ -491,13 +494,13 @@ Hud ShootingScene::GetHud() const
 		<< " V: " << player_->m_fVerticalSensitivity;
 	std::string sensitivityLabel = sensitivity.str();
 	Hud hud;
+	Net::ServerTimeMs nowMs = GetTickCount64();
+	hud.hitIndicatorAlpha = hitIndicatorUntilMs_ > nowMs
+		? static_cast<float>(hitIndicatorUntilMs_ - nowMs) / HitIndicatorDurationMs : 0.0f;
 	if (network_ != nullptr)
 	{
 		hud.lines = {"hits: " + std::to_string(networkStats_.score),
 			"shots: " + std::to_string(networkStats_.shotsFired) + sensitivityLabel};
-		if (lastResolvedShotId_ != 0)
-			hud.message = lastShotOutcome_ == Net::ShotOutcome::HitTarget ? "Hit"
-				: (lastShotOutcome_ == Net::ShotOutcome::BlockedByWorld ? "Blocked" : "Miss");
 		if (roomState_.state == Net::GameState::Playing)
 		{
 			Net::ServerTimeMs remainingMs = endsAtMs_ > serverTimeMs_ ? endsAtMs_ - serverTimeMs_ : 0;
@@ -560,6 +563,7 @@ bool ShootingScene::SetNetworkSession(NetworkClient& network, const Net::RoomEnt
 	mapLoadedSent_ = false;
 	startedMatchId_ = 0;
 	serverTimeMs_ = startsAtMs_ = endsAtMs_ = 0;
+	hitIndicatorUntilMs_ = 0;
 	finalResults_.clear();
 	return true;
 }
@@ -624,6 +628,7 @@ void ShootingScene::OnGameStarted(const Net::GameStarted& event)
 	movementSendElapsed_ = 0.0f;
 	nextShotId_ = 1;
 	lastResolvedShotId_ = 0;
+	hitIndicatorUntilMs_ = 0;
 	networkStats_ = {};
 	hasShot_ = false;
 	ClearTargets();
@@ -896,7 +901,8 @@ void ShootingScene::RecvShootResult(const Net::ShotResolved& result)
 	if (result.shooterToken != sessionToken_)
 		return;
 	networkStats_ = result.shooterStats;
-	lastShotOutcome_ = result.outcome;
+	if (result.outcome == Net::ShotOutcome::HitTarget)
+		hitIndicatorUntilMs_ = GetTickCount64() + HitIndicatorDurationMs;
 	lastResolvedShotId_ = result.shotId;
 }
 

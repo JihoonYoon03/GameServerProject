@@ -103,7 +103,7 @@ private:
 	Net::ShotId nextShotId_ = 1;
 	Net::ShotId lastResolvedShotId_ = 0;
 	Net::PlayerStats networkStats_{};
-	Net::ShotOutcome lastShotOutcome_ = Net::ShotOutcome::Miss;
+	Net::ServerTimeMs hitIndicatorUntilMs_ = 0;
 	glm::mat4 shotTransform_{1.0f};
 
 	Object* AddProp(const std::string& name, const std::shared_ptr<Mesh>& mesh, const std::shared_ptr<Material>& material, const glm::vec3& position, const glm::vec3& scale, bool solid = false);

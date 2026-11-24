@@ -591,6 +591,27 @@ void Framework::DrawOverlay()
 			glVertex2f(0, -0.025f);
 			//LegacyGL
 			glEnd();
+
+			if (hud.hitIndicatorAlpha > 0.0f)
+			{
+				glPushAttrib(GL_ENABLE_BIT | GL_COLOR_BUFFER_BIT | GL_CURRENT_BIT | GL_LINE_BIT);
+				glEnable(GL_BLEND);
+				glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+				glColor4f(1.0f, 1.0f, 1.0f, hud.hitIndicatorAlpha);
+				glLineWidth(2.0f);
+				float radiusPixels = 0.035f * static_cast<float>(std::max(width_, height_)) * 0.5f;
+				float radiusX = 2.0f * radiusPixels / width_;
+				float radiusY = 2.0f * radiusPixels / height_;
+				constexpr int CircleSegments = 64;
+				glBegin(GL_LINE_LOOP);
+				for (int index = 0; index < CircleSegments; ++index)
+				{
+					float angle = glm::radians(360.0f) * index / CircleSegments;
+					glVertex2f(std::cos(angle) * radiusX, std::sin(angle) * radiusY);
+				}
+				glEnd();
+				glPopAttrib();
+			}
 			// 원본은 이후 HUD에도 선 두께 2를 유지합니다.
 		}
 

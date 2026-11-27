@@ -23,6 +23,7 @@ public:
     void DrawText(const std::string& text, float x, float y);
 
 private:
+    void SearchRoomList(bool manual);
     void ShowRoomList() const;
     void SelectRoom(std::size_t index);
     bool CanJoinSelectedRoom() const;
@@ -30,6 +31,8 @@ private:
     NetworkClient* network_;
     std::vector<Net::RoomInfo> roomList_;
     std::uint32_t pendingListRequestId_ = 0;
+    float autoRefreshElapsed_ = 0.0f;
+    bool autoRefreshPending_ = false;
     Net::RoomId roomId_ = 0;
     std::uint32_t pendingLeaveRequestId_ = 0;
     bool leaveFailed_ = false;

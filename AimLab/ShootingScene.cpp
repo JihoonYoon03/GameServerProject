@@ -429,14 +429,14 @@ Hud ShootingScene::ShowReadyUI() const
 			label += " - Waiting";
 		hud.lines.push_back(label);
 		if (isLocal && player.mapLoaded)
-			hud.readyButton = player.ready == Net::ReadyState::Ready ? "Cancel ready [Space]" : "Ready [Space]";
+		{
+			bool lastReady = pendingReadyChanges_.empty()
+				? player.ready == Net::ReadyState::Ready
+				: pendingReadyChanges_.back().ready;
+			hud.readyButton = lastReady ? "Cancel ready [Space]" : "Ready [Space]";
+		}
 	}
-	if (!pendingReadyChanges_.empty())
-	{
-		hud.readyButton = pendingReadyChanges_.back().ready ? "Requesting ready..." : "Cancelling ready...";
-		hud.message = "Click or press Space to change again";
-	}
-	else if (readyChangeRejected_)
+	if (readyChangeRejected_)
 		hud.message = "Server declined the change. Try again.";
 	else
 		hud.message = "Starts when everyone is ready";
@@ -480,7 +480,7 @@ Hud ShootingScene::GetHud() const
 			}
 		}
 		std::string readyStatus = std::to_string(readyCount) + "/" + std::to_string(roomState_.vPlayers.size());
-		hud.lines.push_back((localReady || !pendingReadyChanges_.empty()) ? "Ready requested. Waiting for everyone (" + readyStatus + ")"
+		hud.lines.push_back((localReady || !pendingReadyChanges_.empty()) ? "Ready. Waiting for everyone (" + readyStatus + ")"
 			: "Press R to ready for next match (" + readyStatus + ")");
 		return hud;
 	}

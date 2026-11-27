@@ -4,8 +4,21 @@
 #include "../Shared/ShootingRange.h"
 
 #include <algorithm>
+#include <cmath>
+#include <GL/glm/gtc/matrix_transform.hpp>
 #include <utility>
 #include <variant>
+
+namespace
+{
+	// 배정 구역 스폰 위치에서 중앙 사격 구역(0, 0, 0)을 바라보는 초기 yaw(도)를 계산한다.
+	Net::PlayerPose SpawnPoseForArea(const Net::AreaData& area)
+	{
+		glm::vec3 position = glm::vec3(area.spawnTransform[3]);
+		float yaw = glm::degrees(std::atan2(position.x, position.z));
+		return {position, yaw, 0.0f};
+	}
+}
 
 Room::Room()
 {
@@ -46,11 +59,15 @@ void Room::AssignPlayerAreas()
 		{
 			std::size_t centerIndex = (ShootingRange::SouthArea + index) % ShootingRange::AreaCenters.size();
 			glm::vec3 center = ShootingRange::AreaCenters[centerIndex];
+			glm::vec3 spawnPosition = center + glm::vec3(0, 1, 0);
+			float spawnYaw = glm::degrees(std::atan2(spawnPosition.x, spawnPosition.z));
 			Net::AreaData area;
 			area.areaId = static_cast<std::uint8_t>(index);
 			area.movementBounds.min = center - glm::vec3(ShootingRange::AreaInnerHalfSize);
 			area.movementBounds.max = center + glm::vec3(ShootingRange::AreaInnerHalfSize);
-			area.spawnTransform[3] = glm::vec4(center + glm::vec3(0, 1, 0), 1.0f);
+			area.spawnTransform = glm::rotate(
+				glm::translate(glm::mat4(1.0f), spawnPosition),
+				glm::radians(spawnYaw), glm::vec3(0, 1, 0));
 			m_state.vAreas.push_back(area);
 		}
 		m_vWorldBoxes.clear();
@@ -81,7 +98,7 @@ void Room::AssignPlayerAreas()
 		if (area != m_state.vAreas.end())
 		{
 			player.m_PlayerData.areaId = area->areaId;
-			player.m_PlayerData.pose.position = glm::vec3(area->spawnTransform[3]);
+			player.m_PlayerData.pose = SpawnPoseForArea(*area);
 		}
 	}
 }
@@ -260,6 +277,14 @@ void Room::StartGameIfReady()
 	{
 		player.m_PlayerData.ready = Net::ReadyState::Playing;
 		player.m_PlayerData.stats = {};
+		for (const Net::AreaData& area : m_state.vAreas)
+		{
+			if (area.areaId == player.m_PlayerData.areaId)
+			{
+				player.m_PlayerData.pose = SpawnPoseForArea(area);
+				break;
+			}
+		}
 		player.m_nLastShotId = 0;
 		// 클라이언트도 새 경기에서 입력 순번을 0부터 시작한다.
 		player.m_nLastProcessedInput = 0;

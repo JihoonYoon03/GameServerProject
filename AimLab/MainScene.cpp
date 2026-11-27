@@ -6,6 +6,7 @@
 namespace
 {
     constexpr std::size_t RoomsPerPage = 6;
+    constexpr float AutoRefreshIntervalSeconds = 1.0f;
     constexpr HudRect JoinButton{-0.82f, -0.78f, -0.30f, -0.59f};
     constexpr HudRect CreateButton{-0.26f, -0.78f, 0.26f, -0.59f};
     constexpr HudRect RefreshButton{0.30f, -0.78f, 0.82f, -0.59f};
@@ -30,15 +31,30 @@ void MainScene::Initialize()
 
 void MainScene::SearchRoomList()
 {
+    SearchRoomList(true);
+}
+
+void MainScene::SearchRoomList(bool manual)
+{
     if (pendingListRequestId_ != 0)
+    {
+        if (manual && autoRefreshPending_)
+        {
+            autoRefreshPending_ = false;
+            notice_.clear();
+        }
         return;
+    }
 
     Net::PacketData packet;
     std::uint32_t requestId = network_->NextRequestId();
     if (!Net::PacketCodec::EncodeTcp(Net::RoomListRequest{}, requestId, packet) || !network_->SendPacket(packet))
         throw std::runtime_error("방 목록을 요청하지 못했습니다.");
     pendingListRequestId_ = requestId;
-    notice_.clear();
+    autoRefreshPending_ = !manual;
+    autoRefreshElapsed_ = 0.0f;
+    if (manual)
+        notice_.clear();
 }
 
 void MainScene::UpdateRoomList(std::uint32_t requestId, const Net::RoomListResult& result)
@@ -46,9 +62,13 @@ void MainScene::UpdateRoomList(std::uint32_t requestId, const Net::RoomListResul
     if (pendingListRequestId_ == 0 || requestId != pendingListRequestId_)
         return;
 
+    bool wasAutoRefresh = autoRefreshPending_;
     // 새로고침으로 행 순서가 바뀌어도 선택했던 방 번호를 유지한다.
     Net::RoomId previousRoom = roomList_.empty() ? 0 : roomList_[selected_].roomId;
+    std::vector<Net::RoomInfo> previousList = roomList_;
     pendingListRequestId_ = 0;
+    autoRefreshPending_ = false;
+    autoRefreshElapsed_ = 0.0f;
     roomList_ = result.rooms;
     std::sort(roomList_.begin(), roomList_.end(), [](const Net::RoomInfo& a, const Net::RoomInfo& b)
     {
@@ -63,7 +83,16 @@ void MainScene::UpdateRoomList(std::uint32_t requestId, const Net::RoomListResul
             break;
         }
     }
-    ShowRoomList();
+    bool listChanged = previousList.size() != roomList_.size();
+    for (std::size_t i = 0; !listChanged && i < roomList_.size(); ++i)
+    {
+        const Net::RoomInfo& oldRoom = previousList[i];
+        const Net::RoomInfo& newRoom = roomList_[i];
+        listChanged = oldRoom.roomId != newRoom.roomId || oldRoom.playerCount != newRoom.playerCount
+            || oldRoom.capacity != newRoom.capacity || oldRoom.state != newRoom.state;
+    }
+    if (!wasAutoRefresh || listChanged)
+        ShowRoomList();
     if (firstList_ && roomList_.empty())
         RequestEntry(0);
     firstList_ = false;
@@ -74,6 +103,7 @@ void MainScene::RequestEntry(Net::RoomId roomId)
     if (!network_->RequestGameRoom(roomId))
         throw std::runtime_error("방 입장 요청을 보내지 못했습니다.");
     entering_ = true;
+    autoRefreshElapsed_ = 0.0f;
 }
 
 bool MainScene::JoinRoom(const Net::RoomEnterResult& result)
@@ -166,35 +196,41 @@ bool MainScene::CanJoinSelectedRoom() const
     return room.state == Net::GameState::Preparing && room.playerCount < room.capacity;
 }
 
-void MainScene::Update(float, const Input& input)
+void MainScene::Update(float deltaTime, const Input& input)
 {
-    if (entering_ || pendingListRequestId_ != 0)
+    if (entering_ || IsLeaving())
+    {
+        autoRefreshElapsed_ = 0.0f;
         return;
+    }
+    if (pendingListRequestId_ != 0 && !autoRefreshPending_)
+        return;
+
+    autoRefreshElapsed_ += std::max(deltaTime, 0.0f);
     if (input.WasPressed('n') || input.WasPressed('N'))
         RequestEntry(0);
     else if (input.WasPressed('r') || input.WasPressed('R'))
-        SearchRoomList();
-    else if (!roomList_.empty())
-    {
-        if (input.WasPressed('w') || input.WasPressed('W'))
-            SelectRoom((selected_ + roomList_.size() - 1) % roomList_.size());
-        else if (input.WasPressed('s') || input.WasPressed('S'))
-            SelectRoom((selected_ + 1) % roomList_.size());
-        else if (input.WasPressed('\r') && CanJoinSelectedRoom())
-            RequestEntry(roomList_[selected_].roomId);
-    }
+        SearchRoomList(true);
+    else if (!roomList_.empty() && (input.WasPressed('w') || input.WasPressed('W')))
+        SelectRoom((selected_ + roomList_.size() - 1) % roomList_.size());
+    else if (!roomList_.empty() && (input.WasPressed('s') || input.WasPressed('S')))
+        SelectRoom((selected_ + 1) % roomList_.size());
+    else if (!roomList_.empty() && input.WasPressed('\r') && CanJoinSelectedRoom())
+        RequestEntry(roomList_[selected_].roomId);
+    else if (pendingListRequestId_ == 0 && autoRefreshElapsed_ >= AutoRefreshIntervalSeconds)
+        SearchRoomList(false);
 }
 
 void MainScene::PickButton(float x, float y)
 {
-    if (entering_ || pendingListRequestId_ != 0)
+    if (entering_ || IsLeaving() || (pendingListRequestId_ != 0 && !autoRefreshPending_))
         return;
 
-    const std::size_t first = selected_ / RoomsPerPage * RoomsPerPage;
+    std::size_t first = selected_ / RoomsPerPage * RoomsPerPage;
     if (CreateButton.Contains(x, y))
         RequestEntry(0);
     else if (RefreshButton.Contains(x, y))
-        SearchRoomList();
+        SearchRoomList(true);
     else if (JoinButton.Contains(x, y) && CanJoinSelectedRoom())
         RequestEntry(roomList_[selected_].roomId);
     else if (PrevButton.Contains(x, y) && first >= RoomsPerPage)
@@ -219,10 +255,11 @@ Hud MainScene::GetHud() const
     Hud hud;
     hud.crosshair = false;
     hud.message = notice_;
-    const bool available = !entering_ && pendingListRequestId_ == 0;
+    bool manualPending = pendingListRequestId_ != 0 && !autoRefreshPending_;
+    bool available = !entering_ && !manualPending;
     if (entering_)
         hud.message = "Entering room...";
-    else if (pendingListRequestId_ != 0 && notice_.empty())
+    else if (manualPending && notice_.empty())
         hud.message = "Loading room list...";
     else if (roomList_.empty() && notice_.empty())
         hud.message = "No rooms available";

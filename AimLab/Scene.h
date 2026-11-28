@@ -29,6 +29,9 @@ struct Hud
 	std::vector<std::string> lines;
 	std::string				 message;
 	bool					 crosshair = true;
+	bool showTitle = false;
+	bool titlePromptVisible = true;
+	std::string titlePrompt;
 	bool showResults = false;
 	float hitIndicatorAlpha = 0.0f;
 	float					 messageScale = 0.0015f;

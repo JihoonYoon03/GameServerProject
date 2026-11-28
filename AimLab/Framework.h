@@ -9,12 +9,14 @@ class MainScene;
 class Framework
 {
 public:
-	explicit Framework(std::unique_ptr<NetworkClient> network = nullptr);
+	Framework(std::string serverAddress, std::uint16_t tcpPort);
 	~Framework();
 	int Run(int argc, char** argv, std::unique_ptr<Scene> scene);
 
 private:
 	void Tick();
+	void BeginConnection();
+	void ReturnToTitle(const std::string& message);
 	void UpdateConnection();
 	void Render();
 	void DrawObjects();
@@ -35,6 +37,8 @@ private:
 	static void MotionCallback(int x, int y);
 	static void CloseCallback();
 
+	std::string serverAddress_;
+	std::uint16_t tcpPort_;
 	std::unique_ptr<NetworkClient> network_;
 	bool sceneInitialized_ = false;
 	std::unique_ptr<MainScene> roomMenu_;

@@ -113,6 +113,9 @@
     <ClCompile Include="MainScene.cpp">
       <Filter>Network\Client\Source</Filter>
     </ClCompile>
+    <ClCompile Include="TitleScene.cpp">
+      <Filter>Network\Client\Source</Filter>
+    </ClCompile>
     <ClCompile Include="NetworkClient.cpp">
       <Filter>Network\Client\Source</Filter>
     </ClCompile>
@@ -185,6 +188,9 @@
       <Filter>Engine\Header</Filter>
     </ClInclude>
     <ClInclude Include="MainScene.h">
+      <Filter>Network\Client\Header</Filter>
+    </ClInclude>
+    <ClInclude Include="TitleScene.h">
       <Filter>Network\Client\Header</Filter>
     </ClInclude>
     <ClInclude Include="NetworkClient.h">

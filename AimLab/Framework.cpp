@@ -2,13 +2,14 @@
 #include "Framework.h"
 #include "NetworkClient.h"
 #include "MainScene.h"
+#include "TitleScene.h"
 #include "ShootingScene.h"
 #include "../Shared/PacketCodec.h"
 
 Framework* Framework::current_ = nullptr;
 
-Framework::Framework(std::unique_ptr<NetworkClient> network)
-	: network_(std::move(network))
+Framework::Framework(std::string serverAddress, std::uint16_t tcpPort)
+	: serverAddress_(std::move(serverAddress)), tcpPort_(tcpPort)
 {
 }
 
@@ -51,6 +52,45 @@ namespace
 	{
 		return static_cast<float>(glutStrokeLength(GLUT_STROKE_ROMAN,
 			reinterpret_cast<const unsigned char*>(text.c_str())));
+	}
+
+	void DrawTitlePanel(const Hud& hud, float aspectCorrection)
+	{
+		glColor3f(0.035f, 0.055f, 0.08f);
+		glRectf(-1.0f, -1.0f, 1.0f, 1.0f);
+		glPushMatrix();
+		glScalef(aspectCorrection, 1.0f, 1.0f);
+
+		const std::string title = "AimLab";
+		float width = ReadyTextWidth(title);
+		float scale = std::min(0.0042f, 1.6f / (width * aspectCorrection));
+		glColor3f(0.53f, 0.90f, 0.80f);
+		glLineWidth(4.0f);
+		DrawText(title, -width * scale * 0.5f, -50.0f * scale, scale);
+
+		glLineWidth(1.7f);
+		glColor3f(0.94f, 0.96f, 0.98f);
+		if (hud.titlePromptVisible)
+		{
+			scale = std::min(0.00085f, 1.7f / (std::max(1.0f, ReadyTextWidth(hud.titlePrompt)) * aspectCorrection));
+			DrawText(hud.titlePrompt, -ReadyTextWidth(hud.titlePrompt) * scale * 0.5f, -0.44f, scale);
+		}
+		glColor3f(0.60f, 0.68f, 0.74f);
+		if (!hud.lines.empty())
+		{
+			scale = std::min(0.00053f, 1.8f / (std::max(1.0f, ReadyTextWidth(hud.lines.front())) * aspectCorrection));
+			DrawText(hud.lines.front(), -ReadyTextWidth(hud.lines.front()) * scale * 0.5f, -0.68f, scale);
+		}
+		const std::string editHint = "Type IP / Backspace to edit";
+		scale = std::min(0.00038f, 1.8f / (ReadyTextWidth(editHint) * aspectCorrection));
+		DrawText(editHint, -ReadyTextWidth(editHint) * scale * 0.5f, -0.77f, scale);
+		if (!hud.message.empty())
+		{
+			glColor3f(1.0f, 0.69f, 0.53f);
+			scale = std::min(0.00045f, 1.8f / (ReadyTextWidth(hud.message) * aspectCorrection));
+			DrawText(hud.message, -ReadyTextWidth(hud.message) * scale * 0.5f, -0.91f, scale);
+		}
+		glPopMatrix();
 	}
 
 	void DrawLobbyPanel(const Hud& hud)
@@ -124,7 +164,7 @@ int Framework::Run(int argc, char** argv, std::unique_ptr<Scene> scene)
 		glutInitWindowSize(width_, height_);
 		glutInitWindowPosition(100, 100);
 		glutSetOption(GLUT_MULTISAMPLE, 4);
-		window_ = glutCreateWindow("Example1");
+		window_ = glutCreateWindow("AimLab");
 
 		if (window_ <= 0)
 		{
@@ -153,11 +193,9 @@ int Framework::Run(int argc, char** argv, std::unique_ptr<Scene> scene)
 		glEnable(GL_MULTISAMPLE);
 		glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
 		scene_ = std::move(scene);
-		if (network_ == nullptr)
-		{
-			scene_->Initialize();
-			sceneInitialized_ = true;
-		}
+		scene_->Initialize();
+		sceneInitialized_ = true;
+		menuCursorActive_ = true;
 
 		glutDisplayFunc(DisplayCallback);
 		glutReshapeFunc(ReshapeCallback);
@@ -167,7 +205,7 @@ int Framework::Run(int argc, char** argv, std::unique_ptr<Scene> scene)
 		glutMotionFunc(MotionCallback);
 		glutPassiveMotionFunc(MotionCallback);
 		glutCloseFunc(CloseCallback);
-		glutSetCursor(GLUT_CURSOR_NONE);
+		glutSetCursor(GLUT_CURSOR_LEFT_ARROW);
 		previousTime_ = std::chrono::steady_clock::now();
 		glutTimerFunc(UpdateIntervalMs, TimerCallback, 0);
 		glutMainLoop();
@@ -204,13 +242,17 @@ void Framework::Tick()
 
 	if (network_ != nullptr)
 	{
-		UpdateConnection();
-		if (network_->IsDisconnected())
+		try
 		{
-			std::cerr << "서버 연결이 종료되었습니다.\n";
-			exitCode_ = 1;
-			Close();
-			return;
+			if (!network_->IsDisconnected())
+				UpdateConnection();
+			if (network_->IsDisconnected())
+				ReturnToTitle("Connection lost or failed. Press Space to retry.");
+		}
+		catch (const std::exception& error)
+		{
+			std::cerr << error.what() << '\n';
+			ReturnToTitle("Connection error. Press Space to retry.");
 		}
 	}
 	if (!sceneInitialized_)
@@ -226,6 +268,11 @@ void Framework::Tick()
 		input_.EndFrame();
 	if (!roomMenu_ || !roomMenu_->IsLeaving())
 		scene_->Update(elapsed, input_);
+	if (TitleScene* title = dynamic_cast<TitleScene*>(scene_.get()))
+	{
+		if (input_.WasPressed(' ') && !title->IsConnecting())
+			BeginConnection();
+	}
 	input_.EndFrame();
 
 	if (elapsed > 0.0f)
@@ -236,9 +283,55 @@ void Framework::Tick()
 	glutPostRedisplay();
 }
 
+void Framework::BeginConnection()
+{
+	TitleScene* title = dynamic_cast<TitleScene*>(scene_.get());
+	if (!title || title->IsConnecting()) return;
+
+	serverAddress_ = title->GetServerAddress();
+	title->SetConnecting(true);
+	try
+	{
+		network_ = std::make_unique<NetworkClient>();
+		if (!network_->ConnectServer(serverAddress_, tcpPort_) || !network_->StartNetwork())
+			ReturnToTitle("Connection failed. Check the server IP and try again.");
+	}
+	catch (const std::exception& error)
+	{
+		std::cerr << error.what() << '\n';
+		ReturnToTitle("Connection failed. Check the server IP and try again.");
+	}
+}
+
+void Framework::ReturnToTitle(const std::string& message)
+{
+	scene_.reset();
+	roomMenu_.reset();
+	network_.reset();
+	input_.Reset();
+	readyPanelActive_ = false;
+	centerAimOnMotion_ = false;
+	menuCursorActive_ = true;
+	glutSetCursor(GLUT_CURSOR_LEFT_ARROW);
+
+	auto title = std::make_unique<TitleScene>(serverAddress_);
+	title->Initialize();
+	title->SetNotice(message);
+	scene_ = std::move(title);
+	sceneInitialized_ = true;
+	previousTime_ = std::chrono::steady_clock::now();
+}
+
 void Framework::UpdateConnection()
 {
 	network_->UpdateNetwork();
+	if (dynamic_cast<TitleScene*>(scene_.get()) && network_->IsConnected())
+	{
+		scene_ = std::make_unique<MainScene>(*network_);
+		scene_->Initialize();
+		sceneInitialized_ = true;
+		input_.Reset();
+	}
 	MainScene* lobby = dynamic_cast<MainScene*>(scene_.get());
 	ShootingScene* shooting = dynamic_cast<ShootingScene*>(scene_.get());
 
@@ -249,11 +342,6 @@ void Framework::UpdateConnection()
 			Net::UdpHeader header;
 			if (!Net::PacketCodec::ReadUdpHeader(packet.bytes.data(), packet.bytes.size(), header))
 				continue;
-			if (lobby && !sceneInitialized_ && header.type == Net::UdpType::RegisterResult && network_->IsConnected())
-			{
-				lobby->Initialize();
-				sceneInitialized_ = true;
-			}
 			if (!sceneInitialized_ || !shooting)
 				continue;
 
@@ -385,7 +473,7 @@ void Framework::UpdateConnection()
 		}
 	}
 	readyPanelActive_ = shooting && shooting->IsPreparing();
-	bool showCursor = lobby || (shooting && !shooting->IsPlaying());
+	bool showCursor = dynamic_cast<TitleScene*>(scene_.get()) || lobby || (shooting && !shooting->IsPlaying());
 	if (menuCursorActive_ != showCursor)
 	{
 		menuCursorActive_ = showCursor;
@@ -553,7 +641,9 @@ void Framework::DrawOverlay()
 	//LegacyGL
 	glLoadIdentity();
 
-	if (!hud.lobbyButtons.empty())
+	if (hud.showTitle)
+		DrawTitlePanel(hud, static_cast<float>(height_) / width_);
+	else if (!hud.lobbyButtons.empty())
 		DrawLobbyPanel(hud);
 	else if (!hud.readyButton.empty())
 		DrawReadyPanel(hud);
@@ -666,6 +756,11 @@ void Framework::Close()
 void Framework::Fail(const std::exception& error)
 {
 	std::cerr << error.what() << '\n';
+	if (network_ && network_->IsDisconnected())
+	{
+		ReturnToTitle("Connection lost. Press Space to reconnect.");
+		return;
+	}
 	exitCode_ = 1;
 	Close();
 }
@@ -712,11 +807,14 @@ void Framework::KeyDownCallback(unsigned char key, int, int)
 		return;
 	}
 
+	TitleScene* title = dynamic_cast<TitleScene*>(current_->scene_.get());
 	if (current_->input_.IsDown(key) &&
-		((key == ' ' && current_->readyPanelActive_) || key == 'l' || key == 'L'))
+		((key == ' ' && (current_->readyPanelActive_ || title)) || key == 'l' || key == 'L'))
 		return;
 	if (key == ' ' && current_->readyPanelActive_)
 		current_->input_.ToggleReady();
+	if (title)
+		title->HandleKey(key);
 	current_->input_.SetKey(key, true);
 }
 

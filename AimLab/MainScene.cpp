@@ -93,8 +93,6 @@ void MainScene::UpdateRoomList(std::uint32_t requestId, const Net::RoomListResul
     }
     if (!wasAutoRefresh || listChanged)
         ShowRoomList();
-    if (firstList_ && roomList_.empty())
-        RequestEntry(0);
     firstList_ = false;
 }
 
